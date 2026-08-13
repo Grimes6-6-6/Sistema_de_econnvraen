@@ -1,0 +1,11 @@
+-- El esquema dejó de ejecutarse desde este archivo para evitar reinicios
+-- destructivos y cambios sin historial.
+--
+-- La fuente canónica está en:
+--   db/migrations/001_initial.sql
+--
+-- Aplicación segura:
+--   npm run db:migrate
+--
+-- Datos iniciales:
+--   npm run db:seed
