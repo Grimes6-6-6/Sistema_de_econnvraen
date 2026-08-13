@@ -102,14 +102,18 @@ export default function LiveMap({
         attributionControl: true,
       });
 
-      // Only detect REAL user interactions — dragstart fires only on manual drag.
-      // For scroll-wheel zoom we listen to 'wheel' on the container element.
+      // dragstart → user dragged the map (never fires on programmatic setView)
       map.on("dragstart", () => {
         if (isAutoFollowRef.current) setIsAutoFollow(false);
       });
-      container.addEventListener("wheel", () => {
-        if (isAutoFollowRef.current) setIsAutoFollow(false);
-      }, { passive: true });
+      // zoomstart with originalEvent → user used scroll-wheel or pinch-to-zoom
+      // Programmatic setView/fitBounds do NOT carry originalEvent, so this is safe.
+      map.on("zoomstart", (e) => {
+        const leafletEvent = e as unknown as { originalEvent?: Event };
+        if (leafletEvent.originalEvent && isAutoFollowRef.current) {
+          setIsAutoFollow(false);
+        }
+      });
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
