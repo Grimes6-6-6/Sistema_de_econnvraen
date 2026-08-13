@@ -68,6 +68,7 @@ export default function LiveMap({
   const ownMarkerRef = useRef<Marker | null>(null);
   const accuracyCircleRef = useRef<Circle | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isAutoFollow, setIsAutoFollow] = useState(true);
   const initialCenterRef = useRef(center ?? ownPosition ?? DEFAULT_CENTER);
   const initialZoomRef = useRef(zoom);
 
@@ -95,6 +96,8 @@ export default function LiveMap({
         zoomControl: true,
         attributionControl: true,
       });
+
+      map.on("movestart", () => setIsAutoFollow(false));
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
@@ -173,9 +176,11 @@ export default function LiveMap({
         }).addTo(map);
       }
 
-      map.setView([lat, lng], map.getZoom());
+      if (isAutoFollow) {
+        map.setView([lat, lng], map.getZoom());
+      }
     });
-  }, [isMapReady, ownPosition]);
+  }, [isMapReady, ownPosition, isAutoFollow]);
 
   // ── Update vehicle markers ──────────────────────────────────────────────
   useEffect(() => {
@@ -226,19 +231,30 @@ export default function LiveMap({
         }
       });
 
-      // Center map if a center override is provided
-      if (center) {
-        map.setView([center.lat, center.lng], map.getZoom());
-      } else if (vehicles.length === 1) {
-        map.setView([vehicles[0].lat, vehicles[0].lng], map.getZoom());
-      } else if (vehicles.length > 1) {
-        const bounds = L.latLngBounds(vehicles.map(v => [v.lat, v.lng]));
-        map.fitBounds(bounds, { padding: [40, 40] });
+      if (isAutoFollow) {
+        if (center) {
+          map.setView([center.lat, center.lng], map.getZoom());
+        } else if (vehicles.length === 1) {
+          map.setView([vehicles[0].lat, vehicles[0].lng], map.getZoom());
+        } else if (vehicles.length > 1) {
+          const bounds = L.latLngBounds(vehicles.map(v => [v.lat, v.lng]));
+          map.fitBounds(bounds, { padding: [40, 40] });
+        }
       }
     });
-  }, [vehicles, center, isMapReady]);
+  }, [vehicles, center, isMapReady, isAutoFollow]);
 
   return (
-    <div ref={mapContainerRef} className={className} style={{ zIndex: 0 }} />
+    <div className="relative w-full h-full">
+      <div ref={mapContainerRef} className={className} style={{ zIndex: 0 }} />
+      {!isAutoFollow && (
+        <button
+          onClick={() => setIsAutoFollow(true)}
+          className="absolute top-4 right-4 z-[1000] bg-white px-3 py-1.5 rounded-full shadow-md text-xs font-bold text-emerald-600 hover:bg-emerald-50 transition-colors"
+        >
+          Seguir posición
+        </button>
+      )}
+    </div>
   );
 }
