@@ -69,8 +69,13 @@ export default function LiveMap({
   const accuracyCircleRef = useRef<Circle | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [isAutoFollow, setIsAutoFollow] = useState(true);
+  // Keep a ref in sync so Leaflet event handlers (closures) always see the latest value
+  const isAutoFollowRef = useRef(true);
   const initialCenterRef = useRef(center ?? ownPosition ?? DEFAULT_CENTER);
   const initialZoomRef = useRef(zoom);
+
+  // Sync ref whenever state changes
+  useEffect(() => { isAutoFollowRef.current = isAutoFollow; }, [isAutoFollow]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -97,7 +102,14 @@ export default function LiveMap({
         attributionControl: true,
       });
 
-      map.on("movestart", () => setIsAutoFollow(false));
+      // Only detect REAL user interactions — dragstart fires only on manual drag.
+      // For scroll-wheel zoom we listen to 'wheel' on the container element.
+      map.on("dragstart", () => {
+        if (isAutoFollowRef.current) setIsAutoFollow(false);
+      });
+      container.addEventListener("wheel", () => {
+        if (isAutoFollowRef.current) setIsAutoFollow(false);
+      }, { passive: true });
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
@@ -180,7 +192,7 @@ export default function LiveMap({
         map.setView([lat, lng], map.getZoom());
       }
     });
-  }, [isMapReady, ownPosition, isAutoFollow]);
+  }, [isMapReady, ownPosition, isAutoFollow]); // isAutoFollow kept as dep so button re-enables centering
 
   // ── Update vehicle markers ──────────────────────────────────────────────
   useEffect(() => {
