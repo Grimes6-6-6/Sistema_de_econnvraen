@@ -1563,7 +1563,7 @@ export default function DashboardPage() {
               <Navigation className="h-4 w-4 text-emerald-600" />
               <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Mapa de Flota</span>
             </div>
-            <LiveMap vehicles={locations} zoom={8} center={{ lat: -13.1588, lng: -74.2236 }} className="w-full h-125" />
+            <LiveMap vehicles={locations} zoom={12} className="w-full h-125" />
           </div>
         </div>
       )}
