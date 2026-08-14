@@ -21,13 +21,21 @@ export function assertTrustedMutation(request: Request): void {
     }
 
     if (originHost !== host) {
-      throw forbidden("La solicitud no proviene de este sitio.");
+      // Whitelist para la app móvil (Flutter Web)
+      const isTrustedOrigin = 
+        originHost.includes("localhost") || 
+        originHost.endsWith(".vercel.app");
+      
+      if (!isTrustedOrigin) {
+        throw forbidden("La solicitud no proviene de este sitio.");
+      }
     }
   }
 
-  if (request.headers.get("sec-fetch-site") === "cross-site") {
+  // Permitimos cross-site fetch para la app móvil
+  /* if (request.headers.get("sec-fetch-site") === "cross-site") {
     throw forbidden("Las solicitudes entre sitios no están permitidas.");
-  }
+  } */
 }
 
 export async function parseJsonBody<T>(
