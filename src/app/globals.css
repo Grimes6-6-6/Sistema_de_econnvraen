@@ -132,3 +132,95 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8; /* slate-400 */
 }
+
+/* ============================
+   AMBIENT BACKGROUND BLOBS
+   ============================ */
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ambient-blob-1 {
+  position: absolute;
+  top: -20%;
+  left: -10%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: blob-float 12s ease-in-out infinite;
+  filter: blur(60px);
+}
+
+.ambient-blob-2 {
+  position: absolute;
+  top: 30%;
+  right: -15%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(6, 78, 59, 0.2) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: blob-float 16s ease-in-out infinite reverse;
+  filter: blur(80px);
+}
+
+.ambient-blob-3 {
+  position: absolute;
+  bottom: -10%;
+  left: 30%;
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(5, 150, 105, 0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: blob-float 20s ease-in-out infinite 4s;
+  filter: blur(70px);
+}
+
+@keyframes blob-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(30px, -40px) scale(1.05); }
+  66%       { transform: translate(-20px, 20px) scale(0.95); }
+}
+
+/* ============================
+   GLASSMORPHISM CARDS
+   ============================ */
+.glass-container-dark {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-container {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ============================
+   ANIMATIONS
+   ============================ */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.35s ease-out both;
+}
+
+/* ============================
+   PREMIUM SHADOWS
+   ============================ */
+.shadow-premium {
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 4px 24px rgba(0, 0, 0, 0.45),
+    0 1px 4px rgba(0, 0, 0, 0.3);
+}
