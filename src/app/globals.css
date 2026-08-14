@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
 @theme {
@@ -15,22 +15,28 @@
 }
 
 :root {
-  --background: #f8fafc; /* slate-50 */
-  --foreground: #0f172a; /* slate-900 */
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
   --card-foreground: #0f172a;
-  --border: #e2e8f0; /* slate-200 */
+  --border: #e2e8f0;
   --sidebar-bg: #ffffff;
   --sidebar-border: #e2e8f0;
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
-  min-height: 100vh;
-  position: relative;
-  -webkit-font-smoothing: antialiased;
+/* ============================================================
+   BASE STYLES — wrapped in @layer base so Tailwind utilities
+   (bg-[#090d16] etc.) can override them properly in v4
+   ============================================================ */
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    min-height: 100vh;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
 /* Print styles */
@@ -51,13 +57,14 @@ body {
   }
 }
 
-/* Base SaaS UI Classes */
-
+/* ============================
+   BASE SaaS UI CLASSES
+   ============================ */
 .saas-card {
   background-color: var(--card);
   color: var(--card-foreground);
   border: 1px solid var(--border);
-  border-radius: 0.75rem; /* xl */
+  border-radius: 0.75rem;
   box-shadow: var(--shadow-card);
   transition: all 0.2s ease-in-out;
 }
@@ -82,7 +89,7 @@ body {
 }
 
 .saas-input::placeholder {
-  color: #94a3b8; /* slate-400 */
+  color: #94a3b8;
 }
 
 /* Buttons */
@@ -111,10 +118,10 @@ body {
 }
 
 .btn-secondary:hover {
-  background-color: #f1f5f9; /* slate-100 */
+  background-color: #f1f5f9;
 }
 
-/* Custom Scrollbars for SaaS */
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -125,12 +132,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1; /* slate-300 */
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8; /* slate-400 */
+  background: #94a3b8;
 }
 
 /* ============================
@@ -215,6 +222,15 @@ body {
   animation: fade-in 0.35s ease-out both;
 }
 
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.3s ease-out both;
+}
+
 /* ============================
    PREMIUM SHADOWS
    ============================ */
@@ -224,3 +240,4 @@ body {
     0 4px 24px rgba(0, 0, 0, 0.45),
     0 1px 4px rgba(0, 0, 0, 0.3);
 }
+
