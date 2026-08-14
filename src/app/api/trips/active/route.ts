@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { query } from "@/server/db/pool";
-import { getSession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/session";
 
 export async function GET(request: Request) {
   try {
-    const session = await getSession();
-    if (!session?.user) {
+    const session = await getSessionUser();
+    if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const userId = parseInt(session.user.id.replace('U', ''), 10);
+    const userId = parseInt(session.id.replace('U', ''), 10);
 
     // Obtener el ID del conductor
     const driverRes = await query(
@@ -80,3 +80,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }
+
+
