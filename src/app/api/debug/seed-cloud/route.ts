@@ -29,6 +29,6 @@ export async function GET() {
 
     return NextResponse.json({ message: "Viaje de prueba insertado en la NUBE exitosamente!", id: res.rows[0].id_viaje });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
