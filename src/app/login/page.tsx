@@ -12,6 +12,7 @@ import {
   PackageSearch,
   ShieldCheck,
   User,
+  Sparkles,
 } from "lucide-react";
 import { useDatabase } from "@/context/DatabaseContext";
 
@@ -77,127 +78,161 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen bg-slate-50">
-      {/* Left Side: Form Container */}
-      <div className="flex w-full flex-col justify-center px-6 py-12 lg:w-1/2 lg:px-20 xl:px-32">
-        <div className="mx-auto w-full max-w-sm">
+    <main className="relative flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-10 overflow-hidden">
+      {/* Background Glow effects */}
+      <div className="ambient-bg pointer-events-none">
+        <div className="ambient-blob-1"></div>
+        <div className="ambient-blob-2"></div>
+        <div className="ambient-blob-3"></div>
+      </div>
+
+      <div className="relative z-10 w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl shadow-premium grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
+        {/* Left Side: Form Container */}
+        <div className="lg:col-span-7 p-6 sm:p-10 lg:p-12 flex flex-col justify-center">
           {/* Logo / Brand */}
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-sm">
-              <Bus className="h-5 w-5" />
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-500 to-green-700 text-white shadow-lg border border-emerald-400/20">
+              <Bus className="h-6 w-6" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-slate-900">
-              ECONNVRAE
-            </span>
+            <div>
+              <span className="text-xl font-black tracking-wider text-white flex items-center gap-2">
+                ECONNVRAE
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Cloud v2.0
+                </span>
+              </span>
+              <p className="text-[11px] text-slate-400 font-semibold tracking-wide">
+                Transporte y Encomiendas Ayacucho - VRAEM
+              </p>
+            </div>
           </div>
 
           <div className="mt-8">
             {loginMode === "selector" ? (
-              <div className="animate-fade-in">
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-                  Bienvenido al Sistema
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  Selecciona el módulo al que deseas ingresar
-                </p>
+              <div className="animate-fade-in space-y-6">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    Bienvenido al Sistema
+                  </h2>
+                  <p className="mt-1 text-xs sm:text-sm text-slate-400 font-medium">
+                    Selecciona el módulo de acceso correspondiente:
+                  </p>
+                </div>
 
-                <div className="mt-8 space-y-4">
+                <div className="space-y-3">
                   <button
                     onClick={() => router.push("/public")}
-                    className="saas-card flex w-full items-center gap-4 p-4 text-left hover:border-blue-300 hover:ring-1 hover:ring-blue-300"
+                    className="saas-card group flex w-full items-center gap-4 p-4 text-left cursor-pointer border border-white/5 hover:border-blue-500/40 hover:bg-slate-800/80 transition-all shadow-md"
                   >
-                    <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
-                      <PackageSearch className="h-5 w-5" />
+                    <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-3 text-blue-400 group-hover:scale-105 transition-transform shrink-0">
+                      <PackageSearch className="h-6 w-6" />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900">Consultar Encomienda</h3>
-                      <p className="text-xs text-slate-500">Acceso público de rastreo</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-extrabold text-sm text-white group-hover:text-blue-300 transition-colors">
+                        Consultar Encomienda
+                      </h3>
+                      <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
+                        Acceso público para clientes con código de rastreo
+                      </p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400" />
+                    <ArrowRight className="h-4 w-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
                   </button>
 
                   <button
                     onClick={() => selectRole("operador")}
-                    className="saas-card flex w-full items-center gap-4 p-4 text-left hover:border-emerald-300 hover:ring-1 hover:ring-emerald-300"
+                    className="saas-card group flex w-full items-center gap-4 p-4 text-left cursor-pointer border border-white/5 hover:border-emerald-500/40 hover:bg-slate-800/80 transition-all shadow-md"
                   >
-                    <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
-                      <KeyRound className="h-5 w-5" />
+                    <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-emerald-400 group-hover:scale-105 transition-transform shrink-0">
+                      <KeyRound className="h-6 w-6" />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900">Personal de Agencia</h3>
-                      <p className="text-xs text-slate-500">Ventas, viajes y despachos</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-extrabold text-sm text-white group-hover:text-emerald-300 transition-colors">
+                        Personal de Agencia
+                      </h3>
+                      <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
+                        Ventas de pasajes, manifiestos y control de encomiendas
+                      </p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400" />
+                    <ArrowRight className="h-4 w-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all shrink-0" />
                   </button>
-                  
+
                   <button
                     onClick={() => selectRole("conductor")}
-                    className="saas-card flex w-full items-center gap-4 p-4 text-left hover:border-amber-300 hover:ring-1 hover:ring-amber-300"
+                    className="saas-card group flex w-full items-center gap-4 p-4 text-left cursor-pointer border border-white/5 hover:border-amber-500/40 hover:bg-slate-800/80 transition-all shadow-md"
                   >
-                    <div className="rounded-lg bg-amber-50 p-2 text-amber-600">
-                      <Navigation className="h-5 w-5" />
+                    <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                      <Navigation className="h-6 w-6" />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900">Conductores (Web)</h3>
-                      <p className="text-xs text-slate-500">Acceso alternativo web</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-extrabold text-sm text-white group-hover:text-amber-300 transition-colors">
+                        Portal de Conductores
+                      </h3>
+                      <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
+                        Viajes asignados, firmas de entrega, GPS e incidencias
+                      </p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400" />
+                    <ArrowRight className="h-4 w-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-1 transition-all shrink-0" />
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="animate-slide-in-left">
+              <div className="animate-slide-in-left space-y-5">
                 <button
                   onClick={() => setLoginMode("selector")}
-                  className="group mb-6 flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900"
+                  className="group inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                  Regresar
+                  Volver a seleccionar módulo
                 </button>
 
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-                  {loginMode === 'operador' ? 'Acceso Administrativo' : 'Acceso Conductor'}
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  Ingresa tus credenciales para continuar
-                </p>
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    {loginMode === "operador"
+                      ? "Acceso de Agencia"
+                      : "Acceso Conductor"}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-400 font-medium">
+                    Ingresa tus credenciales autorizadas por la empresa
+                  </p>
+                </div>
 
                 {error && (
-                  <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700 border border-red-200">
-                    {error}
+                  <div className="rounded-xl bg-red-500/10 p-3.5 text-xs font-bold text-red-300 border border-red-500/30 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>{error}</span>
                   </div>
                 )}
 
-                <form onSubmit={handleLoginSubmit} className="mt-6 space-y-5">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Usuario
+                <form onSubmit={handleLoginSubmit} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                      Usuario / DNI
                     </label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                       <input
                         type="text"
                         required
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="saas-input w-full pl-10"
+                        className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
                         placeholder="Ingresa tu usuario"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
                       Contraseña
                     </label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                       <input
                         type="password"
                         required
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="saas-input w-full pl-10"
+                        className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
                         placeholder="••••••••"
                       />
                     </div>
@@ -206,9 +241,9 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="btn-primary w-full py-2.5 flex justify-center items-center gap-2 mt-4"
+                    className="w-full rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-extrabold text-xs uppercase tracking-widest py-3.5 flex justify-center items-center gap-2 shadow-lg shadow-emerald-950/50 hover:shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50 mt-2"
                   >
-                    {isSubmitting ? "Autenticando..." : "Ingresar"}
+                    {isSubmitting ? "Autenticando..." : "Ingresar al Sistema"}
                     {!isSubmitting && <ArrowRight className="h-4 w-4" />}
                   </button>
                 </form>
@@ -216,30 +251,35 @@ export default function LoginPage() {
             )}
           </div>
         </div>
-      </div>
 
-      {/* Right Side: Visual/Branding (Hidden on mobile) */}
-      <div className="relative hidden w-1/2 lg:block">
-        <div className="absolute inset-0 bg-emerald-900">
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-30 mix-blend-overlay"></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-emerald-900 via-emerald-900/40 to-transparent"></div>
-        </div>
-        
-        <div className="absolute bottom-0 left-0 right-0 p-12 xl:p-20 text-white">
-          <div className="flex gap-4 mb-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md">
-              <ShieldCheck className="h-6 w-6 text-emerald-100" />
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md">
-              <Navigation className="h-6 w-6 text-emerald-100" />
-            </div>
+        {/* Right Side: Hero Visual Panel */}
+        <div className="lg:col-span-5 relative hidden lg:flex flex-col justify-between p-10 bg-linear-to-br from-emerald-950/80 via-slate-900/90 to-[#090d16] border-l border-white/10">
+          <div className="flex items-center gap-2 text-emerald-400 text-xs font-black uppercase tracking-widest">
+            <Sparkles className="h-4 w-4" />
+            <span>Sistema Centralizado</span>
           </div>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Gestión Logística Inteligente
-          </h2>
-          <p className="mt-4 max-w-xl text-lg text-emerald-100">
-            Plataforma centralizada para la administración de encomiendas, pasajes y control de flota en la ruta Ayacucho - VRAEM.
-          </p>
+
+          <div className="space-y-4">
+            <div className="flex gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-500/30 backdrop-blur-md text-emerald-300">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-500/30 backdrop-blur-md text-emerald-300">
+                <Navigation className="h-6 w-6" />
+              </div>
+            </div>
+            <h2 className="text-2xl xl:text-3xl font-black text-white leading-tight">
+              Gestión Logística Inteligente
+            </h2>
+            <p className="text-xs xl:text-sm text-slate-300 font-medium leading-relaxed">
+              Plataforma para la administración de encomiendas, pasajes, incidencias y control satelital de flota en tiempo real.
+            </p>
+          </div>
+
+          <div className="pt-6 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500 font-bold tracking-wider uppercase">
+            <span>Seguridad ASVS 5.0</span>
+            <span>Ayacucho — VRAEM</span>
+          </div>
         </div>
       </div>
     </main>

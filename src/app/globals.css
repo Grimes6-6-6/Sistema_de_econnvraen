@@ -7,31 +7,20 @@
   --color-primary-green-dark: #022c22;
   --color-secondary-orange: #d97706;
   --color-secondary-orange-light: #fef3c7;
-  
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 }
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: #e2e8f0;
-  --sidebar-bg: #ffffff;
-  --sidebar-border: #e2e8f0;
+  --background: #090d16;
+  --foreground: #f8fafc;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+  --border: rgba(255, 255, 255, 0.1);
 }
 
-/* ============================================================
-   BASE STYLES — wrapped in @layer base so Tailwind utilities
-   (bg-[#090d16] etc.) can override them properly in v4
-   ============================================================ */
 @layer base {
   body {
-    background-color: var(--background);
-    color: var(--foreground);
+    background-color: #090d16;
+    color: #f8fafc;
     font-family: var(--font-geist-sans), system-ui, sans-serif;
     min-height: 100vh;
     position: relative;
@@ -55,89 +44,6 @@
     box-shadow: none !important;
     border: none !important;
   }
-}
-
-/* ============================
-   BASE SaaS UI CLASSES
-   ============================ */
-.saas-card {
-  background-color: var(--card);
-  color: var(--card-foreground);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  box-shadow: var(--shadow-card);
-  transition: all 0.2s ease-in-out;
-}
-
-.saas-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.saas-input {
-  background-color: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  color: var(--foreground);
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-}
-
-.saas-input:focus {
-  outline: none;
-  border-color: var(--color-primary-green-light);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
-}
-
-.saas-input::placeholder {
-  color: #94a3b8;
-}
-
-/* Buttons */
-.btn-primary {
-  background-color: var(--color-primary-green);
-  color: white;
-  font-weight: 500;
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
-  transition: background-color 0.2s ease;
-  border: none;
-}
-
-.btn-primary:hover {
-  background-color: var(--color-primary-green-dark);
-}
-
-.btn-secondary {
-  background-color: #ffffff;
-  color: var(--foreground);
-  font-weight: 500;
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
-  transition: background-color 0.2s ease;
-  border: 1px solid var(--border);
-}
-
-.btn-secondary:hover {
-  background-color: #f1f5f9;
-}
-
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
 }
 
 /* ============================
@@ -194,13 +100,13 @@
 }
 
 /* ============================
-   GLASSMORPHISM CARDS
+   GLASSMORPHISM & SAAS CARDS
    ============================ */
 .glass-container-dark {
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-container {
@@ -210,9 +116,40 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* ============================
-   ANIMATIONS
-   ============================ */
+.saas-card {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.saas-card:hover {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 8px 24px -4px rgba(16, 185, 129, 0.15);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Animations */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -231,22 +168,9 @@
   animation: slide-in-left 0.3s ease-out both;
 }
 
-/* ============================
-   PREMIUM SHADOWS
-   ============================ */
 .shadow-premium {
   box-shadow:
-    0 0 0 1px rgba(255,255,255,0.04),
-    0 4px 24px rgba(0, 0, 0, 0.45),
-    0 1px 4px rgba(0, 0, 0, 0.3);
-}
-
-
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out both;
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.4);
 }
