@@ -21,11 +21,20 @@ export function assertTrustedMutation(request: Request): void {
     }
 
     if (originHost !== host) {
-      // Whitelist para la app móvil (Flutter Web)
-      const isTrustedOrigin = 
-        originHost.includes("localhost") || 
-        originHost.endsWith(".vercel.app");
-      
+      const allowedOrigin = process.env.ALLOWED_ORIGIN?.trim();
+      const allowedHost = allowedOrigin
+        ? (() => {
+            try {
+              return new URL(allowedOrigin).host;
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+      const isTrustedOrigin =
+        originHost === allowedHost ||
+        (process.env.NODE_ENV !== "production" && originHost.includes("localhost"));
+
       if (!isTrustedOrigin) {
         throw forbidden("La solicitud no proviene de este sitio.");
       }

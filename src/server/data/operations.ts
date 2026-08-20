@@ -8,6 +8,7 @@ import {
   type DatabaseState,
   EMPTY_DATABASE_STATE,
   type Encomienda,
+  type IncidenciaViaje,
   type PublicTrackingResult,
   type Recojo,
   type Ruta,
@@ -19,12 +20,14 @@ import {
 import { formatEntityId, parseEntityId } from "@/lib/domain/ids";
 import { canAdvanceParcelStatus } from "@/lib/domain/rules";
 import type {
+  DriverProfileUpdateInput,
   ParcelInput,
   ParcelStatusInput,
   PickupAssignmentInput,
   PickupInput,
   PickupStatusInput,
   TicketInput,
+  TripIncidentInput,
   TripInput,
   TripStatusInput,
   VehicleLocationUpdateInput,
@@ -1182,7 +1185,7 @@ export async function updateParcelStatus(
   parcelValue: string,
   input: ParcelStatusInput,
 ): Promise<Encomienda> {
-  requireRole(user, DRIVER_ROLES);
+  requireRole(user, ["CONDUCTOR", "ADMINISTRADOR", "OPERADOR"]);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const parcelId = parseEntityId(parcelValue, "E");
@@ -1710,3 +1713,428 @@ export async function updateVehicleLocation(
     }
   });
 }
+
+export async function getTripDetail(
+  user: SessionUser,
+  tripValue: string,
+): Promise<{
+  trip: {
+    id: string;
+    code: string;
+    origin: string;
+    destination: string;
+    date: string;
+    departureTime: string;
+    vehicleId: string;
+    vehiclePlate: string;
+    driverId: string;
+    status: string;
+    passengerCount: number;
+    parcelCount: number;
+  };
+  passengers: Array<{
+    id: number;
+    codigo: string;
+    asiento: number;
+    estado: string;
+    nombre: string;
+    documento: string;
+    telefono: string | null;
+  }>;
+  parcels: Array<{
+    id: number;
+    codigo: string;
+    descripcion: string;
+    estado: string;
+    remitente: string;
+    destinatario: string;
+  }>;
+}> {
+  const userId = requireUserId(user);
+  const scopeAgencyId = agencyScopeId(user);
+  const tripId = parseEntityId(tripValue, "T");
+  if (!tripId) throw notFound("El viaje no existe.");
+
+  const sessionDriverId =
+    user.rol === "CONDUCTOR" ? await getConductorId(userId) : null;
+  if (user.rol === "CONDUCTOR" && !sessionDriverId) {
+    throw forbidden("Tu usuario no está vinculado a un conductor habilitado.");
+  }
+
+  const tripRes = await query<{
+    id_viaje: number;
+    origen: string;
+    destino: string;
+    fecha: string;
+    hora: string;
+    estado: string;
+    placa: string;
+    marca: string;
+    modelo: string;
+    id_vehiculo: number;
+    id_conductor: number;
+    id_agencia: number;
+  }>(
+    `SELECT
+       v.id_viaje,
+       r.origen,
+       r.destino,
+       TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha,
+       TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'HH24:MI') AS hora,
+       v.estado,
+       veh.placa,
+       veh.marca,
+       veh.modelo,
+       v.id_vehiculo,
+       v.id_conductor,
+       v.id_agencia
+     FROM viajes v
+     JOIN rutas r ON r.id_ruta = v.id_ruta
+     JOIN vehiculos veh ON veh.id_vehiculo = v.id_vehiculo
+     WHERE v.id_viaje = $1
+       AND ($2::integer IS NULL OR v.id_agencia = $2)
+       AND ($3::integer IS NULL OR v.id_conductor = $3)
+     LIMIT 1`,
+    [tripId, scopeAgencyId, sessionDriverId],
+  );
+
+  const trip = tripRes.rows[0];
+  if (!trip) {
+    throw notFound("El viaje no existe o no tienes autorización para consultarlo.");
+  }
+
+  const [passengers, parcels] = await Promise.all([
+    query<{
+      id_boleto: number;
+      codigo: string;
+      asiento: number;
+      estado: string;
+      nombres: string;
+      apellidos: string;
+      nro_documento: string;
+      telefono: string | null;
+    }>(
+      `SELECT
+         b.id_boleto,
+         b.codigo,
+         b.asiento,
+         b.estado,
+         p.nombres,
+         p.apellidos,
+         p.nro_documento,
+         p.telefono
+       FROM boletos b
+       JOIN personas p ON p.id_persona = b.id_persona_pasajero
+       WHERE b.id_viaje = $1
+         AND b.estado = 'ACTIVO'
+       ORDER BY b.asiento`,
+      [trip.id_viaje],
+    ),
+    query<{
+      id_encomienda: number;
+      codigo_tracking: string;
+      descripcion: string;
+      estado: string;
+      remitente: string;
+      destinatario: string;
+    }>(
+      `SELECT
+         e.id_encomienda,
+         e.codigo_tracking,
+         e.descripcion,
+         e.estado,
+         sr.nombres || ' ' || sr.apellidos AS remitente,
+         sd.nombres || ' ' || sd.apellidos AS destinatario
+       FROM encomiendas e
+       JOIN personas sr ON sr.id_persona = e.id_persona_remitente
+       JOIN personas sd ON sd.id_persona = e.id_persona_destinatario
+       WHERE e.id_viaje = $1
+       ORDER BY e.fecha_registro`,
+      [trip.id_viaje],
+    ),
+  ]);
+
+  return {
+    trip: {
+      id: formatEntityId("T", trip.id_viaje, 3),
+      code: formatEntityId("T", trip.id_viaje, 3),
+      origin: trip.origen,
+      destination: trip.destino,
+      date: trip.fecha,
+      departureTime: trip.hora,
+      vehicleId: String(trip.id_vehiculo),
+      vehiclePlate: trip.placa,
+      driverId: String(trip.id_conductor),
+      status: trip.estado,
+      passengerCount: passengers.rows.length,
+      parcelCount: parcels.rows.length,
+    },
+    passengers: passengers.rows.map((row) => ({
+      id: row.id_boleto,
+      codigo: row.codigo,
+      asiento: row.asiento,
+      estado: row.estado,
+      nombre: `${row.nombres} ${row.apellidos}`.trim(),
+      documento: row.nro_documento,
+      telefono: row.telefono,
+    })),
+    parcels: parcels.rows.map((row) => ({
+      id: row.id_encomienda,
+      codigo: row.codigo_tracking,
+      descripcion: row.descripcion,
+      estado: row.estado,
+      remitente: row.remitente,
+      destinatario: row.destinatario,
+    })),
+  };
+}
+
+export async function createTripIncident(
+  user: SessionUser,
+  tripValue: string,
+  input: TripIncidentInput,
+): Promise<IncidenciaViaje> {
+  requireRole(user, DRIVER_ROLES);
+  const userId = requireUserId(user);
+  const scopeAgencyId = agencyScopeId(user);
+  const tripId = parseEntityId(tripValue, "T");
+  if (!tripId) throw notFound("El viaje no existe.");
+
+  const sessionDriverId =
+    user.rol === "CONDUCTOR" ? await getConductorId(userId) : null;
+  if (user.rol === "CONDUCTOR" && !sessionDriverId) {
+    throw forbidden("Tu usuario no está vinculado a un conductor habilitado.");
+  }
+
+  return withTransaction(async (client) => {
+    const trip = await client.query<{
+      id_viaje: number;
+      id_conductor: number;
+      id_agencia: number;
+      estado: string;
+    }>(
+      `SELECT id_viaje, id_conductor, id_agencia, estado
+       FROM viajes
+       WHERE id_viaje = $1
+         AND ($2::integer IS NULL OR id_agencia = $2)
+         AND ($3::integer IS NULL OR id_conductor = $3)
+       FOR SHARE`,
+      [tripId, scopeAgencyId, sessionDriverId],
+    );
+
+    const tripRow = trip.rows[0];
+    if (!tripRow) {
+      throw notFound("El viaje no existe o no tienes autorización sobre él.");
+    }
+
+    if (tripRow.estado === "CANCELADO") {
+      throw conflict(
+        "TRIP_CANCELLED",
+        "No se pueden reportar incidencias en viajes cancelados.",
+      );
+    }
+
+    const insertResult = await client.query<{
+      id_incidencia: number;
+      id_viaje: number;
+      id_conductor: number;
+      id_agencia: number;
+      tipo: IncidenciaViaje["tipo"];
+      descripcion: string;
+      nivel_gravedad: IncidenciaViaje["nivel_gravedad"];
+      latitude: string | null;
+      longitude: string | null;
+      created_at: string;
+    }>(
+      `INSERT INTO incidencias_viajes (
+         id_viaje, id_conductor, id_agencia, id_usuario,
+         tipo, descripcion, nivel_gravedad, latitude, longitude
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING
+         id_incidencia, id_viaje, id_conductor, id_agencia,
+         tipo, descripcion, nivel_gravedad,
+         latitude::text, longitude::text,
+         TO_CHAR(created_at AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI:SS') AS created_at`,
+      [
+        tripId,
+        tripRow.id_conductor,
+        tripRow.id_agencia,
+        userId,
+        input.tipo,
+        input.descripcion,
+        input.nivel_gravedad,
+        input.latitude ?? null,
+        input.longitude ?? null,
+      ],
+    );
+
+    const row = insertResult.rows[0];
+    const createdIncident: IncidenciaViaje = {
+      id: formatEntityId("INC", row.id_incidencia, 3),
+      id_viaje: formatEntityId("T", row.id_viaje, 3),
+      id_conductor: formatEntityId("C", row.id_conductor, 2),
+      id_agencia: formatEntityId("A", row.id_agencia, 2),
+      tipo: row.tipo,
+      descripcion: row.descripcion,
+      nivel_gravedad: row.nivel_gravedad,
+      latitude: row.latitude ? Number(row.latitude) : null,
+      longitude: row.longitude ? Number(row.longitude) : null,
+      created_at: row.created_at,
+    };
+
+    await writeAuditLog(
+      {
+        userId,
+        agencyId: tripRow.id_agencia,
+        action: "INCIDENT_REPORTED",
+        entity: "incidencia_viaje",
+        entityId: createdIncident.id,
+        metadata: {
+          tripId: tripValue,
+          tipo: input.tipo,
+          gravedad: input.nivel_gravedad,
+        },
+      },
+      client,
+    );
+
+    return createdIncident;
+  });
+}
+
+export async function getTripIncidents(
+  user: SessionUser,
+  tripValue: string,
+): Promise<IncidenciaViaje[]> {
+  const userId = requireUserId(user);
+  const scopeAgencyId = agencyScopeId(user);
+  const tripId = parseEntityId(tripValue, "T");
+  if (!tripId) throw notFound("El viaje no existe.");
+
+  const sessionDriverId =
+    user.rol === "CONDUCTOR" ? await getConductorId(userId) : null;
+  if (user.rol === "CONDUCTOR" && !sessionDriverId) {
+    throw forbidden("Tu usuario no está vinculado a un conductor habilitado.");
+  }
+
+  const result = await query<{
+    id_incidencia: number;
+    id_viaje: number;
+    id_conductor: number;
+    conductor_nombre: string;
+    id_agencia: number;
+    agencia_nombre: string;
+    tipo: IncidenciaViaje["tipo"];
+    descripcion: string;
+    nivel_gravedad: IncidenciaViaje["nivel_gravedad"];
+    latitude: string | null;
+    longitude: string | null;
+    created_at: string;
+  }>(
+    `SELECT
+       i.id_incidencia,
+       i.id_viaje,
+       i.id_conductor,
+       p.nombres || ' ' || p.apellidos AS conductor_nombre,
+       i.id_agencia,
+       a.nombre AS agencia_nombre,
+       i.tipo,
+       i.descripcion,
+       i.nivel_gravedad,
+       i.latitude::text,
+       i.longitude::text,
+       TO_CHAR(i.created_at AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI:SS') AS created_at
+     FROM incidencias_viajes i
+     JOIN conductores c ON c.id_conductor = i.id_conductor
+     JOIN personas p ON p.id_persona = c.id_persona
+     JOIN agencias a ON a.id_agencia = i.id_agencia
+     JOIN viajes v ON v.id_viaje = i.id_viaje
+     WHERE i.id_viaje = $1
+       AND ($2::integer IS NULL OR v.id_agencia = $2)
+       AND ($3::integer IS NULL OR v.id_conductor = $3)
+     ORDER BY i.created_at DESC`,
+    [tripId, scopeAgencyId, sessionDriverId],
+  );
+
+  return result.rows.map((row) => ({
+    id: formatEntityId("INC", row.id_incidencia, 3),
+    id_viaje: formatEntityId("T", row.id_viaje, 3),
+    id_conductor: formatEntityId("C", row.id_conductor, 2),
+    conductor_nombre: row.conductor_nombre,
+    id_agencia: formatEntityId("A", row.id_agencia, 2),
+    agencia_nombre: row.agencia_nombre,
+    tipo: row.tipo,
+    descripcion: row.descripcion,
+    nivel_gravedad: row.nivel_gravedad,
+    latitude: row.latitude ? Number(row.latitude) : null,
+    longitude: row.longitude ? Number(row.longitude) : null,
+    created_at: row.created_at,
+  }));
+}
+
+export async function updateDriverContact(
+  user: SessionUser,
+  input: DriverProfileUpdateInput,
+): Promise<{ phone: string; email: string; address: string }> {
+  const userId = requireUserId(user);
+  return withTransaction(async (client) => {
+    const userPerson = await client.query<{ id_persona: number }>(
+      `SELECT u.id_persona
+       FROM usuarios u
+       WHERE u.id_usuario = $1 AND u.estado = 'ACTIVO'`,
+      [userId],
+    );
+    const personId = userPerson.rows[0]?.id_persona;
+    if (!personId) {
+      throw notFound(
+        "No se encontró el registro de persona asociado al usuario.",
+      );
+    }
+
+    await client.query(
+      `UPDATE personas
+       SET telefono = COALESCE(NULLIF($1, ''), telefono),
+           email = COALESCE(NULLIF($2, ''), email),
+           direccion = COALESCE(NULLIF($3, ''), direccion),
+           updated_at = NOW()
+       WHERE id_persona = $4`,
+      [
+        input.phone || null,
+        input.email || null,
+        input.address || null,
+        personId,
+      ],
+    );
+
+    const updated = await client.query<{
+      telefono: string | null;
+      email: string | null;
+      direccion: string | null;
+    }>(
+      `SELECT telefono, email, direccion FROM personas WHERE id_persona = $1`,
+      [personId],
+    );
+
+    await writeAuditLog(
+      {
+        userId,
+        agencyId: user.agenciaId ? parseEntityId(user.agenciaId, "A") : null,
+        action: "DRIVER_PROFILE_UPDATED",
+        entity: "persona",
+        entityId: String(personId),
+        metadata: {
+          updatedFields: Object.keys(input),
+        },
+      },
+      client,
+    );
+
+    return {
+      phone: updated.rows[0]?.telefono || "",
+      email: updated.rows[0]?.email || "",
+      address: updated.rows[0]?.direccion || "",
+    };
+  });
+}
+

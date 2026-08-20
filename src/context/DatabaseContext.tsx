@@ -7,6 +7,7 @@ import type {
   DatabaseState,
   DeliveryEvidence,
   Encomienda,
+  IncidenciaViaje,
   OfflineAction,
   Recojo,
   Viaje,
@@ -20,6 +21,7 @@ export type {
   DatabaseState,
   DeliveryEvidence,
   Encomienda,
+  IncidenciaViaje,
   OfflineAction,
   Recojo,
   Ruta,
@@ -65,6 +67,22 @@ interface DatabaseContextType {
     newState: Encomienda["estado"],
     evidence?: DeliveryEvidence | null,
   ) => Promise<void>;
+  reportTripIncident: (
+    viajeId: string,
+    incident: {
+      tipo: IncidenciaViaje["tipo"];
+      descripcion: string;
+      nivel_gravedad?: IncidenciaViaje["nivel_gravedad"];
+      latitude?: number | null;
+      longitude?: number | null;
+    },
+  ) => Promise<IncidenciaViaje>;
+  getTripIncidents: (viajeId: string) => Promise<IncidenciaViaje[]>;
+  updateConductorProfile: (profile: {
+    phone?: string;
+    email?: string;
+    address?: string;
+  }) => Promise<{ phone: string; email: string; address: string }>;
   refreshDatabase: () => Promise<void>;
   currentUser: Usuario | null;
   loginUser: (username: string, password: string) => Promise<Usuario | null>;
@@ -412,7 +430,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     newState: Encomienda["estado"],
     evidence: DeliveryEvidence | null = null,
   ): Promise<void> => {
-    if (!hasRole("CONDUCTOR", "ADMINISTRADOR")) {
+    if (!hasRole("CONDUCTOR", "ADMINISTRADOR", "OPERADOR")) {
       throw new Error("No tienes permisos para actualizar encomiendas.");
     }
 
@@ -483,6 +501,51 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     setDb((current) => replaceParcel(current, payload.item));
   };
 
+  const reportTripIncident = async (
+    viajeId: string,
+    incident: {
+      tipo: IncidenciaViaje["tipo"];
+      descripcion: string;
+      nivel_gravedad?: IncidenciaViaje["nivel_gravedad"];
+      latitude?: number | null;
+      longitude?: number | null;
+    },
+  ): Promise<IncidenciaViaje> => {
+    if (!hasRole("CONDUCTOR", "ADMINISTRADOR")) {
+      throw new Error("No tienes permisos para reportar incidencias.");
+    }
+    const payload = await apiRequest<{ incident: IncidenciaViaje }>(
+      `/api/trips/${encodeURIComponent(viajeId)}/incidents`,
+      {
+        method: "POST",
+        body: JSON.stringify(incident),
+      },
+    );
+    return payload.incident;
+  };
+
+  const getTripIncidents = async (
+    viajeId: string,
+  ): Promise<IncidenciaViaje[]> => {
+    const payload = await apiRequest<{ incidents: IncidenciaViaje[] }>(
+      `/api/trips/${encodeURIComponent(viajeId)}/incidents`,
+    );
+    return payload.incidents;
+  };
+
+  const updateConductorProfile = async (
+    profile: { phone?: string; email?: string; address?: string },
+  ): Promise<{ phone: string; email: string; address: string }> => {
+    const payload = await apiRequest<{
+      success: boolean;
+      contact: { phone: string; email: string; address: string };
+    }>("/api/conductor/profile", {
+      method: "PATCH",
+      body: JSON.stringify(profile),
+    });
+    return payload.contact;
+  };
+
   return (
     <DatabaseContext.Provider
       value={{
@@ -500,6 +563,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
         assignRecojoDriver,
         updateRecojoStatus,
         updateParcelStatus,
+        reportTripIncident,
+        getTripIncidents,
+        updateConductorProfile,
         refreshDatabase,
         currentUser,
         loginUser,

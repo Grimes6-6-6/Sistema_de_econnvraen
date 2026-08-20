@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Legacy maintenance scripts (CommonJS, not part of the app bundle):
+    "check.js",
+    "scripts/**/*.js",
   ]),
 ]);
 

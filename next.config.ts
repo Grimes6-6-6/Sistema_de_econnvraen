@@ -1,17 +1,36 @@
 import type { NextConfig } from "next";
 
+const allowedOrigin =
+  process.env.ALLOWED_ORIGIN?.trim() ||
+  (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "");
+
 const nextConfig: NextConfig = {
   async headers() {
-    return [
-      {
-        source: "/api/:path*",
-        headers: [
+    const corsHeaders = allowedOrigin
+      ? [
+          { key: "Access-Control-Allow-Origin", value: allowedOrigin },
           { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "*" }, // O cambiar al dominio de Flutter web
-          { key: "Access-Control-Allow-Methods", value: "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
-          { key: "Access-Control-Allow-Headers", value: "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version" },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET,OPTIONS,PATCH,DELETE,POST,PUT",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value:
+              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+          },
         ]
-      },
+      : [];
+
+    return [
+      ...(corsHeaders.length > 0
+        ? [
+            {
+              source: "/api/:path*",
+              headers: corsHeaders,
+            },
+          ]
+        : []),
       {
         source: "/(.*)",
         headers: [
@@ -19,7 +38,6 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          // Quitamos Cross-Origin-Resource-Policy para no bloquear la API
           {
             key: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains",

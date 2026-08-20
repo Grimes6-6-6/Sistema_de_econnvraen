@@ -1,25 +1,24 @@
 "use client";
 
 import { Bell, Search, User } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useDatabase } from "@/context/DatabaseContext";
+
+const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: "Super administrador",
+  ADMINISTRADOR: "Administrador",
+  OPERADOR: "Operador",
+  CONDUCTOR: "Conductor",
+};
 
 export function Header() {
-  const [userName, setUserName] = useState("Usuario");
-
-  useEffect(() => {
-    // Intentar sacar el nombre de la cookie (solo con fines visuales rápidos)
-    // El rol real se maneja en SSR
-    const cookies = document.cookie.split(";");
-    for (const c of cookies) {
-      if (c.trim().startsWith("econnvrae_session=")) {
-        try {
-          const val = decodeURIComponent(c.trim().substring("econnvrae_session=".length));
-          const parsed = JSON.parse(val);
-          if (parsed.username) setUserName(parsed.username);
-        } catch(e) {}
-      }
-    }
-  }, []);
+  const { currentUser } = useDatabase();
+  const userName = currentUser
+    ? `${currentUser.nombres} ${currentUser.apellidos}`.trim() ||
+      currentUser.username
+    : "Usuario";
+  const roleLabel = currentUser
+    ? ROLE_LABELS[currentUser.rol] || currentUser.rol
+    : "Invitado";
 
   return (
     <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-8">
@@ -45,7 +44,7 @@ export function Header() {
         <div className="flex items-center gap-3">
           <div className="text-right hidden md:block">
             <p className="text-sm font-medium text-slate-900">{userName}</p>
-            <p className="text-xs text-slate-500">Administrador</p>
+            <p className="text-xs text-slate-500">{roleLabel}</p>
           </div>
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
             <User className="h-5 w-5" />

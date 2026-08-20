@@ -1,84 +1,161 @@
-import { NextResponse } from "next/server";
+import { requireApiRole } from "@/lib/auth/authorization";
+import { parseEntityId } from "@/lib/domain/ids";
 import { query } from "@/server/db/pool";
-import { getSessionUser } from "@/lib/auth/session";
+import { handleRouteError, noStoreJson } from "@/server/http";
+import { notFound } from "@/server/errors";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    const user = await requireApiRole(["CONDUCTOR", "ADMINISTRADOR"]);
+    const userId = parseEntityId(user.id, "U");
+    if (!userId) {
+      return noStoreJson(
+        { error: { code: "FORBIDDEN", message: "Sesión inválida." } },
+        { status: 403 },
+      );
     }
 
-    const userId = parseInt(session.id.replace('U', ''), 10);
-
-    // Obtener el ID del conductor
-    const driverRes = await query(
-      "SELECT id_conductor FROM conductores WHERE id_usuario = $1 LIMIT 1",
-      [userId]
+    const driverRes = await query<{ id_conductor: number }>(
+      `SELECT c.id_conductor
+       FROM conductores c
+       JOIN usuarios u ON u.id_persona = c.id_persona
+       WHERE u.id_usuario = $1
+       LIMIT 1`,
+      [userId],
     );
 
-    if (driverRes.rows.length === 0) {
-      return NextResponse.json({ error: "El usuario no es un conductor registrado" }, { status: 404 });
+    if (!driverRes.rows[0]) {
+      throw notFound("El usuario no está vinculado a un conductor.");
     }
 
     const driverId = driverRes.rows[0].id_conductor;
 
-    // Buscar el viaje activo (PENDIENTE, EN_RUTA, EN_PREPARACION)
-    const tripRes = await query(
-      `SELECT v.*, veh.placa, veh.marca, veh.modelo 
-       FROM viajes v 
-       JOIN vehiculos veh ON v.id_vehiculo = veh.id_vehiculo
-       WHERE v.id_conductor = $1 AND v.estado IN ('PENDIENTE', 'EN_PREPARACION', 'EN_RUTA')
-       ORDER BY v.fecha ASC, v.hora_salida ASC LIMIT 1`,
-      [driverId]
+    const tripRes = await query<{
+      id_viaje: number;
+      origen: string;
+      destino: string;
+      fecha: string;
+      hora: string;
+      estado: string;
+      placa: string;
+      marca: string;
+      modelo: string;
+      id_vehiculo: number;
+      id_conductor: number;
+    }>(
+      `SELECT
+         v.id_viaje,
+         r.origen,
+         r.destino,
+         TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha,
+         TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'HH24:MI') AS hora,
+         v.estado,
+         veh.placa,
+         veh.marca,
+         veh.modelo,
+         v.id_vehiculo,
+         v.id_conductor
+       FROM viajes v
+       JOIN rutas r ON r.id_ruta = v.id_ruta
+       JOIN vehiculos veh ON veh.id_vehiculo = v.id_vehiculo
+       WHERE v.id_conductor = $1
+         AND v.estado IN ('PROGRAMADO', 'EN_CURSO')
+       ORDER BY v.fecha_hora_salida ASC
+       LIMIT 1`,
+      [driverId],
     );
 
-    if (tripRes.rows.length === 0) {
-      return NextResponse.json({ trip: null }); // Sin viaje activo
+    if (!tripRes.rows[0]) {
+      return noStoreJson({ trip: null, passengers: [], parcels: [] });
     }
 
     const trip = tripRes.rows[0];
 
-    // Obtener Pasajeros del viaje
-    const passRes = await query(
-      `SELECT p.id_pasajero, p.nombre, p.documento, p.telefono, r.asiento, r.estado
-       FROM reservas r
-       JOIN pasajeros p ON r.id_pasajero = p.id_pasajero
-       WHERE r.id_viaje = $1`,
-      [trip.id_viaje]
-    );
+    const [passengers, parcels] = await Promise.all([
+      query<{
+        id_boleto: number;
+        codigo: string;
+        asiento: number;
+        estado: string;
+        nombres: string;
+        apellidos: string;
+        nro_documento: string;
+        telefono: string | null;
+      }>(
+        `SELECT
+           b.id_boleto,
+           b.codigo,
+           b.asiento,
+           b.estado,
+           p.nombres,
+           p.apellidos,
+           p.nro_documento,
+           p.telefono
+         FROM boletos b
+         JOIN personas p ON p.id_persona = b.id_persona_pasajero
+         WHERE b.id_viaje = $1
+           AND b.estado = 'ACTIVO'
+         ORDER BY b.asiento`,
+        [trip.id_viaje],
+      ),
+      query<{
+        id_encomienda: number;
+        codigo_tracking: string;
+        descripcion: string;
+        estado: string;
+        remitente: string;
+        destinatario: string;
+      }>(
+        `SELECT
+           e.id_encomienda,
+           e.codigo_tracking,
+           e.descripcion,
+           e.estado,
+           sr.nombres || ' ' || sr.apellidos AS remitente,
+           sd.nombres || ' ' || sd.apellidos AS destinatario
+         FROM encomiendas e
+         JOIN personas sr ON sr.id_persona = e.id_persona_remitente
+         JOIN personas sd ON sd.id_persona = e.id_persona_destinatario
+         WHERE e.id_viaje = $1
+         ORDER BY e.fecha_registro`,
+        [trip.id_viaje],
+      ),
+    ]);
 
-    // Obtener Encomiendas del viaje
-    const encRes = await query(
-      `SELECT id_encomienda, codigo, remitente, destinatario, descripcion, cantidad, estado
-       FROM encomiendas
-       WHERE id_viaje = $1`,
-      [trip.id_viaje]
-    );
-
-    return NextResponse.json({
+    return noStoreJson({
       trip: {
-        id: trip.id_viaje.toString(),
-        code: trip.codigo,
+        id: `T${String(trip.id_viaje).padStart(3, "0")}`,
+        code: `T${String(trip.id_viaje).padStart(3, "0")}`,
         origin: trip.origen,
         destination: trip.destino,
         date: trip.fecha,
-        departureTime: trip.hora_salida,
-        estimatedArrivalTime: trip.hora_llegada,
-        vehicleId: trip.id_vehiculo.toString(),
+        departureTime: trip.hora,
+        vehicleId: String(trip.id_vehiculo),
         vehiclePlate: trip.placa,
-        driverId: trip.id_conductor.toString(),
+        driverId: String(trip.id_conductor),
         status: trip.estado,
-        passengerCount: passRes.rows.length,
-        parcelCount: encRes.rows.length,
+        passengerCount: passengers.rows.length,
+        parcelCount: parcels.rows.length,
       },
-      passengers: passRes.rows,
-      parcels: encRes.rows
+      passengers: passengers.rows.map((row) => ({
+        id: row.id_boleto,
+        codigo: row.codigo,
+        asiento: row.asiento,
+        estado: row.estado,
+        nombre: `${row.nombres} ${row.apellidos}`.trim(),
+        documento: row.nro_documento,
+        telefono: row.telefono,
+      })),
+      parcels: parcels.rows.map((row) => ({
+        id: row.id_encomienda,
+        codigo: row.codigo_tracking,
+        descripcion: row.descripcion,
+        estado: row.estado,
+        remitente: row.remitente,
+        destinatario: row.destinatario,
+      })),
     });
   } catch (error) {
-    console.error("Error API viajes activos:", error);
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
+    return handleRouteError(error);
   }
 }
-
-

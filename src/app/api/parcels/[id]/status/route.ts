@@ -14,7 +14,11 @@ export async function PATCH(
 ) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole(["CONDUCTOR", "ADMINISTRADOR"]);
+    const user = await requireApiRole([
+      "CONDUCTOR",
+      "ADMINISTRADOR",
+      "OPERADOR",
+    ]);
     const { id } = await params;
     const input = await parseJsonBody(request, parcelStatusSchema);
     const item = await updateParcelStatus(user, id, input);

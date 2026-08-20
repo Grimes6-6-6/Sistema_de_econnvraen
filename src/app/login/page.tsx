@@ -43,6 +43,26 @@ export default function LoginPage() {
     try {
       const user = await loginUser(username, password);
       if (!user) throw new Error("Usuario o contraseña incorrectos.");
+
+      if (
+        loginMode === "operador" &&
+        user.rol === "CONDUCTOR"
+      ) {
+        throw new Error(
+          "Este usuario es conductor. Usa el acceso de Conductores.",
+        );
+      }
+
+      if (
+        loginMode === "conductor" &&
+        user.rol !== "CONDUCTOR" &&
+        user.rol !== "ADMINISTRADOR"
+      ) {
+        throw new Error(
+          "Este usuario no tiene perfil de conductor. Usa Personal de Agencia.",
+        );
+      }
+
       router.replace(user.rol === "CONDUCTOR" ? "/conductor" : "/dashboard");
       router.refresh();
     } catch (loginError) {

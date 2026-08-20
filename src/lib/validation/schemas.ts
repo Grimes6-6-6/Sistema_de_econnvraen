@@ -223,6 +223,32 @@ export const dniLookupSchema = z.object({
   dni: dniSchema,
 });
 
+export const tripIncidentSchema = z.object({
+  tipo: z.enum([
+    "MECANICA",
+    "CLIMA",
+    "BLOQUEO_VIA",
+    "ACCIDENTE",
+    "RETRASO",
+    "OTRO",
+  ]),
+  descripcion: safeText(5, 500),
+  nivel_gravedad: z.enum(["LEVE", "MODERADA", "GRAVE"]).default("LEVE"),
+  latitude: z.number().finite().min(-90).max(90).optional().nullable(),
+  longitude: z.number().finite().min(-180).max(180).optional().nullable(),
+});
+
+export const driverProfileUpdateSchema = z.object({
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9+ -]{7,20}$/)
+    .optional()
+    .or(z.literal("")),
+  email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
+  address: safeText(3, 180).optional().or(z.literal("")),
+});
+
 export type TicketInput = z.infer<typeof ticketInputSchema>;
 export type AgencyInput = z.infer<typeof agencyInputSchema>;
 export type ParcelInput = z.infer<typeof parcelInputSchema>;
@@ -235,3 +261,6 @@ export type ParcelStatusInput = z.infer<typeof parcelStatusSchema>;
 export type VehicleLocationUpdateInput = z.infer<
   typeof vehicleLocationUpdateSchema
 >;
+export type TripIncidentInput = z.infer<typeof tripIncidentSchema>;
+export type DriverProfileUpdateInput = z.infer<typeof driverProfileUpdateSchema>;
+

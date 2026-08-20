@@ -141,6 +141,27 @@ export interface PublicTrackingResult {
   ultimaActualizacion: string;
 }
 
+export interface IncidenciaViaje {
+  id: string;
+  id_viaje: string;
+  id_conductor: string;
+  conductor_nombre?: string;
+  id_agencia: string;
+  agencia_nombre?: string;
+  tipo: "MECANICA" | "CLIMA" | "BLOQUEO_VIA" | "ACCIDENTE" | "RETRASO" | "OTRO";
+  descripcion: string;
+  nivel_gravedad: "LEVE" | "MODERADA" | "GRAVE";
+  latitude: number | null;
+  longitude: number | null;
+  created_at: string;
+}
+
+export interface DriverContact {
+  telefono: string;
+  email: string;
+  direccion: string;
+}
+
 export const EMPTY_DATABASE_STATE: DatabaseState = {
   rutas: [],
   vehiculos: [],
@@ -150,3 +171,4 @@ export const EMPTY_DATABASE_STATE: DatabaseState = {
   encomiendas: [],
   recojos: [],
 };
+
