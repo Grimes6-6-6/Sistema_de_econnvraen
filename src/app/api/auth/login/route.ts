@@ -1,5 +1,6 @@
 import { authenticateUser } from "@/lib/auth/users";
 import { createSession } from "@/lib/auth/session";
+import { toClientSessionUser } from "@/lib/auth/types";
 import { parseEntityId } from "@/lib/domain/ids";
 import { loginSchema } from "@/lib/validation/schemas";
 import { writeAuditLog } from "@/server/audit";
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
       ipHash,
     });
 
-    return noStoreJson({ user });
+    return noStoreJson({ user: toClientSessionUser(user) });
   } catch (error) {
     return handleRouteError(error);
   }

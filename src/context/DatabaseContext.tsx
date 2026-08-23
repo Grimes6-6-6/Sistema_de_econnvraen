@@ -1,6 +1,13 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { SessionUser } from "@/lib/auth/types";
 import type {
   Boleto,
@@ -33,13 +40,18 @@ export type Usuario = SessionUser;
 
 interface DatabaseContextType {
   db: DatabaseState;
+  isInitializing: boolean;
+  dataError: string | null;
   isOffline: boolean;
   offlineQueue: OfflineAction[];
   toggleOffline: () => void;
   addBoleto: (
-    boleto: Omit<Boleto, "id" | "codigo" | "fechaEmision" | "sunat_estado" | "estado">,
+    boleto: Omit<
+      Boleto,
+      "id" | "codigo" | "fechaEmision" | "sunat_estado" | "estado" | "precio"
+    >,
   ) => Promise<Boleto | null>;
-  anularBoleto: (boletoId: string) => Promise<void>;
+  anularBoleto: (boletoId: string, reason: string) => Promise<void>;
   addEncomienda: (
     encomienda: Omit<
       Encomienda,
@@ -53,19 +65,23 @@ interface DatabaseContextType {
     viajeId: string,
     newState: Extract<Viaje["estado"], "en_curso" | "completado">,
   ) => Promise<Viaje | null>;
-  cancelViaje: (viajeId: string) => Promise<void>;
+  cancelViaje: (viajeId: string, reason: string) => Promise<void>;
   addRecojo: (
     recojo: Omit<Recojo, "id" | "estado" | "asignado">,
   ) => Promise<Recojo | null>;
-  assignRecojoDriver: (recojoId: string, driverName: string) => Promise<void>;
+  assignRecojoDriver: (recojoId: string, driverId: string) => Promise<void>;
   updateRecojoStatus: (
     recojoId: string,
-    newState: Extract<Recojo["estado"], "completado" | "cancelado">,
+    newState: Extract<
+      Recojo["estado"],
+      "en_camino" | "completado" | "cancelado"
+    >,
   ) => Promise<void>;
   updateParcelStatus: (
     parcelId: string,
     newState: Encomienda["estado"],
     evidence?: DeliveryEvidence | null,
+    coordinates?: { latitude: number; longitude: number } | null,
   ) => Promise<void>;
   reportTripIncident: (
     viajeId: string,
@@ -176,13 +192,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [db, setDb] = useState<DatabaseState>(EMPTY_DATABASE_STATE);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState<OfflineAction[]>([]);
   const [currentUser, setCurrentUser] = useState<Usuario | null>(null);
+  const syncInProgressRef = useRef(false);
+  const lastAutoSyncKeyRef = useRef("");
+  const manualOfflineRef = useRef(false);
 
   const refreshDatabase = useCallback(async () => {
-    const payload = await apiRequest<{ data: DatabaseState }>("/api/data");
-    setDb(payload.data);
+    setDataError(null);
+    try {
+      const payload = await apiRequest<{ data: DatabaseState }>("/api/data");
+      setDb(payload.data);
+    } catch (error) {
+      setDataError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo cargar la información de la agencia.",
+      );
+      throw error;
+    }
   }, []);
 
   const loginUser = async (
@@ -197,21 +228,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     setOfflineQueue(
       readOfflineQueue(payload.user.id, payload.user.agenciaId),
     );
+    setDataError(null);
     await refreshDatabase();
     return payload.user;
   };
 
   const logoutUser = async () => {
-    const queueKey = currentUser
-      ? offlineQueueKey(currentUser.id, currentUser.agenciaId)
-      : null;
     try {
       await apiRequest<void>("/api/auth/logout", { method: "POST" });
     } finally {
-      if (queueKey) localStorage.removeItem(queueKey);
+      // Unsynchronized operational events belong to the user and agency. Keep
+      // them so an accidental logout does not destroy work recorded offline.
       setCurrentUser(null);
       setDb(EMPTY_DATABASE_STATE);
       setOfflineQueue([]);
+      setDataError(null);
     }
   };
 
@@ -226,13 +257,24 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
           readOfflineQueue(payload.user.id, payload.user.agenciaId),
         );
         const data = await apiRequest<{ data: DatabaseState }>("/api/data");
-        if (!cancelled) setDb(data.data);
+        if (!cancelled) {
+          setDb(data.data);
+          setDataError(null);
+        }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
           setCurrentUser(null);
           setDb(EMPTY_DATABASE_STATE);
+          setDataError(
+            error instanceof Error
+              ? error.message
+              : "No se pudo iniciar la aplicación.",
+          );
         }
+      })
+      .finally(() => {
+        if (!cancelled) setIsInitializing(false);
       });
 
     localStorage.removeItem(OFFLINE_QUEUE_PREFIX);
@@ -249,7 +291,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
   const addBoleto = async (
     boletoData: Omit<
       Boleto,
-      "id" | "codigo" | "fechaEmision" | "sunat_estado" | "estado"
+      "id" | "codigo" | "fechaEmision" | "sunat_estado" | "estado" | "precio"
     >,
   ): Promise<Boleto | null> => {
     if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
@@ -263,12 +305,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     return payload.item;
   };
 
-  const anularBoleto = async (boletoId: string): Promise<void> => {
+  const anularBoleto = async (
+    boletoId: string,
+    reason: string,
+  ): Promise<void> => {
     if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
       throw new Error("No tienes permisos para anular pasajes.");
     }
     await apiRequest(`/api/tickets/${encodeURIComponent(boletoId)}/cancel`, {
       method: "POST",
+      body: JSON.stringify({ reason }),
     });
     await refreshDatabase();
   };
@@ -304,12 +350,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     return payload.item;
   };
 
-  const cancelViaje = async (viajeId: string): Promise<void> => {
+  const cancelViaje = async (
+    viajeId: string,
+    reason: string,
+  ): Promise<void> => {
     if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
       throw new Error("No tienes permisos para cancelar viajes.");
     }
     await apiRequest(`/api/trips/${encodeURIComponent(viajeId)}/cancel`, {
       method: "POST",
+      body: JSON.stringify({ reason }),
     });
     await refreshDatabase();
   };
@@ -348,12 +398,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const assignRecojoDriver = async (
     recojoId: string,
-    driverName: string,
+    driverId: string,
   ): Promise<void> => {
     if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
       throw new Error("No tienes permisos para asignar recojos.");
     }
-    const driver = db.conductores.find((item) => item.nombres === driverName);
+    const driver = db.conductores.find((item) => item.id === driverId);
     if (!driver) throw new Error("El conductor seleccionado no existe.");
     await apiRequest(`/api/pickups/${encodeURIComponent(recojoId)}/assign`, {
       method: "PATCH",
@@ -364,9 +414,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const updateRecojoStatus = async (
     recojoId: string,
-    newState: Extract<Recojo["estado"], "completado" | "cancelado">,
+    newState: Extract<
+      Recojo["estado"],
+      "en_camino" | "completado" | "cancelado"
+    >,
   ): Promise<void> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
+    if (!hasRole("CONDUCTOR", "OPERADOR", "ADMINISTRADOR")) {
       throw new Error("No tienes permisos para actualizar recojos.");
     }
     await apiRequest(`/api/pickups/${encodeURIComponent(recojoId)}/status`, {
@@ -376,48 +429,91 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     await refreshDatabase();
   };
 
-  const syncOfflineQueue = async (queue: OfflineAction[]) => {
+  const syncOfflineQueue = useCallback(async (queue: OfflineAction[]) => {
+    if (syncInProgressRef.current || !currentUser) return;
+    syncInProgressRef.current = true;
     let processed = 0;
-    for (const action of queue) {
-      try {
-        const payload = await apiRequest<{ item: Encomienda }>(
-          `/api/parcels/${encodeURIComponent(action.parcelId)}/status`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              requestId: action.requestId,
-              newState: action.newState,
-              location: action.location,
-              evidence: action.evidence,
-            }),
-          },
+    try {
+      for (const action of queue) {
+        try {
+          const payload = await apiRequest<{ item: Encomienda }>(
+            `/api/parcels/${encodeURIComponent(action.parcelId)}/status`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                requestId: action.requestId,
+                newState: action.newState,
+                location: action.location,
+                latitude: action.latitude,
+                longitude: action.longitude,
+                occurredAt: action.timestamp,
+                evidence: action.evidence,
+              }),
+            },
+          );
+          setDb((current) => replaceParcel(current, payload.item));
+          processed += 1;
+        } catch {
+          // Keep failed actions in the queue for a later synchronization attempt.
+          break;
+        }
+      }
+      const remaining = queue.slice(processed);
+      setOfflineQueue(remaining);
+      if (remaining.length) {
+        localStorage.setItem(
+          offlineQueueKey(currentUser.id, currentUser.agenciaId),
+          JSON.stringify(remaining),
         );
-        setDb((current) => replaceParcel(current, payload.item));
-        processed += 1;
-      } catch {
-        // Keep failed actions in the queue for a later synchronization attempt.
-        break;
+      } else {
+        localStorage.removeItem(
+          offlineQueueKey(currentUser.id, currentUser.agenciaId),
+        );
+      }
+      await refreshDatabase();
+    } finally {
+      syncInProgressRef.current = false;
+    }
+  }, [currentUser, refreshDatabase]);
+
+  useEffect(() => {
+    const syncWhenOnline = () => {
+      if (manualOfflineRef.current) return;
+      setIsOffline(false);
+      lastAutoSyncKeyRef.current = "";
+      if (offlineQueue.length) void syncOfflineQueue(offlineQueue);
+    };
+    const markOffline = () => setIsOffline(true);
+
+    window.addEventListener("online", syncWhenOnline);
+    window.addEventListener("offline", markOffline);
+    const connectionCheck = window.setTimeout(() => {
+      if (!navigator.onLine) setIsOffline(true);
+      else if (!manualOfflineRef.current) setIsOffline(false);
+    }, 0);
+
+    const firstAction = offlineQueue[0];
+    if (navigator.onLine && !manualOfflineRef.current && currentUser && firstAction) {
+      const attemptKey = `${currentUser.id}:${currentUser.agenciaId}:${firstAction.requestId}`;
+      if (lastAutoSyncKeyRef.current !== attemptKey) {
+        lastAutoSyncKeyRef.current = attemptKey;
+        void syncOfflineQueue(offlineQueue);
       }
     }
-    const remaining = queue.slice(processed);
-    setOfflineQueue(remaining);
-    if (remaining.length && currentUser) {
-      localStorage.setItem(
-        offlineQueueKey(currentUser.id, currentUser.agenciaId),
-        JSON.stringify(remaining),
-      );
-    } else if (currentUser) {
-      localStorage.removeItem(
-        offlineQueueKey(currentUser.id, currentUser.agenciaId),
-      );
-    }
-    await refreshDatabase();
-  };
+
+    return () => {
+      window.clearTimeout(connectionCheck);
+      window.removeEventListener("online", syncWhenOnline);
+      window.removeEventListener("offline", markOffline);
+    };
+  }, [currentUser, offlineQueue, syncOfflineQueue]);
 
   const toggleOffline = () => {
     if (!hasRole("CONDUCTOR", "ADMINISTRADOR")) return;
+    if (!navigator.onLine) return;
     setIsOffline((current) => {
       const next = !current;
+      manualOfflineRef.current = next;
       if (current && !next && offlineQueue.length) {
         void syncOfflineQueue(offlineQueue);
       }
@@ -429,6 +525,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     parcelId: string,
     newState: Encomienda["estado"],
     evidence: DeliveryEvidence | null = null,
+    coordinates: { latitude: number; longitude: number } | null = null,
   ): Promise<void> => {
     if (!hasRole("CONDUCTOR", "ADMINISTRADOR", "OPERADOR")) {
       throw new Error("No tienes permisos para actualizar encomiendas.");
@@ -444,12 +541,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     }[newState];
 
     if (isOffline) {
+      if (newState === "entregado") {
+        throw new Error(
+          "La entrega con firma requiere conexión para no guardar datos biométricos en este dispositivo.",
+        );
+      }
       const action: OfflineAction = {
         requestId,
         parcelId,
         newState,
         timestamp: new Date().toISOString(),
         location,
+        latitude: coordinates?.latitude,
+        longitude: coordinates?.longitude,
         evidence,
       };
       const nextQueue = [...offlineQueue, action];
@@ -494,6 +598,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
           requestId,
           newState,
           location,
+          latitude: coordinates?.latitude,
+          longitude: coordinates?.longitude,
           evidence,
         }),
       },
@@ -550,6 +656,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     <DatabaseContext.Provider
       value={{
         db,
+        isInitializing,
+        dataError,
         isOffline,
         offlineQueue,
         toggleOffline,

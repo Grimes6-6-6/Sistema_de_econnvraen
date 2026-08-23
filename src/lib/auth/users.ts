@@ -15,6 +15,7 @@ interface UserRow {
   nombres: string | null;
   apellidos: string | null;
   dni: string | null;
+  id_conductor: number | null;
   id_agencia: number | null;
   agencia_nombre: string | null;
 }
@@ -27,6 +28,10 @@ function toSessionUser(row: UserRow): SessionUser {
     apellidos: row.apellidos || "",
     rol: row.rol,
     dni: row.dni || "",
+    conductorId:
+      row.id_conductor === null
+        ? null
+        : `C${String(row.id_conductor).padStart(2, "0")}`,
     agenciaId:
       row.id_agencia === null
         ? null
@@ -48,11 +53,13 @@ export async function authenticateUser(
        p.nombres,
        p.apellidos,
        p.nro_documento AS dni,
+       driver.id_conductor,
        membership.id_agencia,
        agency.nombre AS agencia_nombre
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
      LEFT JOIN LATERAL (
        SELECT ua.id_agencia
        FROM usuarios_agencias ua
@@ -98,11 +105,13 @@ export async function findUserById(userId: number): Promise<SessionUser | null> 
        p.nombres,
        p.apellidos,
        p.nro_documento AS dni,
+       driver.id_conductor,
        membership.id_agencia,
        agency.nombre AS agencia_nombre
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
      LEFT JOIN LATERAL (
        SELECT ua.id_agencia
        FROM usuarios_agencias ua

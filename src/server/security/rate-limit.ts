@@ -20,6 +20,8 @@ export async function consumeRateLimit(
   const bucketStart = Math.floor(now / windowMs) * windowMs;
   const expiresAt = new Date(bucketStart + windowMs);
 
+  await query("DELETE FROM rate_limits WHERE expires_at < NOW()");
+
   const result = await query<RateLimitRow>(
     `INSERT INTO rate_limits (
        rate_key, bucket_start, request_count, expires_at

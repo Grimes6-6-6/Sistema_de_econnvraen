@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasValidTrackingChecksum } from "@/lib/domain/tracking";
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 const PERSON_NAME = /^[\p{L}\p{M} .'-]+$/u;
@@ -28,7 +29,8 @@ export const trackingCodeSchema = z
   .string()
   .trim()
   .toUpperCase()
-  .regex(/^ECV-\d{6}-\d{5}$/, "El código de tracking no es válido.");
+  .regex(/^ECV-\d{6}-\d{5}$/, "El código de tracking no es válido.")
+  .refine(hasValidTrackingChecksum, "El código de tracking no supera la validación de control.");
 
 export const loginSchema = z.object({
   username: z
@@ -65,16 +67,17 @@ export const agencyInputSchema = z.object({
   email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
 });
 
-export const ticketInputSchema = z.object({
-  requestId: requestIdSchema,
-  id_viaje: z.string().regex(/^T\d{3,10}$/),
-  asiento: z.number().int().min(1).max(80),
-  pasajeroDni: dniSchema,
-  pasajeroNombres: personName,
-  pasajeroApellidos: personName,
-  pasajeroTelefono: phoneSchema,
-  precio: z.number().finite().min(0).max(100_000),
-});
+export const ticketInputSchema = z
+  .object({
+    requestId: requestIdSchema,
+    id_viaje: z.string().regex(/^T\d{3,10}$/),
+    asiento: z.number().int().min(1).max(4),
+    pasajeroDni: dniSchema,
+    pasajeroNombres: personName,
+    pasajeroApellidos: personName,
+    pasajeroTelefono: phoneSchema,
+  })
+  .strict();
 
 export const parcelInputSchema = z
   .object({
@@ -87,6 +90,7 @@ export const parcelInputSchema = z
     destinatarioNombre: personName,
     destinatarioTelefono: phoneSchema,
     peso: z.number().finite().positive().max(1000),
+    dimensiones: safeText(3, 60),
     valor: z.number().finite().min(0).max(10_000_000),
     costo: z.number().finite().min(0).max(100_000),
     descripcion: safeText(3, 240),
@@ -110,6 +114,10 @@ export const tripStatusSchema = z.object({
   newState: z.enum(["en_curso", "completado"]),
 });
 
+export const cancellationSchema = z.object({
+  reason: safeText(5, 300),
+});
+
 export const pickupInputSchema = z.object({
   requestId: requestIdSchema,
   dni: dniSchema,
@@ -121,7 +129,7 @@ export const pickupInputSchema = z.object({
 });
 
 export const pickupStatusSchema = z.object({
-  newState: z.enum(["completado", "cancelado"]),
+  newState: z.enum(["en_camino", "completado", "cancelado"]),
 });
 
 export const pickupAssignmentSchema = z.object({
@@ -146,6 +154,7 @@ export const parcelStatusSchema = z
     location: safeText(3, 180).optional(),
     latitude: z.number().finite().min(-90).max(90).optional(),
     longitude: z.number().finite().min(-180).max(180).optional(),
+    occurredAt: z.iso.datetime().optional(),
     evidence: z
       .object({
         signature: signatureSchema.nullable().optional(),
@@ -204,12 +213,22 @@ export const offlineQueueSchema = z
       ]),
       timestamp: z.iso.datetime(),
       location: safeText(3, 180),
+      latitude: z.number().finite().min(-90).max(90).optional(),
+      longitude: z.number().finite().min(-180).max(180).optional(),
       evidence: z
         .object({
           signature: signatureSchema.nullable().optional(),
           photo: safeText(1, 200).optional(),
         })
         .nullable(),
+    }).superRefine((value, context) => {
+      if ((value.latitude === undefined) !== (value.longitude === undefined)) {
+        context.addIssue({
+          code: "custom",
+          path: ["latitude"],
+          message: "La latitud y longitud deben enviarse juntas.",
+        });
+      }
     }),
   )
   .max(100);
@@ -254,6 +273,7 @@ export type AgencyInput = z.infer<typeof agencyInputSchema>;
 export type ParcelInput = z.infer<typeof parcelInputSchema>;
 export type TripInput = z.infer<typeof tripInputSchema>;
 export type TripStatusInput = z.infer<typeof tripStatusSchema>;
+export type CancellationInput = z.infer<typeof cancellationSchema>;
 export type PickupInput = z.infer<typeof pickupInputSchema>;
 export type PickupStatusInput = z.infer<typeof pickupStatusSchema>;
 export type PickupAssignmentInput = z.infer<typeof pickupAssignmentSchema>;
@@ -263,4 +283,3 @@ export type VehicleLocationUpdateInput = z.infer<
 >;
 export type TripIncidentInput = z.infer<typeof tripIncidentSchema>;
 export type DriverProfileUpdateInput = z.infer<typeof driverProfileUpdateSchema>;
-

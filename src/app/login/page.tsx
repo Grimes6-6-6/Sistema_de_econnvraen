@@ -45,25 +45,6 @@ export default function LoginPage() {
       const user = await loginUser(username, password);
       if (!user) throw new Error("Usuario o contraseña incorrectos.");
 
-      if (
-        loginMode === "operador" &&
-        user.rol === "CONDUCTOR"
-      ) {
-        throw new Error(
-          "Este usuario es conductor. Usa el acceso de Conductores.",
-        );
-      }
-
-      if (
-        loginMode === "conductor" &&
-        user.rol !== "CONDUCTOR" &&
-        user.rol !== "ADMINISTRADOR"
-      ) {
-        throw new Error(
-          "Este usuario no tiene perfil de conductor. Usa Personal de Agencia.",
-        );
-      }
-
       router.replace(user.rol === "CONDUCTOR" ? "/conductor" : "/dashboard");
       router.refresh();
     } catch (loginError) {
@@ -98,7 +79,7 @@ export default function LoginPage() {
               <span className="text-xl font-black tracking-wider text-white flex items-center gap-2">
                 ECONNVRAE
                 <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Cloud v2.0
+                  Sistema Web
                 </span>
               </span>
               <p className="text-[11px] text-slate-400 font-semibold tracking-wide">
@@ -197,7 +178,7 @@ export default function LoginPage() {
                 </div>
 
                 {error && (
-                  <div className="rounded-xl bg-red-500/10 p-3.5 text-xs font-bold text-red-300 border border-red-500/30 flex items-center gap-2">
+                  <div role="alert" className="rounded-xl bg-red-500/10 p-3.5 text-xs font-bold text-red-300 border border-red-500/30 flex items-center gap-2">
                     <span>⚠️</span>
                     <span>{error}</span>
                   </div>
@@ -205,12 +186,13 @@ export default function LoginPage() {
 
                 <form onSubmit={handleLoginSubmit} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                      <label htmlFor="login-username" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
                       Usuario / DNI
                     </label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                       <input
+                        id="login-username"
                         type="text"
                         required
                         value={username}
@@ -222,12 +204,13 @@ export default function LoginPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                      <label htmlFor="login-password" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
                       Contraseña
                     </label>
                     <div className="relative">
                       <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                       <input
+                        id="login-password"
                         type="password"
                         required
                         value={password}
@@ -241,6 +224,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
+                    aria-busy={isSubmitting}
                     className="w-full rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-extrabold text-xs uppercase tracking-widest py-3.5 flex justify-center items-center gap-2 shadow-lg shadow-emerald-950/50 hover:shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50 mt-2"
                   >
                     {isSubmitting ? "Autenticando..." : "Ingresar al Sistema"}
@@ -272,12 +256,12 @@ export default function LoginPage() {
               Gestión Logística Inteligente
             </h2>
             <p className="text-xs xl:text-sm text-slate-300 font-medium leading-relaxed">
-              Plataforma para la administración de encomiendas, pasajes, incidencias y control satelital de flota en tiempo real.
+              Plataforma para la administración de encomiendas, pasajes, incidencias y ubicación GPS de la flota.
             </p>
           </div>
 
           <div className="pt-6 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500 font-bold tracking-wider uppercase">
-            <span>Seguridad ASVS 5.0</span>
+            <span>Acceso protegido por roles</span>
             <span>Ayacucho — VRAEM</span>
           </div>
         </div>

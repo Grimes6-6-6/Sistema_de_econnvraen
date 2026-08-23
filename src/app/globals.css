@@ -21,15 +21,34 @@
   body {
     background-color: #090d16;
     color: #f8fafc;
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: var(--font-roboto), system-ui, sans-serif;
     min-height: 100vh;
     position: relative;
     -webkit-font-smoothing: antialiased;
+  }
+
+  button {
+    min-height: 44px;
   }
 }
 
 /* Print styles */
 @media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+
+  .ambient-bg {
+    display: none !important;
+  }
+
   .no-print {
     display: none !important;
   }
@@ -43,6 +62,36 @@
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    color: #0f172a !important;
+    background: #fff !important;
+  }
+
+  .ticket-print-context > :not(.ticket-print-area) {
+    display: none !important;
+  }
+
+  .ticket-print-area {
+    display: block !important;
+    max-width: 180mm !important;
+  }
+
+  .print-area * {
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+  }
+
+  .print-area > div,
+  .print-area section {
+    background: #fff !important;
+  }
+
+  .print-area table {
+    break-inside: auto;
+  }
+
+  .print-area tr {
+    break-inside: avoid;
   }
 }
 
@@ -173,4 +222,15 @@
     0 0 0 1px rgba(255,255,255,0.06),
     0 8px 32px rgba(0, 0, 0, 0.5),
     0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

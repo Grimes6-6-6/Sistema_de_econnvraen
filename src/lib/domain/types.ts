@@ -75,6 +75,7 @@ export interface Encomienda {
   destinatarioNombre: string;
   destinatarioTelefono: string;
   peso: number;
+  dimensiones: string;
   valor: number;
   costo: number;
   descripcion: string;
@@ -96,7 +97,12 @@ export interface Recojo {
   fecha: string;
   direccion: string;
   descripcion: string;
-  estado: "pendiente" | "asignado" | "completado" | "cancelado";
+  estado:
+    | "pendiente"
+    | "asignado"
+    | "en_camino"
+    | "completado"
+    | "cancelado";
   asignado: string;
 }
 
@@ -130,7 +136,15 @@ export interface OfflineAction {
   newState: Encomienda["estado"];
   timestamp: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
   evidence: DeliveryEvidence | null;
+}
+
+export interface PublicTrackingEvent {
+  estado: Encomienda["estado"];
+  fecha: string;
+  ubicacion: string;
 }
 
 export interface PublicTrackingResult {
@@ -139,6 +153,7 @@ export interface PublicTrackingResult {
   fechaRegistro: string;
   ultimaUbicacion: string;
   ultimaActualizacion: string;
+  historial: PublicTrackingEvent[];
 }
 
 export interface IncidenciaViaje {
@@ -171,4 +186,3 @@ export const EMPTY_DATABASE_STATE: DatabaseState = {
   encomiendas: [],
   recojos: [],
 };
-

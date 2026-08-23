@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPool } from "./db-client.mjs";
+import { verifyBaselineSchema, verifyCurrentSchema } from "./db-schema.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDirectory = path.resolve(scriptDirectory, "../db/migrations");
@@ -24,6 +25,13 @@ try {
   const filenames = (await readdir(migrationsDirectory))
     .filter((filename) => filename.endsWith(".sql"))
     .sort();
+
+  const initialMigration = await pool.query(
+    "SELECT 1 FROM schema_migrations WHERE filename = '001_initial.sql'",
+  );
+  if (initialMigration.rowCount) {
+    await verifyBaselineSchema(pool);
+  }
 
   for (const filename of filenames) {
     const sql = await readFile(path.join(migrationsDirectory, filename), "utf8");
@@ -60,6 +68,7 @@ try {
       client.release();
     }
   }
+  await verifyCurrentSchema(pool);
 } finally {
   if (lockAcquired) {
     await pool.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID]);

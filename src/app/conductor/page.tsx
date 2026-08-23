@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import {
   useDatabase,
   Viaje,
@@ -11,17 +10,16 @@ import {
   IncidenciaViaje,
 } from "@/context/DatabaseContext";
 import { useLocation } from "@/context/LocationContext";
+import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
+import { useFeedback } from "@/components/ui/FeedbackProvider";
 import {
   ArrowLeft,
-  Camera,
   User,
   CheckCircle2,
   CloudOff,
   Wifi,
   LogOut,
   FileText,
-  Upload,
-  Shield,
   Edit3,
   Phone,
   Mail,
@@ -29,7 +27,6 @@ import {
   Save,
   X,
   AlertTriangle,
-  Clock,
   Package,
   Users,
   LayoutGrid,
@@ -44,62 +41,48 @@ import {
 // Dynamically load the map — no SSR (Leaflet needs window)
 const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false });
 
-// ── Types ────────────────────────────────────────────────────────────────────
-type DocumentStatus = "vigente" | "por_vencer" | "vencido" | "sin_cargar";
-interface DriverDoc {
-  id: string;
-  name: string;
-  icon: React.ReactNode;
-  expiry: string;
-  status: DocumentStatus;
-  fileDataUrl: string | null;
-  fileMediaType?: string;
+function trapDialogFocus(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const statusMeta: Record<
-  DocumentStatus,
-  { label: string; color: string; dot: string }
-> = {
-  vigente: {
-    label: "Vigente",
-    color: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
-    dot: "bg-emerald-500",
-  },
-  por_vencer: {
-    label: "Por Vencer",
-    color: "bg-amber-500/10 border-amber-500/20 text-amber-400",
-    dot: "bg-amber-500",
-  },
-  vencido: {
-    label: "Vencido",
-    color: "bg-red-500/10 border-red-500/20 text-red-400",
-    dot: "bg-red-500",
-  },
-  sin_cargar: {
-    label: "Sin Cargar",
-    color: "bg-slate-700/50 border-slate-700 text-slate-400",
-    dot: "bg-slate-500",
-  },
-};
 
 export default function ConductorPage() {
   const router = useRouter();
   const {
     db,
+    isInitializing,
+    dataError,
     isOffline,
     toggleOffline,
     updateParcelStatus,
     updateViajeStatus,
+    updateRecojoStatus,
     reportTripIncident,
     getTripIncidents,
     updateConductorProfile,
     currentUser,
     logoutUser,
+    refreshDatabase,
   } = useDatabase();
-  const [mainTab, setMainTab] = useState<
-    "trips" | "perfil" | "documentos" | "gps"
-  >("trips");
+  const { notify, requestConfirmation } = useFeedback();
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [mainTab, setMainTab] = useState<"trips" | "perfil" | "gps">(
+    "trips",
+  );
   const { ownPosition, gpsStatus, gpsError, startTracking, stopTracking } =
     useLocation();
   const [driverScreen, setDriverScreen] = useState<
@@ -135,64 +118,39 @@ export default function ConductorPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [profilePhone, setProfilePhone] = useState("987-654-321");
-  const [profileEmail, setProfileEmail] = useState("conductor@econnvrae.pe");
-  const [profileAddress, setProfileAddress] = useState(
-    "Jr. Los Andes 245, Ayacucho",
-  );
-  const [profileLicense, setProfileLicense] = useState("A-IIb · Lima");
+  const [profilePhone, setProfilePhone] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profileAddress, setProfileAddress] = useState("");
+  const [profileLicense, setProfileLicense] = useState("");
 
-  // Documents state
-  const [docs, setDocs] = useState<DriverDoc[]>([
-    {
-      id: "soat",
-      name: "SOAT Vehicular",
-      icon: <Shield className="h-5 w-5" />,
-      expiry: "2026-12-31",
-      status: "vigente",
-      fileDataUrl: null,
-    },
-    {
-      id: "licencia",
-      name: "Licencia de Conducir",
-      icon: <FileText className="h-5 w-5" />,
-      expiry: "2026-08-15",
-      status: "vigente",
-      fileDataUrl: null,
-    },
-    {
-      id: "revision",
-      name: "Revisión Técnica",
-      icon: <CheckCircle2 className="h-5 w-5" />,
-      expiry: "2026-06-01",
-      status: "vigente",
-      fileDataUrl: null,
-    },
-    {
-      id: "poliza",
-      name: "Póliza de Seguro",
-      icon: <Shield className="h-5 w-5" />,
-      expiry: "2026-03-20",
-      status: "vigente",
-      fileDataUrl: null,
-    },
-    {
-      id: "brevete",
-      name: "Certificado Médico",
-      icon: <User className="h-5 w-5" />,
-      expiry: "",
-      status: "sin_cargar",
-      fileDataUrl: null,
-    },
-    {
-      id: "tarjeta",
-      name: "Tarjeta de Propiedad",
-      icon: <FileText className="h-5 w-5" />,
-      expiry: "",
-      status: "sin_cargar",
-      fileDataUrl: null,
-    },
-  ]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/conductor/profile", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          contact?: { phone: string; email: string; address: string };
+        };
+        if (!response.ok || !payload.contact) {
+          throw new Error("No se pudo cargar el perfil.");
+        }
+        if (!cancelled) {
+          setProfilePhone(payload.contact.phone);
+          setProfileEmail(payload.contact.email);
+          setProfileAddress(payload.contact.address);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProfileMsg({
+            type: "error",
+            text: "No se pudieron cargar los datos de contacto.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogout = async () => {
     stopTracking();
@@ -205,7 +163,6 @@ export default function ConductorPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
   const getTodayDateString = () => {
     const today = new Date();
@@ -216,14 +173,8 @@ export default function ConductorPage() {
   };
 
   const todayStr = getTodayDateString();
-  const conductorRecord = db.conductores.find(
-    (c) =>
-      c.nombres ===
-      (currentUser
-        ? `${currentUser.nombres} ${currentUser.apellidos}`
-        : "Alexis Melgar Vila"),
-  );
-  const conductorId = conductorRecord ? conductorRecord.id : "C01";
+  const conductorId = currentUser?.conductorId || "";
+  const conductorRecord = db.conductores.find((c) => c.id === conductorId);
   const myTrips = db.viajes.filter(
     (v) => v.id_conductor === conductorId && v.fecha === todayStr,
   );
@@ -255,15 +206,60 @@ export default function ConductorPage() {
     nextState: Extract<Viaje["estado"], "en_curso" | "completado">,
   ) => {
     if (!selectedTrip) return;
+    if (nextState === "completado") {
+      const result = await requestConfirmation({
+        title: "Finalizar viaje",
+        message:
+          "Confirma que la unidad llegó a destino y que la operación del viaje terminó.",
+        confirmLabel: "Finalizar viaje",
+        cancelLabel: "Volver",
+        tone: "primary",
+      });
+      if (!result.confirmed) return;
+    }
+
+    setPendingAction(`trip-${nextState}`);
     try {
       const updated = await updateViajeStatus(selectedTrip.id, nextState);
       if (updated) setSelectedTrip(updated);
+      notify({
+        type: "success",
+        title: nextState === "en_curso" ? "Viaje iniciado" : "Viaje finalizado",
+        message:
+          nextState === "en_curso"
+            ? "La salida quedó registrada en el sistema."
+            : "La llegada quedó registrada correctamente.",
+      });
     } catch (error) {
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "No se pudo actualizar el estado del viaje.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo actualizar el viaje",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handlePickupStatus = async (
+    pickupId: string,
+    newState: "en_camino" | "completado",
+  ) => {
+    setPendingAction(`pickup-${pickupId}`);
+    try {
+      await updateRecojoStatus(pickupId, newState);
+      notify({
+        type: "success",
+        title: newState === "en_camino" ? "Recojo iniciado" : "Recojo completado",
+      });
+    } catch (error) {
+      notify({
+        type: "error",
+        title: "No se pudo actualizar el recojo",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -271,7 +267,11 @@ export default function ConductorPage() {
     e.preventDefault();
     if (!selectedTrip) return;
     if (!incidentDesc.trim() || incidentDesc.length < 5) {
-      alert("Describe la incidencia con al menos 5 caracteres.");
+      notify({
+        type: "warning",
+        title: "Descripción incompleta",
+        message: "Describe la incidencia con al menos 5 caracteres.",
+      });
       return;
     }
 
@@ -287,13 +287,17 @@ export default function ConductorPage() {
       setTripIncidents((prev) => [created, ...prev]);
       setIsIncidentModalOpen(false);
       setIncidentDesc("");
-      alert("✓ Incidencia registrada exitosamente en el sistema.");
+      notify({
+        type: "success",
+        title: "Incidencia registrada",
+        message: "El reporte ya está disponible para el personal autorizado.",
+      });
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Error al registrar la incidencia.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo registrar la incidencia",
+        message: error instanceof Error ? error.message : undefined,
+      });
     } finally {
       setIsSubmittingIncident(false);
     }
@@ -335,18 +339,37 @@ export default function ConductorPage() {
   ) => {
     if (nextState === "entregado") {
       setSelectedParcel(parcel);
-      setCapturedPhoto(null);
       setHasSignature(false);
       setDriverScreen("delivery");
       setTimeout(() => initCanvas(), 100);
     } else {
-      void updateParcelStatus(parcel.id, nextState).catch((error) => {
-        alert(
-          error instanceof Error
-            ? error.message
-            : "No se pudo actualizar el estado.",
-        );
-      });
+      setPendingAction(`parcel-${parcel.id}`);
+      void updateParcelStatus(
+        parcel.id,
+        nextState,
+        null,
+        ownPosition
+          ? {
+              latitude: ownPosition.latitude,
+              longitude: ownPosition.longitude,
+            }
+          : null,
+      )
+        .then(() => {
+          notify({
+            type: "success",
+            title: "Encomienda actualizada",
+            message: `Nuevo estado: ${nextState.replaceAll("_", " ")}.`,
+          });
+        })
+        .catch((error) => {
+          notify({
+            type: "error",
+            title: "No se pudo actualizar la encomienda",
+            message: error instanceof Error ? error.message : undefined,
+          });
+        })
+        .finally(() => setPendingAction(null));
     }
   };
 
@@ -414,91 +437,84 @@ export default function ConductorPage() {
     ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
     ctx.stroke();
   };
-  const simulatePhoto = () =>
-    setCapturedPhoto(
-      "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='%23059669'><path d='M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z'/></svg>",
-    );
   const confirmDelivery = async () => {
     if (!selectedParcel) return;
     if (!hasSignature) {
-      alert("Es obligatorio registrar la firma del destinatario.");
+      notify({
+        type: "warning",
+        title: "Falta la firma",
+        message: "El destinatario debe firmar antes de confirmar la entrega.",
+      });
       return;
     }
     const canvas = canvasRef.current;
     const sigUri = canvas ? canvas.toDataURL() : null;
+    setPendingAction("delivery");
     try {
       await updateParcelStatus(selectedParcel.id, "entregado", {
         signature: sigUri,
-        photo: capturedPhoto ? "Foto capturada" : "Sin foto",
-      });
+      }, ownPosition
+        ? {
+            latitude: ownPosition.latitude,
+            longitude: ownPosition.longitude,
+          }
+        : null);
       setDriverScreen("detail");
+      setSelectedParcel(null);
+      notify({
+        type: "success",
+        title: "Entrega confirmada",
+        message: "La firma, fecha y ubicación quedaron registradas.",
+      });
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "No se pudo registrar la entrega.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo registrar la entrega",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
     }
   };
 
-  // Document upload handler
-  const handleDocUpload = (
-    docId: string,
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setDocs((prev) =>
-        prev.map((d) =>
-          d.id === docId
-            ? {
-                ...d,
-                fileDataUrl: ev.target?.result as string,
-                fileMediaType: file.type,
-                status: d.status === "sin_cargar" ? "vigente" : d.status,
-              }
-            : d,
-        ),
-      );
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const docsVigentes = docs.filter((d) => d.status === "vigente").length;
-  const docsProblemas = docs.filter(
-    (d) => d.status === "vencido" || d.status === "sin_cargar",
-  ).length;
+  if (isInitializing) return <InitialDataLoading />;
+  if (dataError && currentUser) {
+    return (
+      <DataLoadError
+        message={dataError}
+        onRetry={() => void refreshDatabase().catch(() => undefined)}
+      />
+    );
+  }
 
   return (
     <div className="grow flex flex-col min-h-screen bg-transparent text-white">
       {/* ── Navigation Bar ─────────────────────────────────────────────── */}
       <header className="bg-slate-900/40 backdrop-blur-md border-b border-white/10 shadow-2xl sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-3">
+          <div className="min-w-0 flex items-center gap-3">
             <span className="h-10 w-10 rounded-xl bg-linear-to-br from-emerald-500 to-green-700 flex items-center justify-center font-black text-sm text-white shadow-sm border border-emerald-400/20">
               {currentUser
                 ? currentUser.nombres[0] + currentUser.apellidos[0]
-                : "AM"}
+                : "--"}
             </span>
-            <div>
-              <h3 className="text-sm font-black tracking-wide">
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-black tracking-wide">
                 {currentUser
                   ? `${currentUser.nombres} ${currentUser.apellidos}`
-                  : "Alexis Melgar Vila"}
+                  : "Conductor"}
               </h3>
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
+              <span className="block truncate text-[10px] font-bold uppercase tracking-wider text-emerald-400">
                 Conductor de Ruta ·{" "}
                 {currentUser?.agenciaNombre || "Sin agencia"}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="ml-2 flex shrink-0 items-center gap-2 sm:gap-3">
             {/* Offline toggle */}
-            <div className="hidden sm:flex items-center gap-2 bg-slate-950/60 border border-white/5 px-3 py-1.5 rounded-xl">
-              <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
+            <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-slate-950/60 px-2 py-1.5 sm:px-3">
+              <span className="hidden text-[9px] font-black uppercase tracking-wider text-slate-400 sm:inline">
                 Offline
               </span>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -506,6 +522,7 @@ export default function ConductorPage() {
                   type="checkbox"
                   checked={isOffline}
                   onChange={toggleOffline}
+                  aria-label="Activar modo sin conexión"
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
@@ -518,8 +535,10 @@ export default function ConductorPage() {
             </div>
             {/* Logout */}
             <button
+              type="button"
               onClick={handleLogout}
               title="Cerrar Sesión"
+              aria-label="Cerrar sesión"
               className="p-2 bg-slate-950/40 border border-white/10 hover:border-red-500/50 hover:bg-red-950/40 rounded-xl text-slate-400 hover:text-red-300 transition-all cursor-pointer"
             >
               <LogOut className="h-4 w-4" />
@@ -542,11 +561,6 @@ export default function ConductorPage() {
                 icon: <User className="h-4 w-4" />,
               },
               {
-                key: "documentos",
-                label: "Documentos",
-                icon: <FileText className="h-4 w-4" />,
-              },
-              {
                 key: "gps",
                 label: "Ubicación",
                 icon: <Navigation className="h-4 w-4" />,
@@ -555,6 +569,8 @@ export default function ConductorPage() {
           ).map((tab) => (
             <button
               key={tab.key}
+              type="button"
+              aria-current={mainTab === tab.key ? "page" : undefined}
               onClick={() => {
                 setMainTab(tab.key);
                 setDriverScreen("trips");
@@ -674,6 +690,65 @@ export default function ConductorPage() {
                     })
                   )}
                 </div>
+
+                <h4 className="pt-3 text-xs font-black uppercase tracking-widest text-slate-400">
+                  Recojos asignados
+                </h4>
+                {db.recojos.length === 0 ? (
+                  <div className="rounded-2xl border border-white/5 bg-slate-900 p-6 text-center text-sm text-slate-500">
+                    No tienes recojos asignados.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {db.recojos.map((pickup) => (
+                      <article
+                        key={pickup.id}
+                        className="rounded-2xl border border-white/5 bg-slate-900 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-black text-white">{pickup.nombre}</p>
+                            <p className="text-xs text-slate-400">{pickup.direccion}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {pickup.telefono} · {pickup.descripcion}
+                            </p>
+                          </div>
+                          <span className="text-[9px] font-black uppercase text-emerald-400">
+                            {pickup.estado.replaceAll("_", " ")}
+                          </span>
+                        </div>
+                        {pickup.estado === "asignado" && (
+                          <button
+                            type="button"
+                            disabled={pendingAction === `pickup-${pickup.id}`}
+                            onClick={() =>
+                              void handlePickupStatus(pickup.id, "en_camino")
+                            }
+                            className="mt-3 w-full rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black uppercase"
+                          >
+                            {pendingAction === `pickup-${pickup.id}`
+                              ? "Actualizando…"
+                              : "Iniciar recojo"}
+                          </button>
+                        )}
+                        {pickup.estado === "en_camino" && (
+                          <button
+                            type="button"
+                            disabled={pendingAction === `pickup-${pickup.id}`}
+                            onClick={() =>
+                              void handlePickupStatus(pickup.id, "completado")
+                            }
+                            className="mt-3 w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-black uppercase"
+                          >
+                            {pendingAction === `pickup-${pickup.id}`
+                              ? "Actualizando…"
+                              : "Confirmar recojo"}
+                          </button>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -730,21 +805,23 @@ export default function ConductorPage() {
                 {selectedTrip.estado === "programado" && (
                   <button
                     type="button"
+                    disabled={pendingAction === "trip-en_curso"}
                     onClick={() => void handleTripStatus("en_curso")}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-emerald-500 cursor-pointer shadow-premium"
                   >
                     <Navigation className="h-4 w-4" />
-                    Iniciar viaje
+                    {pendingAction === "trip-en_curso" ? "Iniciando…" : "Iniciar viaje"}
                   </button>
                 )}
                 {selectedTrip.estado === "en_curso" && (
                   <button
                     type="button"
+                    disabled={pendingAction === "trip-completado"}
                     onClick={() => void handleTripStatus("completado")}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-blue-500 cursor-pointer shadow-premium"
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    Finalizar viaje
+                    {pendingAction === "trip-completado" ? "Finalizando…" : "Finalizar viaje"}
                   </button>
                 )}
 
@@ -858,12 +935,16 @@ export default function ConductorPage() {
                             </div>
                             {current.next && (
                               <button
+                                type="button"
+                                disabled={pendingAction === `parcel-${parcel.id}`}
                                 onClick={() =>
                                   handleParcelStateAction(parcel, current.next!)
                                 }
                                 className="bg-linear-to-r from-emerald-800 to-green-700 hover:from-emerald-900 hover:to-green-800 text-white font-black text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl shadow-premium transition-all cursor-pointer shrink-0"
                               >
-                                {current.nextLabel}
+                                {pendingAction === `parcel-${parcel.id}`
+                                  ? "Actualizando…"
+                                  : current.nextLabel}
                               </button>
                             )}
                           </div>
@@ -977,6 +1058,8 @@ export default function ConductorPage() {
                   <div className="border-2 border-dashed border-slate-700 rounded-2xl overflow-hidden bg-slate-900/60 flex items-center justify-center p-3">
                     <canvas
                       ref={canvasRef}
+                      role="img"
+                      aria-label="Área para registrar la firma manuscrita del destinatario"
                       width={600}
                       height={160}
                       onMouseDown={startDrawing}
@@ -998,51 +1081,13 @@ export default function ConductorPage() {
                   </button>
                 </div>
 
-                {/* Photo */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                    Evidencia Fotográfica
-                  </span>
-                  {capturedPhoto ? (
-                    <div className="border border-slate-800 bg-slate-900 rounded-2xl p-4 flex items-center gap-4">
-                      <Image
-                        src={capturedPhoto}
-                        alt="Evidencia"
-                        width={64}
-                        height={64}
-                        unoptimized
-                        className="h-16 w-16 rounded-xl object-cover"
-                      />
-                      <div>
-                        <p className="text-sm font-bold text-white">
-                          Foto capturada
-                        </p>
-                        <button
-                          onClick={() => setCapturedPhoto(null)}
-                          className="text-xs text-red-400 hover:text-red-300 font-bold mt-1 cursor-pointer"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={simulatePhoto}
-                      className="w-full border-2 border-dashed border-slate-700 rounded-2xl p-8 bg-slate-900/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-emerald-500 hover:text-emerald-400 transition-all cursor-pointer"
-                    >
-                      <Camera className="h-8 w-8" />
-                      <span className="text-sm font-bold">
-                        Capturar Foto de Entrega
-                      </span>
-                    </button>
-                  )}
-                </div>
-
                 <button
-                  onClick={confirmDelivery}
+                  type="button"
+                  disabled={pendingAction === "delivery"}
+                  onClick={() => void confirmDelivery()}
                   className="w-full bg-linear-to-r from-emerald-800 to-green-700 hover:from-emerald-900 hover:to-green-800 text-white font-black py-4 rounded-2xl text-sm uppercase tracking-widest shadow-premium transition-all cursor-pointer"
                 >
-                  ✓ Confirmar Entrega
+                  {pendingAction === "delivery" ? "Registrando entrega…" : "✓ Confirmar Entrega"}
                 </button>
               </div>
             )}
@@ -1070,13 +1115,13 @@ export default function ConductorPage() {
               <div className="h-20 w-20 rounded-2xl bg-linear-to-br from-emerald-500 to-green-700 flex items-center justify-center font-black text-3xl text-white shadow-lg border border-emerald-400/20 shrink-0">
                 {currentUser
                   ? currentUser.nombres[0] + currentUser.apellidos[0]
-                  : "AM"}
+                  : "--"}
               </div>
               <div className="grow text-center sm:text-left">
                 <h2 className="text-xl font-black tracking-wide">
                   {currentUser
                     ? `${currentUser.nombres} ${currentUser.apellidos}`
-                    : "Alexis Melgar Vila"}
+                    : "Conductor"}
                 </h2>
                 <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest mt-0.5">
                   Conductor de Ruta · ECONNVRAE
@@ -1086,7 +1131,7 @@ export default function ConductorPage() {
                     Conductor Habilitado
                   </span>
                   <span className="bg-slate-800 text-slate-300 text-[9px] font-black uppercase px-2.5 py-1 rounded-lg">
-                    DNI: {currentUser?.dni ?? "76729940"}
+                    DNI: {currentUser?.dni || "No disponible"}
                   </span>
                 </div>
               </div>
@@ -1141,11 +1186,12 @@ export default function ConductorPage() {
                     {icon}
                   </div>
                   <div className="grow">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
                       {label}
-                    </label>
+                    </span>
                     {isEditingProfile && !readOnly ? (
                       <input
+                        aria-label={label}
                         value={value}
                         onChange={(e) => set(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-medium focus:outline-none focus:border-emerald-500 transition-colors"
@@ -1210,124 +1256,7 @@ export default function ConductorPage() {
           </div>
         )}
 
-        {/* ══════════════════ TAB 3: DOCUMENTOS ══════════════════ */}
-        {mainTab === "documentos" && (
-          <div className="animate-fade-in space-y-6">
-            {/* Summary row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
-                <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
-                  Documentos al día
-                </p>
-                <p className="text-3xl font-black text-emerald-400 mt-1">
-                  {docsVigentes}
-                </p>
-              </div>
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4">
-                <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest">
-                  Por vencer
-                </p>
-                <p className="text-3xl font-black text-amber-400 mt-1">
-                  {docs.filter((d) => d.status === "por_vencer").length}
-                </p>
-              </div>
-              <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
-                <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">
-                  Sin Cargar
-                </p>
-                <p className="text-3xl font-black text-red-400 mt-1">
-                  {docsProblemas}
-                </p>
-              </div>
-            </div>
-
-            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
-              Gestión de Documentos Obligatorios
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {docs.map((doc) => {
-                const meta = statusMeta[doc.status];
-                return (
-                  <div
-                    key={doc.id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-premium"
-                  >
-                    {/* Header */}
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
-                          {doc.icon}
-                        </div>
-                        <div>
-                          <h5 className="text-sm font-bold text-white leading-tight">
-                            {doc.name}
-                          </h5>
-                          {doc.expiry && (
-                            <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1 mt-0.5">
-                              <Clock className="h-3 w-3" /> Vence: {doc.expiry}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <span
-                        className={`flex items-center gap-1.5 text-[9px] font-black uppercase px-2.5 py-1 rounded-xl border ${meta.color}`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}
-                        ></span>
-                        {meta.label}
-                      </span>
-                    </div>
-
-                    {/* Preview if uploaded */}
-                    {doc.fileDataUrl && (
-                      <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
-                        {doc.fileMediaType?.startsWith("image/") ? (
-                          <Image
-                            src={doc.fileDataUrl}
-                            alt={`Vista previa de ${doc.name}`}
-                            width={480}
-                            height={96}
-                            unoptimized
-                            className="w-full h-24 object-cover"
-                          />
-                        ) : (
-                          <div className="h-24 flex items-center justify-center gap-2 text-xs font-bold text-slate-300">
-                            <FileText className="h-5 w-5" />
-                            Documento PDF cargado
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Upload button */}
-                    <label
-                      className={`w-full flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-2.5 px-4 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                        doc.fileDataUrl
-                          ? "border-emerald-500/30 text-emerald-400 hover:border-emerald-400 hover:bg-emerald-500/5"
-                          : "border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
-                      }`}
-                    >
-                      <Upload className="h-4 w-4" />
-                      {doc.fileDataUrl
-                        ? "Reemplazar Archivo"
-                        : "Subir Documento"}
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*,application/pdf"
-                        onChange={(e) => handleDocUpload(doc.id, e)}
-                      />
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════ TAB 4: GPS ══════════════════ */}
+        {/* ══════════════════ TAB 3: GPS ══════════════════ */}
         {mainTab === "gps" &&
           (() => {
             const route = conductorRecord
@@ -1414,7 +1343,8 @@ export default function ConductorPage() {
                     <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                       <button
                         onClick={() => startTracking(conductorId)}
-                        className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
+                        disabled={!conductorId}
+                        className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Zap className="h-3.5 w-3.5 text-yellow-400" /> GPS Real
                       </button>
@@ -1511,7 +1441,7 @@ export default function ConductorPage() {
                   <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                   <p className="text-xs text-slate-400">
                     La ubicación se actualiza automáticamente y es visible para
-                    el operador y los pasajeros en tiempo real.
+                    el personal autorizado de la agencia.
                   </p>
                 </div>
               </div>
@@ -1522,15 +1452,27 @@ export default function ConductorPage() {
       {/* ── MODAL: REPORTAR INCIDENCIA ── */}
       {isIncidentModalOpen && selectedTrip && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in flex flex-col">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="incident-dialog-title"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setIsIncidentModalOpen(false);
+              trapDialogFocus(event);
+            }}
+            className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in flex flex-col"
+          >
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/60">
               <div className="flex items-center gap-2.5">
                 <AlertOctagon className="h-5 w-5 text-rose-400" />
-                <h3 className="font-extrabold text-white text-base">
+                <h3 id="incident-dialog-title" className="font-extrabold text-white text-base">
                   Reportar Incidencia de Ruta
                 </h3>
               </div>
               <button
+                type="button"
+                autoFocus
+                aria-label="Cerrar reporte de incidencia"
                 onClick={() => setIsIncidentModalOpen(false)}
                 className="text-slate-400 hover:text-white text-xl font-bold cursor-pointer"
               >
@@ -1543,10 +1485,11 @@ export default function ConductorPage() {
               className="p-6 space-y-4"
             >
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <label htmlFor="incident-type" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
                   Tipo de Incidencia *
                 </label>
                 <select
+                  id="incident-type"
                   value={incidentType}
                   onChange={(e) =>
                     setIncidentType(e.target.value as IncidenciaViaje["tipo"])
@@ -1563,14 +1506,15 @@ export default function ConductorPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
                   Nivel de Gravedad *
-                </label>
+                </span>
                 <div className="grid grid-cols-3 gap-2">
                   {(["LEVE", "MODERADA", "GRAVE"] as const).map((sev) => (
                     <button
                       key={sev}
                       type="button"
+                      aria-pressed={incidentSeverity === sev}
                       onClick={() => setIncidentSeverity(sev)}
                       className={`py-2 text-[10px] font-black rounded-xl border transition-all cursor-pointer ${
                         incidentSeverity === sev
@@ -1589,10 +1533,11 @@ export default function ConductorPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <label htmlFor="incident-description" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
                   Descripción Detallada *
                 </label>
                 <textarea
+                  id="incident-description"
                   required
                   minLength={5}
                   maxLength={500}

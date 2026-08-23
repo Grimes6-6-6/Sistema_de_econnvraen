@@ -9,7 +9,10 @@ const MAX_JSON_BYTES = 600_000;
 
 export function assertTrustedMutation(request: Request): void {
   const origin = request.headers.get("origin");
-  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedHost =
+    process.env.TRUST_PROXY === "true"
+      ? request.headers.get("x-forwarded-host")
+      : null;
   const host = forwardedHost || request.headers.get("host");
 
   if (origin && host) {
@@ -41,10 +44,9 @@ export function assertTrustedMutation(request: Request): void {
     }
   }
 
-  // Permitimos cross-site fetch para la app móvil
-  /* if (request.headers.get("sec-fetch-site") === "cross-site") {
+  if (request.headers.get("sec-fetch-site") === "cross-site") {
     throw forbidden("Las solicitudes entre sitios no están permitidas.");
-  } */
+  }
 }
 
 export async function parseJsonBody<T>(

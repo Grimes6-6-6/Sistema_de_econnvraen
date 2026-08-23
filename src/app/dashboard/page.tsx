@@ -3,14 +3,11 @@
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import {
-  useDatabase,
-  Viaje,
-  Boleto,
-  Encomienda,
-} from "@/context/DatabaseContext";
+import { useDatabase, Viaje, Boleto } from "@/context/DatabaseContext";
 import { useLocation } from "@/context/LocationContext";
 import AgencySwitcher from "@/components/AgencySwitcher";
+import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
+import { useFeedback } from "@/components/ui/FeedbackProvider";
 import {
   LayoutDashboard,
   Ticket,
@@ -18,7 +15,6 @@ import {
   Calendar,
   Home,
   FileSpreadsheet,
-  User,
   LogOut,
   CheckCircle2,
   TrendingUp,
@@ -27,19 +23,10 @@ import {
   Search,
   CalendarDays,
   Navigation,
-  Satellite,
   Bus,
-  Sparkles,
   ArrowRight,
-  ShieldCheck,
-  AlertOctagon,
-  Clock,
   MapPin,
   X,
-  RefreshCw,
-  Phone,
-  Trash2,
-  Check,
 } from "lucide-react";
 
 // Map loaded client-side only (Leaflet needs window)
@@ -48,6 +35,7 @@ const LiveMap = dynamic(() => import("@/components/LiveMap"), { ssr: false });
 interface DniLookupResult {
   nombres: string;
   apellidos: string;
+  source: "real" | "mock";
 }
 
 function formatDateInput(date: Date): string {
@@ -55,6 +43,25 @@ function formatDateInput(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function trapDialogFocus(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 async function lookupDni(dni: string): Promise<DniLookupResult> {
@@ -77,13 +84,19 @@ async function lookupDni(dni: string): Promise<DniLookupResult> {
     throw new Error(data.error || "No se pudo consultar el DNI.");
   }
 
-  return { nombres: data.nombres, apellidos: data.apellidos };
+  return {
+    nombres: data.nombres,
+    apellidos: data.apellidos,
+    source: data.source === "mock" ? "mock" : "real",
+  };
 }
 
 export default function DashboardPage() {
   const router = useRouter();
   const {
     db,
+    isInitializing,
+    dataError,
     addBoleto,
     anularBoleto,
     addEncomienda,
@@ -94,7 +107,10 @@ export default function DashboardPage() {
     updateRecojoStatus,
     currentUser,
     logoutUser,
+    refreshDatabase,
   } = useDatabase();
+  const { notify, requestConfirmation } = useFeedback();
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
     | "dashboard"
     | "venta"
@@ -197,7 +213,11 @@ export default function DashboardPage() {
 
   const searchPassengerDni = async () => {
     if (passengerDni.length !== 8 || !/^\d+$/.test(passengerDni)) {
-      alert("Por favor, ingrese un DNI válido de 8 dígitos.");
+      notify({
+        type: "warning",
+        title: "DNI incompleto",
+        message: "Ingresa exactamente 8 dígitos para realizar la consulta.",
+      });
       return;
     }
 
@@ -207,8 +227,19 @@ export default function DashboardPage() {
       const data = await lookupDni(passengerDni);
       setPassengerNombres(data.nombres);
       setPassengerApellidos(data.apellidos);
+      if (data.source === "mock") {
+        notify({
+          type: "warning",
+          title: "Consulta de prueba",
+          message: "Verifica los nombres antes de emitir el boleto.",
+        });
+      }
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Error al consultar DNI");
+      notify({
+        type: "error",
+        title: "No se pudo consultar el DNI",
+        message: error instanceof Error ? error.message : undefined,
+      });
     } finally {
       setIsQueryingReniec(false);
     }
@@ -217,10 +248,15 @@ export default function DashboardPage() {
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTrip || selectedSeat === 0) {
-      alert("Debe elegir asiento.");
+      notify({
+        type: "warning",
+        title: "Selecciona un asiento",
+        message: "Elige uno de los cuatro asientos disponibles antes de continuar.",
+      });
       return;
     }
 
+    setPendingAction("booking");
     try {
       const res = await addBoleto({
         id_viaje: selectedTrip.id,
@@ -229,18 +265,24 @@ export default function DashboardPage() {
         pasajeroNombres: passengerNombres,
         pasajeroApellidos: passengerApellidos,
         pasajeroTelefono: passengerTelefono,
-        precio: passengerPrecio,
       });
       if (res) {
         setEmittedBoleto(res);
         setWizardStep(3);
+        notify({
+          type: "success",
+          title: "Boleto emitido",
+          message: `${res.codigo} · Asiento ${res.asiento}`,
+        });
       }
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "No se pudo emitir el boleto.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo emitir el boleto",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -260,14 +302,35 @@ export default function DashboardPage() {
   const [parcelDestTelf, setParcelDestTelf] = useState("");
   const [parcelTripId, setParcelTripId] = useState("");
   const [parcelPeso, setParcelPeso] = useState("");
+  const [parcelDimensiones, setParcelDimensiones] = useState("");
   const [parcelValor, setParcelValor] = useState("0");
   const [parcelCosto, setParcelCosto] = useState("20");
   const [parcelDesc, setParcelDesc] = useState("");
 
+  const filteredParcels = useMemo(
+    () =>
+      db.encomiendas.filter((parcel) => {
+        const query = searchParcelText.trim().toLowerCase();
+        const matchesText =
+          !query ||
+          parcel.codigo_tracking.toLowerCase().includes(query) ||
+          parcel.destinatarioDni.includes(query) ||
+          parcel.remitenteDni.includes(query);
+        const matchesState =
+          !filterParcelState || parcel.estado === filterParcelState;
+        return matchesText && matchesState;
+      }),
+    [db.encomiendas, filterParcelState, searchParcelText],
+  );
+
   const searchParcelClient = async (role: "rem" | "dest") => {
     const dni = role === "rem" ? parcelRemDni : parcelDestDni;
     if (dni.length !== 8 || !/^\d+$/.test(dni)) {
-      alert("Por favor, ingrese un DNI válido de 8 dígitos.");
+      notify({
+        type: "warning",
+        title: "DNI incompleto",
+        message: "Ingresa exactamente 8 dígitos para realizar la consulta.",
+      });
       return;
     }
 
@@ -280,8 +343,19 @@ export default function DashboardPage() {
       } else {
         setParcelDestNombre(`${data.nombres} ${data.apellidos}`);
       }
+      if (data.source === "mock") {
+        notify({
+          type: "warning",
+          title: "Consulta de prueba",
+          message: "Verifica los nombres antes de registrar la encomienda.",
+        });
+      }
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Error al consultar DNI");
+      notify({
+        type: "error",
+        title: "No se pudo consultar el DNI",
+        message: error instanceof Error ? error.message : undefined,
+      });
     } finally {
       setIsQueryingReniecParcel(null);
     }
@@ -290,10 +364,15 @@ export default function DashboardPage() {
   const handleParcelSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!parcelRemDni || !parcelDestDni || !parcelTripId) {
-      alert("Faltan datos obligatorios.");
+      notify({
+        type: "warning",
+        title: "Completa los datos obligatorios",
+        message: "Se requieren remitente, destinatario y viaje.",
+      });
       return;
     }
 
+    setPendingAction("parcel");
     try {
       const res = await addEncomienda({
         id_viaje: parcelTripId,
@@ -304,15 +383,19 @@ export default function DashboardPage() {
         destinatarioNombre: parcelDestNombre,
         destinatarioTelefono: parcelDestTelf,
         peso: parseFloat(parcelPeso) || 1,
+        dimensiones: parcelDimensiones,
         valor: parseFloat(parcelValor) || 0,
         costo: parseFloat(parcelCosto) || 20,
         descripcion: parcelDesc,
       });
 
       if (res) {
-        alert(
-          `Encomienda registrada con éxito.\nTracking: ${res.codigo_tracking}`,
-        );
+        notify({
+          type: "success",
+          title: "Encomienda registrada",
+          message: `Código de seguimiento: ${res.codigo_tracking}`,
+          duration: 7000,
+        });
         setIsParcelModalOpen(false);
         setParcelRemDni("");
         setParcelRemNombre("");
@@ -322,16 +405,19 @@ export default function DashboardPage() {
         setParcelDestTelf("");
         setParcelTripId("");
         setParcelPeso("");
+        setParcelDimensiones("");
         setParcelValor("0");
         setParcelCosto("20");
         setParcelDesc("");
       }
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Error al registrar la encomienda.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo registrar la encomienda",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -349,10 +435,15 @@ export default function DashboardPage() {
   const handleTripSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tripRutaId || !tripVehiculoId || !tripConductorId) {
-      alert("Todos los campos del viaje son obligatorios.");
+      notify({
+        type: "warning",
+        title: "Completa la programación",
+        message: "Selecciona ruta, vehículo y conductor.",
+      });
       return;
     }
 
+    setPendingAction("trip");
     try {
       const res = await addViaje({
         id_ruta: tripRutaId,
@@ -364,7 +455,11 @@ export default function DashboardPage() {
       });
 
       if (res) {
-        alert("Viaje programado con éxito.");
+        notify({
+          type: "success",
+          title: "Viaje programado",
+          message: `${tripFecha} a las ${tripHora}`,
+        });
         setIsTripModalOpen(false);
         setTripRutaId("");
         setTripVehiculoId("");
@@ -374,20 +469,64 @@ export default function DashboardPage() {
         setTripPrecio("50");
       }
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Error al programar el viaje.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo programar el viaje",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
     }
   };
 
   // ==========================================================================
   // TAB: RECOJOS A DOMICILIO
   // ==========================================================================
+  const [isNewPickupModalOpen, setIsNewPickupModalOpen] = useState(false);
   const [isRecojoModalOpen, setIsRecojoModalOpen] = useState(false);
   const [recojoSelectedId, setRecojoSelectedId] = useState<string | null>(null);
   const [recojoDriverSelect, setRecojoDriverSelect] = useState("");
+  const [pickupDni, setPickupDni] = useState("");
+  const [pickupName, setPickupName] = useState("");
+  const [pickupPhone, setPickupPhone] = useState("");
+  const [pickupDate, setPickupDate] = useState(getTodayDateString());
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [pickupDescription, setPickupDescription] = useState("");
+
+  const submitNewPickup = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPendingAction("pickup");
+    try {
+      await addRecojo({
+        dni: pickupDni,
+        nombre: pickupName,
+        telefono: pickupPhone,
+        fecha: pickupDate,
+        direccion: pickupAddress,
+        descripcion: pickupDescription,
+      });
+      setIsNewPickupModalOpen(false);
+      setPickupDni("");
+      setPickupName("");
+      setPickupPhone("");
+      setPickupDate(getTodayDateString());
+      setPickupAddress("");
+      setPickupDescription("");
+      notify({
+        type: "success",
+        title: "Recojo registrado",
+        message: "La solicitud quedó lista para asignar a un conductor.",
+      });
+    } catch (error) {
+      notify({
+        type: "error",
+        title: "No se pudo registrar el recojo",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   const assignDriverToRecojo = async (recojoId: string) => {
     setRecojoSelectedId(recojoId);
@@ -397,35 +536,132 @@ export default function DashboardPage() {
   const submitAssignDriver = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recojoSelectedId || !recojoDriverSelect) {
-      alert("Seleccione un conductor.");
+      notify({ type: "warning", title: "Selecciona un conductor" });
       return;
     }
+    setPendingAction("assign-pickup");
     try {
       await assignRecojoDriver(recojoSelectedId, recojoDriverSelect);
       setIsRecojoModalOpen(false);
       setRecojoSelectedId(null);
       setRecojoDriverSelect("");
+      notify({
+        type: "success",
+        title: "Conductor asignado",
+        message: "El recojo ya aparece en la operación del conductor.",
+      });
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Error al asignar conductor.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo asignar el conductor",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
     }
   };
 
   const changeRecojoStatus = async (
     recojoId: string,
-    newState: "completado" | "cancelado",
+    newState: "en_camino" | "completado" | "cancelado",
   ) => {
+    if (newState === "cancelado") {
+      const result = await requestConfirmation({
+        title: "Cancelar solicitud de recojo",
+        message:
+          "La solicitud dejará de aparecer como pendiente para la operación. Esta acción quedará registrada.",
+        confirmLabel: "Cancelar solicitud",
+        cancelLabel: "Volver",
+        tone: "danger",
+      });
+      if (!result.confirmed) return;
+    }
+    setPendingAction(`pickup-${recojoId}`);
     try {
       await updateRecojoStatus(recojoId, newState);
+      notify({
+        type: "success",
+        title: "Estado actualizado",
+        message: `El recojo ahora figura como ${newState.replace("_", " ")}.`,
+      });
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Error al actualizar estado del recojo.",
-      );
+      notify({
+        type: "error",
+        title: "No se pudo actualizar el recojo",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleCancelTicket = async (ticket: Boleto) => {
+    const result = await requestConfirmation({
+      title: `Anular boleto ${ticket.codigo}`,
+      message:
+        "Esta acción libera el asiento y deja una constancia de auditoría. Registra el motivo informado al pasajero.",
+      confirmLabel: "Anular boleto",
+      cancelLabel: "Conservar boleto",
+      tone: "danger",
+      input: {
+        label: "Motivo de anulación",
+        placeholder: "Ej.: Solicitud del pasajero",
+        minLength: 5,
+      },
+    });
+    if (!result.confirmed) return;
+
+    setPendingAction(`cancel-ticket-${ticket.id}`);
+    try {
+      await anularBoleto(ticket.id, result.value);
+      notify({
+        type: "success",
+        title: "Boleto anulado",
+        message: `${ticket.codigo} quedó anulado y el asiento fue liberado.`,
+      });
+    } catch (error) {
+      notify({
+        type: "error",
+        title: "No se pudo anular el boleto",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleCancelTrip = async (trip: Viaje) => {
+    const result = await requestConfirmation({
+      title: `Cancelar viaje ${trip.id}`,
+      message:
+        "El viaje dejará de estar disponible para ventas. Verifica antes si existen pasajeros o encomiendas que deban reprogramarse.",
+      confirmLabel: "Cancelar viaje",
+      cancelLabel: "Mantener viaje",
+      tone: "danger",
+      input: {
+        label: "Motivo de cancelación",
+        placeholder: "Ej.: Cierre temporal de la vía",
+        minLength: 5,
+      },
+    });
+    if (!result.confirmed) return;
+
+    setPendingAction(`cancel-trip-${trip.id}`);
+    try {
+      await cancelViaje(trip.id, result.value);
+      notify({
+        type: "success",
+        title: "Viaje cancelado",
+        message: `${trip.id} ya no admite nuevas operaciones.`,
+      });
+    } catch (error) {
+      notify({
+        type: "error",
+        title: "No se pudo cancelar el viaje",
+        message: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -438,16 +674,25 @@ export default function DashboardPage() {
     return formatDateInput(d);
   });
   const [repEnd, setRepEnd] = useState(getTodayDateString());
+  const [repRouteId, setRepRouteId] = useState("");
+  const reportRangeIsValid = repStart <= repEnd;
 
   const repData = useMemo(() => {
     const boletos = db.boletos.filter((b) => {
+      if (!reportRangeIsValid) return false;
       if (b.estado === "anulado") return false;
       const trip = db.viajes.find((v) => v.id === b.id_viaje);
       if (!trip) return false;
+      if (repRouteId && trip.id_ruta !== repRouteId) return false;
       return trip.fecha >= repStart && trip.fecha <= repEnd;
     });
 
     const encomiendas = db.encomiendas.filter((e) => {
+      if (!reportRangeIsValid) return false;
+      if (repRouteId) {
+        const trip = db.viajes.find((v) => v.id === e.id_viaje);
+        if (!trip || trip.id_ruta !== repRouteId) return false;
+      }
       return e.fechaRegistro >= repStart && e.fechaRegistro <= repEnd;
     });
 
@@ -461,7 +706,79 @@ export default function DashboardPage() {
       encomiendasTotal,
       total: pasajesTotal + encomiendasTotal,
     };
-  }, [db, repStart, repEnd]);
+  }, [db, repStart, repEnd, repRouteId, reportRangeIsValid]);
+
+  const exportFinancialReport = () => {
+    if (!reportRangeIsValid) {
+      notify({
+        type: "warning",
+        title: "Rango de fechas inválido",
+        message: "La fecha inicial no puede ser posterior a la fecha final.",
+      });
+      return;
+    }
+
+    const escapeCell = (value: string | number) =>
+      `"${String(value).replaceAll('"', '""')}"`;
+    const rows: Array<Array<string | number>> = [
+      ["Tipo", "Fecha", "Código", "Ruta", "Cliente", "Detalle", "Monto (S/)"],
+      ...repData.boletos.map((ticket) => {
+        const trip = db.viajes.find((item) => item.id === ticket.id_viaje);
+        const route = db.rutas.find((item) => item.id === trip?.id_ruta);
+        return [
+          "Pasaje",
+          trip?.fecha ?? "",
+          ticket.codigo,
+          route ? `${route.origen} - ${route.destino}` : "Sin ruta",
+          `${ticket.pasajeroNombres} ${ticket.pasajeroApellidos}`.trim(),
+          `Asiento ${ticket.asiento}`,
+          ticket.precio.toFixed(2),
+        ];
+      }),
+      ...repData.encomiendas.map((parcel) => {
+        const trip = db.viajes.find((item) => item.id === parcel.id_viaje);
+        const route = db.rutas.find((item) => item.id === trip?.id_ruta);
+        return [
+          "Encomienda",
+          parcel.fechaRegistro,
+          parcel.codigo_tracking,
+          route ? `${route.origen} - ${route.destino}` : "Sin ruta",
+          parcel.destinatarioNombre,
+          parcel.descripcion,
+          parcel.costo.toFixed(2),
+        ];
+      }),
+      [],
+      ["Resumen", "Pasajes", repData.pasajesTotal.toFixed(2)],
+      ["Resumen", "Encomiendas", repData.encomiendasTotal.toFixed(2)],
+      ["Resumen", "Total", repData.total.toFixed(2)],
+    ];
+    const csv = `\uFEFF${rows
+      .map((row) => row.map(escapeCell).join(";"))
+      .join("\r\n")}`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `reporte-econnvrae-${repStart}-${repEnd}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    notify({
+      type: "success",
+      title: "Reporte exportado",
+      message: "El archivo CSV es compatible con Microsoft Excel.",
+    });
+  };
+
+  if (isInitializing) return <InitialDataLoading />;
+  if (dataError && currentUser) {
+    return (
+      <DataLoadError
+        message={dataError}
+        onRetry={() => void refreshDatabase().catch(() => undefined)}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-[#090d16] text-slate-100 lg:flex-row">
@@ -473,7 +790,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── SIDEBAR NAVIGATION ── */}
-      <aside className="relative z-20 flex w-full flex-col border-b border-white/10 bg-slate-900/70 backdrop-blur-2xl lg:min-h-screen lg:w-64 lg:border-r lg:border-b-0 shrink-0">
+      <aside className="no-print relative z-20 flex w-full flex-col border-b border-white/10 bg-slate-900/70 backdrop-blur-2xl lg:min-h-screen lg:w-64 lg:border-r lg:border-b-0 shrink-0">
         {/* Brand */}
         <div className="flex h-16 items-center gap-3 border-b border-white/10 px-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-700 text-white shadow-md border border-emerald-400/20">
@@ -535,7 +852,9 @@ export default function DashboardPage() {
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id)}
+                aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap lg:w-full ${
                   isActive
                     ? "bg-linear-to-r from-emerald-600 to-green-600 text-white shadow-lg shadow-emerald-950/50"
@@ -556,6 +875,32 @@ export default function DashboardPage() {
             );
           })}
         </nav>
+
+        <details className="mx-3 mb-3 rounded-2xl border border-white/10 bg-slate-950/60 lg:hidden">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-bold text-white">
+            <span className="truncate">
+              {currentUser?.agenciaNombre || "Agencia activa"}
+            </span>
+            <span className="text-[10px] uppercase tracking-wider text-emerald-400">
+              Cuenta
+            </span>
+          </summary>
+          <div className="border-t border-white/10 p-3">
+            <p className="mb-3 truncate text-xs font-bold text-slate-300">
+              {currentUser
+                ? `${currentUser.nombres} ${currentUser.apellidos}`
+                : "Usuario"}
+            </p>
+            <AgencySwitcher />
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 py-2.5 text-xs font-bold uppercase tracking-wider text-rose-200"
+            >
+              <LogOut className="h-4 w-4" /> Cerrar sesión
+            </button>
+          </div>
+        </details>
 
         {/* User profile / Agency panel in Sidebar footer */}
         <div className="hidden border-t border-white/10 bg-slate-950/60 p-4 lg:block space-y-3">
@@ -578,6 +923,7 @@ export default function DashboardPage() {
           <AgencySwitcher />
 
           <button
+            type="button"
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 hover:bg-rose-600 hover:border-rose-600 text-slate-300 hover:text-white text-xs font-bold uppercase tracking-wider py-2 transition-all cursor-pointer"
           >
@@ -856,7 +1202,7 @@ export default function DashboardPage() {
         {/* TAB 2: VENTA DE PASAJES (WIZARD) */}
         {/* ================================================================== */}
         {activeTab === "venta" && (
-          <div className="space-y-6 animate-fade-in no-print">
+          <div className="ticket-print-context space-y-6 animate-fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-white/10">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white">
@@ -915,10 +1261,11 @@ export default function DashboardPage() {
               <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-premium backdrop-blur-md space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                    <label htmlFor="booking-route" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                       Ruta Disponible *
                     </label>
                     <select
+                      id="booking-route"
                       value={selectedRouteId}
                       onChange={(e) => setSelectedRouteId(e.target.value)}
                       className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
@@ -932,10 +1279,11 @@ export default function DashboardPage() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                    <label htmlFor="booking-date" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                       Fecha de Salida *
                     </label>
                     <input
+                      id="booking-date"
                       type="date"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
@@ -952,7 +1300,8 @@ export default function DashboardPage() {
                     {db.viajes.filter(
                       (v) =>
                         v.id_ruta === selectedRouteId &&
-                        v.fecha === selectedDate,
+                        v.fecha === selectedDate &&
+                        v.estado === "programado",
                     ).length === 0 ? (
                       <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl text-slate-500 text-xs font-medium">
                         Selecciona una ruta y fecha para visualizar los viajes disponibles.
@@ -962,7 +1311,8 @@ export default function DashboardPage() {
                         .filter(
                           (v) =>
                             v.id_ruta === selectedRouteId &&
-                            v.fecha === selectedDate,
+                            v.fecha === selectedDate &&
+                            v.estado === "programado",
                         )
                         .map((trip) => {
                           const veh = db.vehiculos.find(
@@ -975,8 +1325,9 @@ export default function DashboardPage() {
                           const available = 4 - bookedCount;
 
                           return (
-                            <div
+                            <button
                               key={trip.id}
+                              type="button"
                               onClick={() => {
                                 if (available > 0) {
                                   setSelectedTrip(trip);
@@ -984,12 +1335,14 @@ export default function DashboardPage() {
                                   setSelectedSeat(0);
                                   setWizardStep(2);
                                 } else {
-                                  alert(
-                                    "Este viaje ya no cuenta con asientos disponibles.",
-                                  );
+                                  notify({
+                                    type: "warning",
+                                    title: "Viaje sin disponibilidad",
+                                    message: "Los cuatro asientos ya se encuentran ocupados.",
+                                  });
                                 }
                               }}
-                              className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:border-emerald-500/50 hover:bg-slate-850/50 transition-all shadow-md group"
+                              className="w-full rounded-2xl border border-white/10 bg-slate-950/60 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:border-emerald-500/50 hover:bg-slate-850/50 transition-all shadow-md group text-left"
                             >
                               <div className="flex items-center gap-3">
                                 <span className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
@@ -1020,7 +1373,7 @@ export default function DashboardPage() {
                                     : "Completo"}
                                 </span>
                               </div>
-                            </div>
+                            </button>
                           );
                         })
                     )}
@@ -1055,6 +1408,8 @@ export default function DashboardPage() {
                       </div>
                       <button
                         type="button"
+                        disabled={getBookedSeats(selectedTrip.id).includes(1)}
+                        aria-pressed={selectedSeat === 1}
                         onClick={() =>
                           !getBookedSeats(selectedTrip.id).includes(1) &&
                           setSelectedSeat(1)
@@ -1085,6 +1440,8 @@ export default function DashboardPage() {
                           <button
                             key={sNum}
                             type="button"
+                            disabled={isTaken}
+                            aria-pressed={isSelected}
                             onClick={() => !isTaken && setSelectedSeat(sNum)}
                             className={`flex-1 aspect-square rounded-xl border flex flex-col items-center justify-center text-[10px] font-black transition-all cursor-pointer ${
                               isTaken
@@ -1134,11 +1491,12 @@ export default function DashboardPage() {
 
                   <form onSubmit={handleBookingSubmit} className="space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      <label htmlFor="passenger-dni" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                         Documento DNI *
                       </label>
                       <div className="flex gap-2">
                         <input
+                          id="passenger-dni"
                           type="text"
                           maxLength={8}
                           pattern="\d{8}"
@@ -1162,10 +1520,11 @@ export default function DashboardPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                        <label htmlFor="passenger-first-name" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                           Nombres *
                         </label>
                         <input
+                          id="passenger-first-name"
                           type="text"
                           required
                           value={passengerNombres}
@@ -1174,10 +1533,11 @@ export default function DashboardPage() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                        <label htmlFor="passenger-last-name" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                           Apellidos *
                         </label>
                         <input
+                          id="passenger-last-name"
                           type="text"
                           required
                           value={passengerApellidos}
@@ -1191,10 +1551,11 @@ export default function DashboardPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                        <label htmlFor="passenger-phone" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                           Teléfono de Contacto
                         </label>
                         <input
+                          id="passenger-phone"
                           type="text"
                           value={passengerTelefono}
                           onChange={(e) =>
@@ -1205,16 +1566,16 @@ export default function DashboardPage() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                        <label htmlFor="passenger-price" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                           Tarifa del Pasaje (S/)
                         </label>
                         <input
+                          id="passenger-price"
                           type="number"
                           step="0.5"
                           value={passengerPrecio}
-                          onChange={(e) =>
-                            setPassengerPrecio(parseFloat(e.target.value) || 0)
-                          }
+                          readOnly
+                          aria-readonly="true"
                           className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-3.5 py-2.5 text-xs text-white font-mono font-bold focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
@@ -1230,11 +1591,13 @@ export default function DashboardPage() {
                       </button>
                       <button
                         type="submit"
-                        disabled={selectedSeat === 0}
+                        disabled={selectedSeat === 0 || pendingAction === "booking"}
                         className="grow rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs uppercase tracking-widest py-3 shadow-lg transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         <CheckCircle2 className="h-4 w-4" />
-                        Emitir Boleto Electrónico
+                        {pendingAction === "booking"
+                          ? "Emitiendo…"
+                          : "Emitir Boleto Electrónico"}
                       </button>
                     </div>
                   </form>
@@ -1244,7 +1607,7 @@ export default function DashboardPage() {
 
             {/* WIZARD STEP 3: COMPROBANTE EMITIDO */}
             {wizardStep === 3 && emittedBoleto && (
-              <div className="max-w-xl mx-auto rounded-3xl border border-emerald-500/30 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-md space-y-6 text-center animate-fade-in">
+              <div className="ticket-print-area print-area max-w-xl mx-auto rounded-3xl border border-emerald-500/30 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-md space-y-6 text-center animate-fade-in">
                 <div className="h-16 w-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
                   <CheckCircle2 className="h-10 w-10" />
                 </div>
@@ -1291,7 +1654,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="no-print flex gap-3">
                   <button
                     onClick={() => window.print()}
                     className="flex-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider py-3 flex items-center justify-center gap-2 cursor-pointer transition"
@@ -1388,18 +1751,14 @@ export default function DashboardPage() {
                             <td className="py-3 px-3 text-center">
                               {b.estado !== "anulado" && (
                                 <button
-                                  onClick={() => {
-                                    if (
-                                      confirm(
-                                        `¿Desea anular el boleto ${b.codigo}?`,
-                                      )
-                                    ) {
-                                      void anularBoleto(b.id);
-                                    }
-                                  }}
-                                  className="text-rose-400 hover:text-rose-300 text-xs font-bold cursor-pointer"
+                                  type="button"
+                                  onClick={() => void handleCancelTicket(b)}
+                                  disabled={pendingAction === `cancel-ticket-${b.id}`}
+                                  className="min-h-11 rounded-lg px-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
                                 >
-                                  Anular
+                                  {pendingAction === `cancel-ticket-${b.id}`
+                                    ? "Anulando…"
+                                    : "Anular"}
                                 </button>
                               )}
                             </td>
@@ -1441,6 +1800,7 @@ export default function DashboardPage() {
                 <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
                   type="text"
+                  aria-label="Buscar encomienda por tracking o DNI"
                   value={searchParcelText}
                   onChange={(e) => setSearchParcelText(e.target.value)}
                   placeholder="Buscar por código de tracking o DNI..."
@@ -1449,6 +1809,7 @@ export default function DashboardPage() {
               </div>
               <div className="sm:col-span-4">
                 <select
+                  aria-label="Filtrar encomiendas por estado"
                   value={filterParcelState}
                   onChange={(e) => setFilterParcelState(e.target.value)}
                   className="w-full rounded-xl bg-slate-900/80 border border-white/10 px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
@@ -1486,20 +1847,14 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {db.encomiendas
-                      .filter((e) => {
-                        const matchText =
-                          e.codigo_tracking
-                            .toLowerCase()
-                            .includes(searchParcelText.toLowerCase()) ||
-                          e.destinatarioDni.includes(searchParcelText) ||
-                          e.remitenteDni.includes(searchParcelText);
-                        const matchState = filterParcelState
-                          ? e.estado === filterParcelState
-                          : true;
-                        return matchText && matchState;
-                      })
-                      .map((p) => {
+                    {filteredParcels.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-xs text-slate-500">
+                          No hay encomiendas que coincidan con los filtros.
+                        </td>
+                      </tr>
+                    )}
+                    {filteredParcels.map((p) => {
                         const stateColors: Record<string, string> = {
                           registrado:
                             "bg-blue-500/20 text-blue-300 border-blue-500/30",
@@ -1560,12 +1915,24 @@ export default function DashboardPage() {
             {/* MODAL: REGISTRO DE ENCOMIENDA */}
             {isParcelModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
-                <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900 p-6 sm:p-8 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="parcel-dialog-title"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsParcelModalOpen(false);
+                    trapDialogFocus(event);
+                  }}
+                  className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900 p-6 sm:p-8 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto"
+                >
                   <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                    <h3 className="text-lg font-black text-white">
+                    <h3 id="parcel-dialog-title" className="text-lg font-black text-white">
                       Registrar Nueva Encomienda
                     </h3>
                     <button
+                      type="button"
+                      autoFocus
+                      aria-label="Cerrar registro de encomienda"
                       onClick={() => setIsParcelModalOpen(false)}
                       className="text-slate-400 hover:text-white cursor-pointer"
                     >
@@ -1581,11 +1948,12 @@ export default function DashboardPage() {
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-sender-dni" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             DNI Remitente *
                           </label>
                           <div className="flex gap-1.5">
                             <input
+                              id="parcel-sender-dni"
                               type="text"
                               required
                               maxLength={8}
@@ -1596,6 +1964,8 @@ export default function DashboardPage() {
                             <button
                               type="button"
                               onClick={() => searchParcelClient("rem")}
+                              disabled={isQueryingReniecParcel !== null}
+                              aria-label="Consultar DNI del remitente"
                               className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 cursor-pointer"
                             >
                               <Search className="h-3.5 w-3.5" />
@@ -1603,14 +1973,33 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-sender-name" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Nombre Completo *
                           </label>
                           <input
+                            id="parcel-sender-name"
                             type="text"
                             required
                             value={parcelRemNombre}
                             onChange={(e) => setParcelRemNombre(e.target.value)}
+                            className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white"
+                          />
+                        </div>
+                        <div className="sm:col-span-3">
+                          <label htmlFor="parcel-sender-phone" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                            Celular del remitente *
+                          </label>
+                          <input
+                            id="parcel-sender-phone"
+                            type="tel"
+                            required
+                            inputMode="numeric"
+                            pattern="9\d{8}"
+                            maxLength={9}
+                            value={parcelRemTelf}
+                            onChange={(e) =>
+                              setParcelRemTelf(e.target.value.replace(/\D/g, ""))
+                            }
                             className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white"
                           />
                         </div>
@@ -1624,11 +2013,12 @@ export default function DashboardPage() {
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-recipient-dni" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             DNI Destinatario *
                           </label>
                           <div className="flex gap-1.5">
                             <input
+                              id="parcel-recipient-dni"
                               type="text"
                               required
                               maxLength={8}
@@ -1639,6 +2029,8 @@ export default function DashboardPage() {
                             <button
                               type="button"
                               onClick={() => searchParcelClient("dest")}
+                              disabled={isQueryingReniecParcel !== null}
+                              aria-label="Consultar DNI del destinatario"
                               className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 cursor-pointer"
                             >
                               <Search className="h-3.5 w-3.5" />
@@ -1646,15 +2038,34 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-recipient-name" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Nombre Completo *
                           </label>
                           <input
+                            id="parcel-recipient-name"
                             type="text"
                             required
                             value={parcelDestNombre}
                             onChange={(e) =>
                               setParcelDestNombre(e.target.value)
+                            }
+                            className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white"
+                          />
+                        </div>
+                        <div className="sm:col-span-3">
+                          <label htmlFor="parcel-recipient-phone" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                            Celular del destinatario *
+                          </label>
+                          <input
+                            id="parcel-recipient-phone"
+                            type="tel"
+                            required
+                            inputMode="numeric"
+                            pattern="9\d{8}"
+                            maxLength={9}
+                            value={parcelDestTelf}
+                            onChange={(e) =>
+                              setParcelDestTelf(e.target.value.replace(/\D/g, ""))
                             }
                             className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white"
                           />
@@ -1669,10 +2080,11 @@ export default function DashboardPage() {
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-3">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-trip" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Viaje Asignado *
                           </label>
                           <select
+                            id="parcel-trip"
                             required
                             value={parcelTripId}
                             onChange={(e) => setParcelTripId(e.target.value)}
@@ -1680,6 +2092,7 @@ export default function DashboardPage() {
                           >
                             <option value="">Seleccione el viaje de salida...</option>
                             {db.viajes.map((v) => {
+                              if (v.estado !== "programado") return null;
                               const r = db.rutas.find(
                                 (rt) => rt.id === v.id_ruta,
                               );
@@ -1693,10 +2106,11 @@ export default function DashboardPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-weight" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Peso (kg) *
                           </label>
                           <input
+                            id="parcel-weight"
                             type="number"
                             step="0.5"
                             required
@@ -1706,10 +2120,27 @@ export default function DashboardPage() {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-dimensions" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                            Dimensiones (cm) *
+                          </label>
+                          <input
+                            id="parcel-dimensions"
+                            type="text"
+                            required
+                            minLength={3}
+                            maxLength={60}
+                            value={parcelDimensiones}
+                            onChange={(e) => setParcelDimensiones(e.target.value)}
+                            placeholder="30 x 20 x 15"
+                            className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="parcel-cost" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Costo de Flete (S/) *
                           </label>
                           <input
+                            id="parcel-cost"
                             type="number"
                             step="1"
                             required
@@ -1718,11 +2149,27 @@ export default function DashboardPage() {
                             className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono font-bold"
                           />
                         </div>
+                        <div>
+                          <label htmlFor="parcel-value" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                            Valor declarado (S/) *
+                          </label>
+                          <input
+                            id="parcel-value"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            required
+                            value={parcelValor}
+                            onChange={(e) => setParcelValor(e.target.value)}
+                            className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono"
+                          />
+                        </div>
                         <div className="sm:col-span-3">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                          <label htmlFor="parcel-description" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Descripción del Contenido *
                           </label>
                           <input
+                            id="parcel-description"
                             type="text"
                             required
                             value={parcelDesc}
@@ -1744,9 +2191,12 @@ export default function DashboardPage() {
                       </button>
                       <button
                         type="submit"
+                        disabled={pendingAction === "parcel"}
                         className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase px-5 py-2.5"
                       >
-                        Guardar y Generar Guía
+                        {pendingAction === "parcel"
+                          ? "Registrando…"
+                          : "Guardar y Generar Guía"}
                       </button>
                     </div>
                   </form>
@@ -1808,6 +2258,13 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
+                    {db.viajes.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
+                          Aún no hay viajes programados para esta agencia.
+                        </td>
+                      </tr>
+                    )}
                     {db.viajes.map((t) => {
                       const r = db.rutas.find((rt) => rt.id === t.id_ruta);
                       const veh = db.vehiculos.find(
@@ -1856,18 +2313,14 @@ export default function DashboardPage() {
                           <td className="py-3 px-3 text-center">
                             {t.estado === "programado" && (
                               <button
-                                onClick={() => {
-                                  if (
-                                    confirm(
-                                      `¿Desea cancelar el viaje ${t.id}?`,
-                                    )
-                                  ) {
-                                    void cancelViaje(t.id);
-                                  }
-                                }}
-                                className="text-rose-400 hover:text-rose-300 text-xs font-bold cursor-pointer"
+                                type="button"
+                                onClick={() => void handleCancelTrip(t)}
+                                disabled={pendingAction === `cancel-trip-${t.id}`}
+                                className="min-h-11 rounded-lg px-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
                               >
-                                Cancelar
+                                {pendingAction === `cancel-trip-${t.id}`
+                                  ? "Cancelando…"
+                                  : "Cancelar"}
                               </button>
                             )}
                           </td>
@@ -1882,12 +2335,24 @@ export default function DashboardPage() {
             {/* MODAL: PROGRAMAR VIAJE */}
             {isTripModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
-                <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900 p-6 sm:p-8 shadow-2xl space-y-4 animate-fade-in">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="trip-dialog-title"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsTripModalOpen(false);
+                    trapDialogFocus(event);
+                  }}
+                  className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900 p-6 sm:p-8 shadow-2xl space-y-4 animate-fade-in"
+                >
                   <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                    <h3 className="text-lg font-black text-white">
+                    <h3 id="trip-dialog-title" className="text-lg font-black text-white">
                       Programar Salida de Viaje
                     </h3>
                     <button
+                      type="button"
+                      autoFocus
+                      aria-label="Cerrar programación de viaje"
                       onClick={() => setIsTripModalOpen(false)}
                       className="text-slate-400 hover:text-white cursor-pointer"
                     >
@@ -1897,10 +2362,11 @@ export default function DashboardPage() {
 
                   <form onSubmit={handleTripSubmit} className="space-y-3">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-300 uppercase block">
+                      <label htmlFor="trip-route" className="text-xs font-bold text-slate-300 uppercase block">
                         Ruta *
                       </label>
                       <select
+                        id="trip-route"
                         required
                         value={tripRutaId}
                         onChange={(e) => setTripRutaId(e.target.value)}
@@ -1917,10 +2383,11 @@ export default function DashboardPage() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-300 uppercase block">
+                        <label htmlFor="trip-vehicle" className="text-xs font-bold text-slate-300 uppercase block">
                           Vehículo *
                         </label>
                         <select
+                          id="trip-vehicle"
                           required
                           value={tripVehiculoId}
                           onChange={(e) => setTripVehiculoId(e.target.value)}
@@ -1936,10 +2403,11 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-300 uppercase block">
+                        <label htmlFor="trip-driver" className="text-xs font-bold text-slate-300 uppercase block">
                           Conductor *
                         </label>
                         <select
+                          id="trip-driver"
                           required
                           value={tripConductorId}
                           onChange={(e) => setTripConductorId(e.target.value)}
@@ -1957,10 +2425,11 @@ export default function DashboardPage() {
 
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-300 uppercase block">
+                        <label htmlFor="trip-date" className="text-xs font-bold text-slate-300 uppercase block">
                           Fecha *
                         </label>
                         <input
+                          id="trip-date"
                           type="date"
                           required
                           value={tripFecha}
@@ -1969,10 +2438,11 @@ export default function DashboardPage() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-300 uppercase block">
+                        <label htmlFor="trip-time" className="text-xs font-bold text-slate-300 uppercase block">
                           Hora *
                         </label>
                         <input
+                          id="trip-time"
                           type="time"
                           required
                           value={tripHora}
@@ -1981,10 +2451,11 @@ export default function DashboardPage() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-300 uppercase block">
+                        <label htmlFor="trip-price" className="text-xs font-bold text-slate-300 uppercase block">
                           Precio (S/) *
                         </label>
                         <input
+                          id="trip-price"
                           type="number"
                           step="1"
                           required
@@ -2005,9 +2476,12 @@ export default function DashboardPage() {
                       </button>
                       <button
                         type="submit"
+                        disabled={pendingAction === "trip"}
                         className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase px-5 py-2.5"
                       >
-                        Guardar Itinerario
+                        {pendingAction === "trip"
+                          ? "Guardando…"
+                          : "Guardar Itinerario"}
                       </button>
                     </div>
                   </form>
@@ -2022,7 +2496,7 @@ export default function DashboardPage() {
         {/* ================================================================== */}
         {activeTab === "recojos" && (
           <div className="space-y-6 animate-fade-in no-print">
-            <div className="flex justify-between items-center pb-4 border-b border-white/10">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-4 border-b border-white/10">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white">
                   Solicitudes de Recojo a Domicilio
@@ -2031,6 +2505,13 @@ export default function DashboardPage() {
                   Gestión y asignación de choferes para recojo urbano en Ayacucho.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsNewPickupModalOpen(true)}
+                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white"
+              >
+                <Plus className="inline h-4 w-4 mr-2" /> Nueva solicitud
+              </button>
             </div>
 
             {/* Recojos Table */}
@@ -2091,6 +2572,8 @@ export default function DashboardPage() {
                               className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${
                                 rec.estado === "pendiente"
                                   ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                  : rec.estado === "en_camino"
+                                    ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
                                   : rec.estado === "completado"
                                     ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                                     : "bg-blue-500/20 text-blue-300 border-blue-500/30"
@@ -2103,6 +2586,7 @@ export default function DashboardPage() {
                             <div className="flex justify-center gap-2">
                               {rec.estado === "pendiente" && (
                                 <button
+                                  type="button"
                                   onClick={() => assignDriverToRecojo(rec.id)}
                                   className="rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider cursor-pointer"
                                 >
@@ -2112,18 +2596,33 @@ export default function DashboardPage() {
                               {rec.estado !== "completado" &&
                                 rec.estado !== "cancelado" && (
                                   <>
+                                    {rec.estado === "asignado" && (
+                                      <button
+                                        type="button"
+                                        disabled={pendingAction === `pickup-${rec.id}`}
+                                        onClick={() =>
+                                          changeRecojoStatus(rec.id, "en_camino")
+                                        }
+                                        className="rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-300 hover:bg-blue-600/30 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                                      >
+                                        En camino
+                                      </button>
+                                    )}
+                                    {rec.estado === "en_camino" && (
+                                      <button
+                                        type="button"
+                                        disabled={pendingAction === `pickup-${rec.id}`}
+                                        onClick={() =>
+                                          changeRecojoStatus(rec.id, "completado")
+                                        }
+                                        className="rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                                      >
+                                        Completar
+                                      </button>
+                                    )}
                                     <button
-                                      onClick={() =>
-                                        changeRecojoStatus(
-                                          rec.id,
-                                          "completado",
-                                        )
-                                      }
-                                      className="rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-300 hover:bg-blue-600/30 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider cursor-pointer"
-                                    >
-                                      Listo
-                                    </button>
-                                    <button
+                                      type="button"
+                                      disabled={pendingAction === `pickup-${rec.id}`}
                                       onClick={() =>
                                         changeRecojoStatus(
                                           rec.id,
@@ -2146,15 +2645,142 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {isNewPickupModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="pickup-dialog-title"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsNewPickupModalOpen(false);
+                    trapDialogFocus(event);
+                  }}
+                  className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
+                >
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <h3 id="pickup-dialog-title" className="font-black text-white">Nueva solicitud de recojo</h3>
+                    <button
+                      type="button"
+                      autoFocus
+                      aria-label="Cerrar"
+                      onClick={() => setIsNewPickupModalOpen(false)}
+                      className="p-2 text-slate-400 hover:text-white"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <form onSubmit={submitNewPickup} className="mt-4 space-y-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="text-xs font-bold text-slate-300">
+                        DNI *
+                        <input
+                          required
+                          pattern="\d{8}"
+                          maxLength={8}
+                          value={pickupDni}
+                          onChange={(e) =>
+                            setPickupDni(e.target.value.replace(/\D/g, ""))
+                          }
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                        />
+                      </label>
+                      <label className="text-xs font-bold text-slate-300">
+                        Celular *
+                        <input
+                          required
+                          pattern="9\d{8}"
+                          maxLength={9}
+                          value={pickupPhone}
+                          onChange={(e) =>
+                            setPickupPhone(e.target.value.replace(/\D/g, ""))
+                          }
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                        />
+                      </label>
+                    </div>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Nombre completo *
+                      <input
+                        required
+                        value={pickupName}
+                        onChange={(e) => setPickupName(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Fecha de recojo *
+                      <input
+                        type="date"
+                        required
+                        min={getTodayDateString()}
+                        value={pickupDate}
+                        onChange={(e) => setPickupDate(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Dirección *
+                      <input
+                        required
+                        minLength={8}
+                        value={pickupAddress}
+                        onChange={(e) => setPickupAddress(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Descripción del envío *
+                      <textarea
+                        required
+                        minLength={3}
+                        maxLength={240}
+                        value={pickupDescription}
+                        onChange={(e) => setPickupDescription(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsNewPickupModalOpen(false)}
+                        className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={pendingAction === "pickup"}
+                        className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white"
+                      >
+                        {pendingAction === "pickup" ? "Registrando…" : "Registrar"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {/* MODAL: ASIGNAR CHOFER A RECOJO */}
             {isRecojoModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
-                <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl space-y-4 animate-fade-in">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="assign-pickup-dialog-title"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsRecojoModalOpen(false);
+                    trapDialogFocus(event);
+                  }}
+                  className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl space-y-4 animate-fade-in"
+                >
                   <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                    <h3 className="text-base font-black text-white">
+                    <h3 id="assign-pickup-dialog-title" className="text-base font-black text-white">
                       Asignar Conductor
                     </h3>
                     <button
+                      type="button"
+                      autoFocus
+                      aria-label="Cerrar asignación de conductor"
                       onClick={() => setIsRecojoModalOpen(false)}
                       className="text-slate-400 hover:text-white cursor-pointer"
                     >
@@ -2164,10 +2790,11 @@ export default function DashboardPage() {
 
                   <form onSubmit={submitAssignDriver} className="space-y-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-300 uppercase block">
+                      <label htmlFor="pickup-driver" className="text-xs font-bold text-slate-300 uppercase block">
                         Conductor Responsable *
                       </label>
                       <select
+                        id="pickup-driver"
                         required
                         value={recojoDriverSelect}
                         onChange={(e) => setRecojoDriverSelect(e.target.value)}
@@ -2175,7 +2802,7 @@ export default function DashboardPage() {
                       >
                         <option value="">Seleccione conductor...</option>
                         {db.conductores.map((c) => (
-                          <option key={c.id} value={c.nombres}>
+                          <option key={c.id} value={c.id}>
                             {c.nombres}
                           </option>
                         ))}
@@ -2192,9 +2819,10 @@ export default function DashboardPage() {
                       </button>
                       <button
                         type="submit"
+                        disabled={pendingAction === "assign-pickup"}
                         className="rounded-xl bg-emerald-600 text-white text-xs font-black uppercase px-4 py-2"
                       >
-                        Confirmar
+                        {pendingAction === "assign-pickup" ? "Asignando…" : "Confirmar"}
                       </button>
                     </div>
                   </form>
@@ -2219,21 +2847,32 @@ export default function DashboardPage() {
                   Consolidado de ingresos por venta de pasajes y flete de encomiendas.
                 </p>
               </div>
-              <button
-                onClick={() => window.print()}
-                className="rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-white font-bold text-xs uppercase tracking-wider px-4 py-2.5 flex items-center gap-2 cursor-pointer transition shadow-md"
-              >
-                <Printer className="h-4 w-4" /> Imprimir Reporte
-              </button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <button
+                  type="button"
+                  onClick={exportFinancialReport}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-md transition hover:bg-emerald-500"
+                >
+                  <FileSpreadsheet className="h-4 w-4" /> Exportar Excel (CSV)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-800 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-md transition hover:bg-slate-700"
+                >
+                  <Printer className="h-4 w-4" /> Imprimir / Guardar PDF
+                </button>
+              </div>
             </div>
 
             {/* Date filter no-print */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-premium no-print">
+            <div className="grid grid-cols-1 gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-premium no-print sm:grid-cols-3">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 uppercase block">
+                <label htmlFor="report-start" className="text-xs font-bold text-slate-300 uppercase block">
                   Fecha Inicial
                 </label>
                 <input
+                  id="report-start"
                   type="date"
                   value={repStart}
                   onChange={(e) => setRepStart(e.target.value)}
@@ -2241,20 +2880,51 @@ export default function DashboardPage() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 uppercase block">
+                <label htmlFor="report-end" className="text-xs font-bold text-slate-300 uppercase block">
                   Fecha Final
                 </label>
                 <input
+                  id="report-end"
                   type="date"
                   value={repEnd}
                   onChange={(e) => setRepEnd(e.target.value)}
                   className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white"
                 />
               </div>
+              <div className="space-y-1">
+                <label htmlFor="report-route" className="block text-xs font-bold uppercase text-slate-300">
+                  Ruta
+                </label>
+                <select
+                  id="report-route"
+                  value={repRouteId}
+                  onChange={(event) => setRepRouteId(event.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs text-white"
+                >
+                  <option value="">Todas las rutas</option>
+                  {db.rutas.map((route) => (
+                    <option key={route.id} value={route.id}>
+                      {route.origen} - {route.destino}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            {!reportRangeIsValid && (
+              <div className="no-print rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm font-bold text-amber-100" role="alert">
+                La fecha inicial no puede ser posterior a la fecha final.
+              </div>
+            )}
 
             {/* Print Area */}
             <div className="print-area space-y-6">
+              <header className="hidden border-b border-slate-300 pb-4 text-slate-950 print:block">
+                <h1 className="text-2xl font-black">ECONNVRAE · Reporte financiero</h1>
+                <p className="mt-1 text-sm">
+                  {currentUser?.agenciaNombre || "Consolidado empresarial"} · Del {repStart} al {repEnd}
+                </p>
+              </header>
               {/* KPIs */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 shadow-premium text-center">
@@ -2310,6 +2980,13 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
+                        {repData.boletos.length === 0 && (
+                          <tr>
+                            <td colSpan={3} className="py-8 text-center text-slate-500">
+                              No hay ventas de pasajes en este período.
+                            </td>
+                          </tr>
+                        )}
                         {repData.boletos.map((b) => (
                           <tr
                             key={b.id}
@@ -2345,6 +3022,13 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
+                        {repData.encomiendas.length === 0 && (
+                          <tr>
+                            <td colSpan={3} className="py-8 text-center text-slate-500">
+                              No hay encomiendas en este período.
+                            </td>
+                          </tr>
+                        )}
                         {repData.encomiendas.map((e) => (
                           <tr
                             key={e.id}

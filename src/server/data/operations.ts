@@ -19,7 +19,9 @@ import {
 } from "@/lib/domain/types";
 import { formatEntityId, parseEntityId } from "@/lib/domain/ids";
 import { canAdvanceParcelStatus } from "@/lib/domain/rules";
+import { createTrackingCode } from "@/lib/domain/tracking";
 import type {
+  CancellationInput,
   DriverProfileUpdateInput,
   ParcelInput,
   ParcelStatusInput,
@@ -110,6 +112,7 @@ interface ParcelRow extends QueryResultRow {
   destinatario_apellidos: string;
   destinatario_telefono: string;
   peso_kg: string;
+  dimensiones: string;
   valor_declarado: string;
   costo: string;
   descripcion: string;
@@ -186,6 +189,7 @@ const TRIP_STATUS_FROM_DB: Record<string, Viaje["estado"]> = {
 const PICKUP_STATUS_FROM_DB: Record<string, Recojo["estado"]> = {
   PENDIENTE: "pendiente",
   ASIGNADO: "asignado",
+  EN_CAMINO: "en_camino",
   COMPLETADO: "completado",
   CANCELADO: "cancelado",
 };
@@ -282,6 +286,7 @@ function mapParcel(
       `${row.destinatario_nombres} ${row.destinatario_apellidos}`.trim(),
     destinatarioTelefono: row.destinatario_telefono,
     peso: asNumber(row.peso_kg),
+    dimensiones: row.dimensiones,
     valor: asNumber(row.valor_declarado),
     costo: asNumber(row.costo),
     descripcion: row.descripcion,
@@ -414,7 +419,8 @@ async function readSnapshot(
                 sd.nombres AS destinatario_nombres,
                 sd.apellidos AS destinatario_apellidos,
                 COALESCE(sd.telefono, '') AS destinatario_telefono,
-                e.peso_kg::text, e.valor_declarado::text, e.costo::text,
+                e.peso_kg::text, COALESCE(e.dimensiones, '') AS dimensiones,
+                e.valor_declarado::text, e.costo::text,
                 e.descripcion, e.estado,
                 TO_CHAR(e.fecha_registro AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha_registro
          FROM encomiendas e
@@ -601,9 +607,11 @@ export async function createTicket(
        id_viaje: number;
        estado: string;
        capacidad: number;
+       precio_final: string;
        id_agencia: number;
      }>(
-       `SELECT v.id_viaje, v.estado, veh.capacidad, v.id_agencia
+       `SELECT v.id_viaje, v.estado, veh.capacidad, v.id_agencia,
+               v.precio_final::text
         FROM viajes v
         JOIN vehiculos veh ON veh.id_vehiculo = v.id_vehiculo
         WHERE v.id_viaje = $1
@@ -612,7 +620,7 @@ export async function createTicket(
       [tripId, scopeAgencyId],
     );
     const tripRow = trip.rows[0];
-    if (!tripRow || tripRow.estado === "CANCELADO") {
+    if (!tripRow || tripRow.estado !== "PROGRAMADO") {
       throw conflict("TRIP_NOT_AVAILABLE", "El viaje no está disponible.");
     }
     if (input.asiento > tripRow.capacidad) {
@@ -648,7 +656,7 @@ export async function createTicket(
           tripId,
           personId,
           input.asiento,
-          input.precio,
+          asNumber(tripRow.precio_final),
           input.requestId,
           tripRow.id_agencia,
         ],
@@ -679,6 +687,7 @@ export async function createTicket(
 export async function cancelTicket(
   user: SessionUser,
   ticketIdValue: string,
+  input: CancellationInput,
 ): Promise<void> {
   requireRole(user, OPERATOR_ROLES);
   const userId = requireUserId(user);
@@ -687,26 +696,49 @@ export async function cancelTicket(
   if (!ticketId) throw notFound();
 
   await withTransaction(async (client) => {
-    const result = await client.query(
-      `UPDATE boletos ticket
-       SET estado = 'ANULADO', anulado_por = $1, anulado_at = NOW()
-       FROM viajes trip
-       WHERE ticket.id_boleto = $2
-         AND ticket.estado = 'ACTIVO'
-         AND trip.id_viaje = ticket.id_viaje
-         AND ($3::integer IS NULL OR trip.id_agencia = $3)
-       RETURNING ticket.id_boleto, trip.id_agencia`,
-      [userId, ticketId, scopeAgencyId],
+    const current = await client.query<{
+      estado: string;
+      trip_estado: string;
+      fecha_hora_salida: string;
+      id_agencia: number;
+    }>(
+      `SELECT ticket.estado, trip.estado AS trip_estado,
+              trip.fecha_hora_salida::text, trip.id_agencia
+       FROM boletos ticket
+       JOIN viajes trip ON trip.id_viaje = ticket.id_viaje
+       WHERE ticket.id_boleto = $1
+         AND ($2::integer IS NULL OR trip.id_agencia = $2)
+       FOR UPDATE OF ticket, trip`,
+      [ticketId, scopeAgencyId],
     );
-    if (!result.rowCount) throw notFound("El boleto no existe o ya fue anulado.");
+    const ticket = current.rows[0];
+    if (!ticket) throw notFound("El boleto no existe.");
+    if (ticket.estado !== "ACTIVO") {
+      throw conflict("TICKET_ALREADY_CANCELLED", "El boleto ya fue anulado.");
+    }
+    if (
+      ticket.trip_estado !== "PROGRAMADO" ||
+      new Date(ticket.fecha_hora_salida).getTime() <= Date.now()
+    ) {
+      throw conflict(
+        "TICKET_NOT_CANCELLABLE",
+        "Solo se puede anular un boleto antes de la salida del viaje.",
+      );
+    }
+    await client.query(
+      `UPDATE boletos
+       SET estado = 'ANULADO', anulado_por = $1, anulado_at = NOW(),
+           motivo_anulacion = $2, nota_credito_estado = 'PENDIENTE'
+       WHERE id_boleto = $3`,
+      [userId, input.reason, ticketId],
+    );
     await writeAuditLog({
       userId,
-      agencyId:
-        (result.rows[0] as { id_agencia?: number } | undefined)?.id_agencia ||
-        null,
+      agencyId: ticket.id_agencia,
       action: "TICKET_CANCELLED",
       entity: "boleto",
       entityId: ticketIdValue,
+      metadata: { reason: input.reason },
     }, client);
   });
 }
@@ -726,7 +758,8 @@ async function getParcelById(
               sd.nombres AS destinatario_nombres,
               sd.apellidos AS destinatario_apellidos,
               COALESCE(sd.telefono, '') AS destinatario_telefono,
-              e.peso_kg::text, e.valor_declarado::text, e.costo::text,
+              e.peso_kg::text, COALESCE(e.dimensiones, '') AS dimensiones,
+              e.valor_declarado::text, e.costo::text,
               e.descripcion, e.estado,
               TO_CHAR(e.fecha_registro AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha_registro
        FROM encomiendas e
@@ -791,15 +824,20 @@ export async function createParcel(
       if (current) return current;
     }
 
-    const trip = await client.query<{ estado: string; id_agencia: number }>(
-      `SELECT estado, id_agencia
-       FROM viajes
-       WHERE id_viaje = $1
-         AND ($2::integer IS NULL OR id_agencia = $2)
+    const trip = await client.query<{
+      estado: string;
+      id_agencia: number;
+      agency_name: string;
+    }>(
+      `SELECT trip.estado, trip.id_agencia, agency.nombre AS agency_name
+       FROM viajes trip
+       JOIN agencias agency ON agency.id_agencia = trip.id_agencia
+       WHERE trip.id_viaje = $1
+         AND ($2::integer IS NULL OR trip.id_agencia = $2)
        FOR SHARE`,
       [tripId, scopeAgencyId],
     );
-    if (!trip.rows[0] || trip.rows[0].estado === "CANCELADO") {
+    if (!trip.rows[0] || trip.rows[0].estado !== "PROGRAMADO") {
       throw conflict("TRIP_NOT_AVAILABLE", "El viaje no está disponible.");
     }
 
@@ -823,17 +861,16 @@ export async function createParcel(
       "SELECT nextval(pg_get_serial_sequence('encomiendas', 'id_encomienda'))::int AS id",
     );
     const parcelId = idResult.rows[0].id;
-    const today = new Date().toISOString().slice(2, 10).replace(/-/g, "");
-    const trackingCode = `ECV-${today}-${String(parcelId).padStart(5, "0")}`;
+    const trackingCode = createTrackingCode(parcelId);
 
     await client.query(
        `INSERT INTO encomiendas (
           id_encomienda, codigo_tracking, id_viaje,
           id_persona_remitente, id_persona_destinatario,
-          peso_kg, valor_declarado, costo, descripcion, request_id,
+          peso_kg, dimensiones, valor_declarado, costo, descripcion, request_id,
           id_agencia_registro
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         parcelId,
         trackingCode,
@@ -841,6 +878,7 @@ export async function createParcel(
         senderId,
         recipientId,
         input.peso,
+        input.dimensiones,
         input.valor,
         input.costo,
         input.descripcion,
@@ -852,8 +890,13 @@ export async function createParcel(
       `INSERT INTO tracking_encomiendas (
          id_encomienda, estado, ubicacion, id_usuario, request_id
        )
-       VALUES ($1, 'REGISTRADO', 'Oficina Ayacucho', $2, $3)`,
-      [parcelId, userId, input.requestId],
+       VALUES ($1, 'REGISTRADO', $2, $3, $4)`,
+      [
+        parcelId,
+        trip.rows[0].agency_name,
+        userId,
+        input.requestId,
+      ],
     );
 
     const created = await getParcelById(client, parcelId);
@@ -899,6 +942,13 @@ export async function createTrip(
       const current = await getTripById(client, existingId);
       if (current) return current;
     }
+
+    // Serialize scheduling decisions per vehicle and driver so two concurrent
+    // requests cannot both pass the overlap check.
+    await client.query(
+      "SELECT pg_advisory_xact_lock(7801, $1), pg_advisory_xact_lock(7802, $2)",
+      [vehicleId, driverId],
+    );
 
     const checks = await client.query<{
       route_duration: string | null;
@@ -1057,8 +1107,11 @@ export async function updateTripStatus(
        id_conductor: number;
        id_agencia: number;
        estado: string;
+       is_today: boolean;
      }>(
-       `SELECT id_viaje, id_conductor, id_agencia, estado
+       `SELECT id_viaje, id_conductor, id_agencia, estado,
+               (fecha_hora_salida AT TIME ZONE 'America/Lima')::date =
+                 (NOW() AT TIME ZONE 'America/Lima')::date AS is_today
         FROM viajes
         WHERE id_viaje = $1
           AND ($2::integer IS NULL OR id_agencia = $2)
@@ -1072,6 +1125,9 @@ export async function updateTripStatus(
       const driverId = await getConductorId(userId);
       if (!driverId || driverId !== current.id_conductor) {
         throw forbidden("Solo puedes actualizar tus propios viajes.");
+      }
+      if (!current.is_today) {
+        throw forbidden("Solo puedes operar viajes asignados para hoy.");
       }
     }
 
@@ -1089,9 +1145,9 @@ export async function updateTripStatus(
     const dbState = input.newState === "en_curso" ? "EN_CURSO" : "COMPLETADO";
     await client.query(
       `UPDATE viajes
-       SET estado = $1,
+       SET estado = $1::varchar,
            fecha_hora_llegada = CASE
-             WHEN $1 = 'COMPLETADO' THEN COALESCE(fecha_hora_llegada, NOW())
+             WHEN $1::varchar = 'COMPLETADO' THEN COALESCE(fecha_hora_llegada, NOW())
              ELSE fecha_hora_llegada
            END,
            updated_at = NOW()
@@ -1122,6 +1178,7 @@ export async function updateTripStatus(
 export async function cancelTrip(
   user: SessionUser,
   tripValue: string,
+  input: CancellationInput,
 ): Promise<void> {
   requireRole(user, OPERATOR_ROLES);
   const userId = requireUserId(user);
@@ -1130,8 +1187,12 @@ export async function cancelTrip(
   if (!tripId) throw notFound("El viaje no existe.");
 
   await withTransaction(async (client) => {
-    const trip = await client.query<{ estado: string; id_agencia: number }>(
-      `SELECT estado, id_agencia
+    const trip = await client.query<{
+      estado: string;
+      id_agencia: number;
+      fecha_hora_salida: string;
+    }>(
+      `SELECT estado, id_agencia, fecha_hora_salida::text
        FROM viajes
        WHERE id_viaje = $1
          AND ($2::integer IS NULL OR id_agencia = $2)
@@ -1144,6 +1205,12 @@ export async function cancelTrip(
       throw conflict(
         "TRIP_NOT_CANCELLABLE",
         "Solo se pueden cancelar viajes programados.",
+      );
+    }
+    if (new Date(trip.rows[0].fecha_hora_salida).getTime() <= Date.now()) {
+      throw conflict(
+        "TRIP_NOT_CANCELLABLE",
+        "No se puede cancelar un viaje cuya hora de salida ya pasó.",
       );
     }
 
@@ -1161,14 +1228,17 @@ export async function cancelTrip(
     }
 
     await client.query(
-      "UPDATE viajes SET estado = 'CANCELADO', updated_at = NOW() WHERE id_viaje = $1",
-      [tripId],
+      `UPDATE viajes
+       SET estado = 'CANCELADO', motivo_cancelacion = $1, updated_at = NOW()
+       WHERE id_viaje = $2`,
+      [input.reason, tripId],
     );
     await client.query(
       `UPDATE boletos
-       SET estado = 'ANULADO', anulado_por = $1, anulado_at = NOW()
+       SET estado = 'ANULADO', anulado_por = $1, anulado_at = NOW(),
+           motivo_anulacion = $3, nota_credito_estado = 'PENDIENTE'
        WHERE id_viaje = $2 AND estado = 'ACTIVO'`,
-      [userId, tripId],
+      [userId, tripId, `Cancelación de viaje: ${input.reason}`],
     );
     await writeAuditLog({
       userId,
@@ -1176,6 +1246,7 @@ export async function cancelTrip(
       action: "TRIP_CANCELLED",
       entity: "viaje",
       entityId: tripValue,
+      metadata: { reason: input.reason },
     }, client);
   });
 }
@@ -1212,8 +1283,13 @@ export async function updateParcelStatus(
       estado: string;
       id_conductor: number;
       id_agencia: number;
+      trip_estado: string;
+      is_today: boolean;
     }>(
-      `SELECT e.estado, v.id_conductor, v.id_agencia
+      `SELECT e.estado, v.id_conductor, v.id_agencia,
+              v.estado AS trip_estado,
+              (v.fecha_hora_salida AT TIME ZONE 'America/Lima')::date =
+                (NOW() AT TIME ZONE 'America/Lima')::date AS is_today
        FROM encomiendas e
        JOIN viajes v ON v.id_viaje = e.id_viaje
        WHERE e.id_encomienda = $1
@@ -1228,6 +1304,9 @@ export async function updateParcelStatus(
       const driverId = await getConductorId(userId);
       if (!driverId || driverId !== current.id_conductor) {
         throw forbidden("Solo puedes actualizar encomiendas de tus viajes.");
+      }
+      if (!current.is_today || current.trip_estado !== "EN_CURSO") {
+        throw forbidden("Solo puedes operar encomiendas de tu viaje en curso de hoy.");
       }
     }
 
@@ -1245,12 +1324,24 @@ export async function updateParcelStatus(
       "UPDATE encomiendas SET estado = $1, updated_at = NOW() WHERE id_encomienda = $2",
       [STATUS_TO_DB[input.newState], parcelId],
     );
+    const occurredAt = input.occurredAt ? new Date(input.occurredAt) : null;
+    if (occurredAt) {
+      const ageMs = Date.now() - occurredAt.getTime();
+      if (ageMs < -5 * 60 * 1000 || ageMs > 7 * 24 * 60 * 60 * 1000) {
+        throw conflict(
+          "INVALID_EVENT_TIME",
+          "La fecha del evento sin conexión está fuera del rango permitido.",
+        );
+      }
+    }
+
     await client.query(
       `INSERT INTO tracking_encomiendas (
          id_encomienda, estado, ubicacion, latitude, longitude,
-         id_usuario, observacion, evidencia, request_id
+         id_usuario, fecha_hora, observacion, evidencia, request_id
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamptz, NOW()),
+               $8, $9::jsonb, $10)`,
       [
         parcelId,
         STATUS_TO_DB[input.newState],
@@ -1258,6 +1349,7 @@ export async function updateParcelStatus(
         input.latitude ?? null,
         input.longitude ?? null,
         userId,
+        occurredAt?.toISOString() ?? null,
         null,
         evidence ? JSON.stringify(evidence) : null,
         input.requestId,
@@ -1379,15 +1471,19 @@ export async function updatePickupStatus(
   pickupValue: string,
   input: PickupStatusInput,
 ): Promise<Recojo> {
-  requireRole(user, OPERATOR_ROLES);
+  requireRole(user, ["CONDUCTOR", "OPERADOR", "ADMINISTRADOR"]);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const pickupId = parseEntityId(pickupValue, "P");
   if (!pickupId) throw notFound("La solicitud de recojo no existe.");
 
   return withTransaction(async (client) => {
-    const current = await client.query<{ estado: string; id_agencia: number }>(
-      `SELECT estado, id_agencia
+    const current = await client.query<{
+      estado: string;
+      id_agencia: number;
+      id_usuario_asignado: number | null;
+    }>(
+      `SELECT estado, id_agencia, id_usuario_asignado
        FROM solicitudes_recojo
        WHERE id_solicitud = $1
          AND ($2::integer IS NULL OR id_agencia = $2)
@@ -1397,14 +1493,34 @@ export async function updatePickupStatus(
     if (!current.rows[0]) {
       throw notFound("La solicitud de recojo no existe.");
     }
-    if (!["PENDIENTE", "ASIGNADO"].includes(current.rows[0].estado)) {
+    if (
+      user.rol === "CONDUCTOR" &&
+      current.rows[0].id_usuario_asignado !== userId
+    ) {
+      throw forbidden("Solo puedes actualizar recojos que te fueron asignados.");
+    }
+    if (!["PENDIENTE", "ASIGNADO", "EN_CAMINO"].includes(current.rows[0].estado)) {
       throw conflict(
         "PICKUP_NOT_UPDATABLE",
         "La solicitud ya está cerrada.",
       );
     }
 
-    const dbState = input.newState === "completado" ? "COMPLETADO" : "CANCELADO";
+    const allowed =
+      (current.rows[0].estado === "ASIGNADO" && input.newState === "en_camino") ||
+      (current.rows[0].estado === "EN_CAMINO" && input.newState === "completado") ||
+      input.newState === "cancelado";
+    if (!allowed) {
+      throw conflict(
+        "INVALID_PICKUP_TRANSITION",
+        "La transición de estado del recojo no está permitida.",
+      );
+    }
+    const dbState = {
+      en_camino: "EN_CAMINO",
+      completado: "COMPLETADO",
+      cancelado: "CANCELADO",
+    }[input.newState];
     await client.query(
       `UPDATE solicitudes_recojo
        SET estado = $1, updated_at = NOW()
@@ -1417,10 +1533,7 @@ export async function updatePickupStatus(
       {
         userId,
         agencyId: current.rows[0].id_agencia,
-        action:
-          input.newState === "completado"
-            ? "PICKUP_COMPLETED"
-            : "PICKUP_CANCELLED",
+        action: `PICKUP_${dbState}`,
         entity: "solicitud_recojo",
         entityId: pickupValue,
         metadata: { from: current.rows[0].estado, to: dbState },
@@ -1530,12 +1643,38 @@ export async function findPublicTracking(
   );
   const row = result.rows[0];
   if (!row) return null;
+  const history = await query<{
+    estado: string;
+    fecha: string;
+    ubicacion: string;
+  }>(
+    `SELECT tracking.estado,
+            TO_CHAR(
+              tracking.fecha_hora AT TIME ZONE 'America/Lima',
+              'YYYY-MM-DD HH24:MI'
+            ) AS fecha,
+            tracking.ubicacion
+     FROM tracking_encomiendas tracking
+     JOIN encomiendas parcel
+       ON parcel.id_encomienda = tracking.id_encomienda
+     JOIN personas recipient
+       ON recipient.id_persona = parcel.id_persona_destinatario
+     WHERE parcel.codigo_tracking = $1
+       AND RIGHT(recipient.nro_documento, 4) = $2
+     ORDER BY tracking.fecha_hora, tracking.id_tracking`,
+    [trackingCode, recipientDniLast4],
+  );
   return {
     codigo_tracking: row.codigo_tracking,
     estado: STATUS_FROM_DB[row.estado] || "registrado",
     fechaRegistro: row.fecha_registro,
     ultimaUbicacion: row.ultima_ubicacion || "Sin actualización",
     ultimaActualizacion: row.ultima_actualizacion || row.fecha_registro,
+    historial: history.rows.map((event) => ({
+      estado: STATUS_FROM_DB[event.estado] || "registrado",
+      fecha: event.fecha,
+      ubicacion: event.ubicacion,
+    })),
   };
 }
 
@@ -2138,3 +2277,31 @@ export async function updateDriverContact(
   });
 }
 
+export async function getDriverContact(
+  user: SessionUser,
+): Promise<{ phone: string; email: string; address: string }> {
+  const userId = requireUserId(user);
+  const result = await query<{
+    telefono: string | null;
+    email: string | null;
+    direccion: string | null;
+  }>(
+    `SELECT person.telefono, person.email, person.direccion
+     FROM usuarios user_account
+     JOIN personas person ON person.id_persona = user_account.id_persona
+     JOIN conductores driver ON driver.id_persona = person.id_persona
+     WHERE user_account.id_usuario = $1
+       AND user_account.estado = 'ACTIVO'
+       AND driver.habilitado = TRUE
+     LIMIT 1`,
+    [userId],
+  );
+  if (!result.rows[0]) {
+    throw notFound("No se encontró el perfil del conductor.");
+  }
+  return {
+    phone: result.rows[0].telefono || "",
+    email: result.rows[0].email || "",
+    address: result.rows[0].direccion || "",
+  };
+}

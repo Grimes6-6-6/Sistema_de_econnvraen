@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  CheckCircle2,
   ClipboardList,
   Package,
   Search,
@@ -135,16 +134,16 @@ export default function PublicClientPage() {
           <div className="lg:col-span-6 space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-extrabold uppercase tracking-widest text-emerald-400">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              Seguimiento Satelital en Ruta
+              Seguimiento de estados del envío
             </div>
             <h1 className="text-4xl sm:text-5xl font-black leading-tight tracking-tight text-white">
-              Rastrea tu encomienda en{" "}
+              Consulta el avance de tu encomienda en{" "}
               <span className="bg-linear-to-r from-emerald-400 to-green-500 bg-clip-text text-transparent">
-                tiempo real.
+                cada etapa.
               </span>
             </h1>
             <p className="text-sm sm:text-base leading-relaxed text-slate-300 font-medium">
-              Monitorea el trayecto de tu paquete entre Ayacucho y los distritos del VRAEM. Seguridad garantizada con validación de identidad.
+              Revisa el historial registrado de tu paquete entre Ayacucho y los distritos del VRAEM, con validación de identidad.
             </p>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -164,7 +163,7 @@ export default function PublicClientPage() {
                   <span>Ruta VRAEM Directa</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Actualización constante en terminales y puestos de control.
+                    Actualización registrada en terminales y puntos de control.
                 </p>
               </div>
             </div>
@@ -189,12 +188,13 @@ export default function PublicClientPage() {
 
               <form onSubmit={handleSearch} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                  <label htmlFor="tracking-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
                     Código de Tracking *
                   </label>
                   <div className="relative">
                     <Package className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                     <input
+                      id="tracking-code"
                       type="text"
                       required
                       value={query}
@@ -210,10 +210,11 @@ export default function PublicClientPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                  <label htmlFor="tracking-security-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
                     Últimos 4 dígitos del DNI destinatario *
                   </label>
                   <input
+                    id="tracking-security-code"
                     type="text"
                     required
                     value={securityCode}
@@ -231,7 +232,7 @@ export default function PublicClientPage() {
                 </div>
 
                 {error && (
-                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs font-bold text-rose-300 flex items-center gap-2">
+                  <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs font-bold text-rose-300 flex items-center gap-2">
                     <span>⚠️</span>
                     <span>{error}</span>
                   </div>
@@ -240,6 +241,7 @@ export default function PublicClientPage() {
                 <button
                   type="submit"
                   disabled={isSearching}
+                  aria-busy={isSearching}
                   className="w-full rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-extrabold text-xs uppercase tracking-widest py-3.5 flex justify-center items-center gap-2 shadow-lg shadow-emerald-950/50 hover:shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Search className="h-4 w-4" />
@@ -313,6 +315,31 @@ export default function PublicClientPage() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="space-y-2 border-t border-white/10 pt-3">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                      Historial de estados
+                    </h3>
+                    <ol className="space-y-2">
+                      {result.historial.map((event, index) => (
+                        <li
+                          key={`${event.fecha}-${event.estado}-${index}`}
+                          className="flex gap-3 rounded-xl border border-white/5 bg-slate-950/50 p-3 text-xs"
+                        >
+                          <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400" />
+                          <div>
+                            <p className="font-black uppercase text-emerald-300">
+                              {event.estado.replaceAll("_", " ")}
+                            </p>
+                            <p className="text-slate-300">{event.ubicacion}</p>
+                            <time className="text-[10px] text-slate-500">
+                              {event.fecha}
+                            </time>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                 </div>
               )}
 
@@ -329,7 +356,7 @@ export default function PublicClientPage() {
         {/* Footer */}
         <footer className="border-t border-white/5 py-4 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-2">
           <span>© 2026 ECONNVRAE S.A.C. · Todos los derechos reservados.</span>
-          <span>Plataforma Logística Certificada</span>
+          <span>Consulta protegida por validación de identidad</span>
         </footer>
       </div>
     </main>

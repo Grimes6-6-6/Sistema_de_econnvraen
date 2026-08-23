@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Roboto } from "next/font/google";
 import "./globals.css";
 import { DatabaseProvider } from "@/context/DatabaseContext";
 import { LocationProvider } from "@/context/LocationContext";
+import { FeedbackProvider } from "@/components/ui/FeedbackProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const roboto = Roboto({
+  variable: "--font-roboto",
   subsets: ["latin"],
+  weight: ["400", "500", "700", "900"],
 });
 
 const geistMono = Geist_Mono({
@@ -16,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "ECONNVRAE - Gestión de Transporte y Encomiendas VRAEM",
-  description: "Sistema Multiplataforma para reservaciones de pasajes y envíos de encomiendas terrestre en la ruta Ayacucho-VRAEM",
+  description: "Plataforma web empresarial para la gestión de pasajes, viajes, recojos y encomiendas en la ruta Ayacucho-VRAEM.",
 };
 
 export default function RootLayout({
@@ -27,7 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${roboto.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-[#090d16] text-slate-100 antialiased" suppressHydrationWarning>
@@ -38,13 +40,15 @@ export default function RootLayout({
           <div className="ambient-blob-3"></div>
         </div>
 
-        <DatabaseProvider>
-          <LocationProvider>
-            <div className="flex-grow flex flex-col relative z-10">
-              {children}
-            </div>
-          </LocationProvider>
-        </DatabaseProvider>
+        <FeedbackProvider>
+          <DatabaseProvider>
+            <LocationProvider>
+              <div className="flex-grow flex flex-col relative z-10">
+                {children}
+              </div>
+            </LocationProvider>
+          </DatabaseProvider>
+        </FeedbackProvider>
       </body>
     </html>
   );

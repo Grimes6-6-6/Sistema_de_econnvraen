@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseEntityId, formatEntityId } from "@/lib/domain/ids";
-import {
-  tripIncidentSchema,
-  driverProfileUpdateSchema,
-  parcelStatusSchema,
-} from "@/lib/validation/schemas";
-import { canAdvanceParcelStatus } from "@/lib/domain/rules";
+import { driverProfileUpdateSchema } from "@/lib/validation/schemas";
 
 describe("Seguridad y Control de Acceso (OWASP A01 & A07)", () => {
   it("Valida parsing estricto de IDs de entidades para evitar IDOR", () => {

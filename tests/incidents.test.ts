@@ -67,7 +67,7 @@ describe("Validación de Incidencias de Viajes (OWASP A06 & A08)", () => {
   it("Rechaza tipos de incidencia no reconocidos", () => {
     expect(() =>
       tripIncidentSchema.parse({
-        tipo: "TIPO_INEXISTENTE" as any,
+        tipo: "TIPO_INEXISTENTE",
         descripcion: "Descripción de prueba para incidencia",
       }),
     ).toThrow();

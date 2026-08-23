@@ -13,11 +13,14 @@ function getHashPepper(): string {
 }
 
 export function getClientAddress(request: Request): string {
+  if (process.env.TRUST_PROXY !== "true") {
+    return "direct-client";
+  }
   const forwardedFor = request.headers.get("x-forwarded-for");
   return (
     forwardedFor?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip") ||
-    "unknown"
+    "proxy-client-unknown"
   );
 }
 

@@ -9,9 +9,11 @@ import {
   publicTrackingSchema,
   ticketInputSchema,
   pickupStatusSchema,
+  cancellationSchema,
   tripStatusSchema,
   vehicleLocationUpdateSchema,
 } from "@/lib/validation/schemas";
+import { createTrackingCode } from "@/lib/domain/tracking";
 
 describe("validaciones de entrada", () => {
   it("valida identificadores y datos de agencias", () => {
@@ -44,21 +46,25 @@ describe("validaciones de entrada", () => {
   });
 
   it("exige tracking exacto y los últimos cuatro dígitos", () => {
+    const trackingCode = createTrackingCode(
+      1,
+      new Date("2026-07-14T12:00:00.000Z"),
+    );
     expect(
       publicTrackingSchema.safeParse({
-        trackingCode: "ECV-260714-00001",
+        trackingCode,
         recipientDniLast4: "4321",
       }).success,
     ).toBe(true);
     expect(
       publicTrackingSchema.safeParse({
-        trackingCode: "ECV-260714-00001",
+        trackingCode,
         recipientDniLast4: "12",
       }).success,
     ).toBe(false);
     expect(
       publicTrackingSchema.safeParse({
-        trackingCode: "ECV-260714-00001<script>",
+        trackingCode: `${trackingCode}<script>`,
         recipientDniLast4: "4321",
       }).success,
     ).toBe(false);
@@ -82,7 +88,7 @@ describe("validaciones de entrada", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rechaza precios y asientos fuera de los límites", () => {
+  it("rechaza sobreasignación de asientos y precios enviados por el cliente", () => {
     const base = {
       requestId: "550e8400-e29b-41d4-a716-446655440000",
       id_viaje: "T101",
@@ -90,11 +96,11 @@ describe("validaciones de entrada", () => {
       pasajeroNombres: "Alexis",
       pasajeroApellidos: "Melgar Vila",
       pasajeroTelefono: "998877665",
-      precio: 50,
     };
     expect(ticketInputSchema.safeParse({ ...base, asiento: 1 }).success).toBe(true);
     expect(ticketInputSchema.safeParse({ ...base, asiento: 0 }).success).toBe(false);
-    expect(ticketInputSchema.safeParse({ ...base, asiento: 1, precio: -1 }).success).toBe(false);
+    expect(ticketInputSchema.safeParse({ ...base, asiento: 5 }).success).toBe(false);
+    expect(ticketInputSchema.safeParse({ ...base, asiento: 1, precio: 1 }).success).toBe(false);
   });
 
   it("valida coordenadas y límites físicos del GPS", () => {
@@ -178,7 +184,15 @@ describe("validaciones de entrada", () => {
       pickupStatusSchema.safeParse({ newState: "completado" }).success,
     ).toBe(true);
     expect(
+      pickupStatusSchema.safeParse({ newState: "en_camino" }).success,
+    ).toBe(true);
+    expect(
       pickupStatusSchema.safeParse({ newState: "pendiente" }).success,
     ).toBe(false);
+  });
+
+  it("exige un motivo útil para anulaciones", () => {
+    expect(cancellationSchema.safeParse({ reason: "Cliente desistió" }).success).toBe(true);
+    expect(cancellationSchema.safeParse({ reason: "no" }).success).toBe(false);
   });
 });

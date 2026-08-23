@@ -6,29 +6,14 @@ import { notFound } from "@/server/errors";
 
 export async function GET() {
   try {
-    const user = await requireApiRole(["CONDUCTOR", "ADMINISTRADOR"]);
-    const userId = parseEntityId(user.id, "U");
-    if (!userId) {
-      return noStoreJson(
-        { error: { code: "FORBIDDEN", message: "Sesión inválida." } },
-        { status: 403 },
-      );
-    }
-
-    const driverRes = await query<{ id_conductor: number }>(
-      `SELECT c.id_conductor
-       FROM conductores c
-       JOIN usuarios u ON u.id_persona = c.id_persona
-       WHERE u.id_usuario = $1
-       LIMIT 1`,
-      [userId],
-    );
-
-    if (!driverRes.rows[0]) {
+    const user = await requireApiRole(["CONDUCTOR"]);
+    const driverId = user.conductorId
+      ? parseEntityId(user.conductorId, "C")
+      : null;
+    const agencyId = user.agenciaId ? parseEntityId(user.agenciaId, "A") : null;
+    if (!driverId || !agencyId) {
       throw notFound("El usuario no está vinculado a un conductor.");
     }
-
-    const driverId = driverRes.rows[0].id_conductor;
 
     const tripRes = await query<{
       id_viaje: number;
@@ -59,10 +44,13 @@ export async function GET() {
        JOIN rutas r ON r.id_ruta = v.id_ruta
        JOIN vehiculos veh ON veh.id_vehiculo = v.id_vehiculo
        WHERE v.id_conductor = $1
+         AND v.id_agencia = $2
          AND v.estado IN ('PROGRAMADO', 'EN_CURSO')
+         AND (v.fecha_hora_salida AT TIME ZONE 'America/Lima')::date =
+             (NOW() AT TIME ZONE 'America/Lima')::date
        ORDER BY v.fecha_hora_salida ASC
        LIMIT 1`,
-      [driverId],
+      [driverId, agencyId],
     );
 
     if (!tripRes.rows[0]) {

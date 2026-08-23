@@ -12,6 +12,7 @@ export const SESSION_COOKIE_NAME =
     ? "__Host-econnvrae_session"
     : "econnvrae_session";
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
+const SESSION_IDLE_TIMEOUT_MINUTES = 30;
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 interface SessionRow {
@@ -21,6 +22,7 @@ interface SessionRow {
   nombres: string | null;
   apellidos: string | null;
   dni: string | null;
+  id_conductor: number | null;
   id_agencia: number | null;
   agencia_nombre: string | null;
 }
@@ -50,6 +52,10 @@ function toSessionUser(row: SessionRow): SessionUser {
     apellidos: row.apellidos || "",
     rol: row.rol,
     dni: row.dni || "",
+    conductorId:
+      row.id_conductor === null
+        ? null
+        : `C${String(row.id_conductor).padStart(2, "0")}`,
     agenciaId:
       row.id_agencia === null
         ? null
@@ -71,18 +77,22 @@ export async function getSessionUser(): Promise<SessionUser | null> {
        p.nombres,
        p.apellidos,
        p.nro_documento AS dni,
+       driver.id_conductor,
        s.id_agencia_activa AS id_agencia,
        agency.nombre AS agencia_nombre
      FROM sesiones s
      JOIN usuarios u ON u.id_usuario = s.id_usuario
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
      LEFT JOIN agencias agency
        ON agency.id_agencia = s.id_agencia_activa
       AND agency.estado = 'ACTIVA'
      WHERE s.token_hash = $1
        AND s.revoked_at IS NULL
        AND s.expires_at > NOW()
+       AND s.last_seen_at > NOW() - ($2::integer * INTERVAL '1 minute')
+       AND s.created_at >= u.password_changed_at
        AND u.estado = 'ACTIVO'
        AND agency.id_agencia IS NOT NULL
        AND (
@@ -96,10 +106,14 @@ export async function getSessionUser(): Promise<SessionUser | null> {
          )
        )
      LIMIT 1`,
+    [hashToken(token), SESSION_IDLE_TIMEOUT_MINUTES],
+  );
+  if (!result.rows[0]) return null;
+  await query(
+    "UPDATE sesiones SET last_seen_at = NOW() WHERE token_hash = $1",
     [hashToken(token)],
   );
-
-  return result.rows[0] ? toSessionUser(result.rows[0]) : null;
+  return toSessionUser(result.rows[0]);
 }
 
 export async function createSession(

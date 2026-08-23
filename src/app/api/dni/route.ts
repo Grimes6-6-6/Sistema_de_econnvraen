@@ -185,7 +185,6 @@ export async function POST(request: Request) {
     const { dni } = await parseJsonBody(request, dniLookupSchema);
     const token = process.env.RENIEC_API_TOKEN?.trim().replace(/^Bearer\s+/i, "");
     const allowMockFallback =
-      process.env.NODE_ENV !== "production" ||
       process.env.ALLOW_DNI_MOCK_FALLBACK === "true";
 
     if (!token || token === "TUPERSONALTOKENAQUI") {

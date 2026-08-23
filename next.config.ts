@@ -3,6 +3,19 @@ import type { NextConfig } from "next";
 const allowedOrigin =
   process.env.ALLOWED_ORIGIN?.trim() ||
   (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "");
+const isDevelopment = process.env.NODE_ENV === "development";
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
+  `connect-src 'self'${isDevelopment ? " ws: http://localhost:*" : ""}`,
+  "font-src 'self' data:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -38,10 +51,15 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=31536000; includeSubDomains",
-          },
+          { key: "Content-Security-Policy", value: contentSecurityPolicy },
+          ...(isDevelopment
+            ? []
+            : [
+                {
+                  key: "Strict-Transport-Security",
+                  value: "max-age=31536000; includeSubDomains",
+                },
+              ]),
           {
             key: "Permissions-Policy",
             value: "camera=(self), geolocation=(self), microphone=()",

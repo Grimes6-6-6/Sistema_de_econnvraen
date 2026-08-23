@@ -1,12 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Building2, Plus, X } from "lucide-react";
 import { useDatabase } from "@/context/DatabaseContext";
 import type { Agency } from "@/lib/domain/agency";
 
 interface ApiError {
   error?: { message?: string };
+}
+
+function trapDialogFocus(event: KeyboardEvent<HTMLElement>) {
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function errorMessage(payload: unknown): string {
@@ -157,23 +176,31 @@ export default function AgencySwitcher() {
           </option>
         ))}
       </select>
-      {error && <p className="mt-2 text-[10px] text-red-400">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-[10px] text-red-400">{error}</p>}
 
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
           <form
             action={(formData) => void createAgency(formData)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-agency-title"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setShowCreate(false);
+              trapDialogFocus(event);
+            }}
             className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-white">Nueva agencia</h2>
+                <h2 id="create-agency-title" className="text-lg font-black text-white">Nueva agencia</h2>
                 <p className="text-xs text-slate-400">
                   Quedará disponible para asignar personal y operaciones.
                 </p>
               </div>
               <button
                 type="button"
+                autoFocus
                 onClick={() => setShowCreate(false)}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
                 aria-label="Cerrar"
