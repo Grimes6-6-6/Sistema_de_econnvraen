@@ -17,6 +17,7 @@ const BASELINE_COLUMNS = {
 
 const CURRENT_COLUMNS = {
   agencias: ["id_agencia", "codigo", "estado"],
+  usuarios: ["must_change_password", "temporary_password_expires_at"],
   vehiculos: ["id_agencia_base"],
   conductores: ["id_agencia_base"],
   viajes: ["id_agencia", "motivo_cancelacion"],
@@ -40,6 +41,23 @@ const CURRENT_COLUMNS = {
     "id_viaje",
     "captured_at",
     "received_at",
+  ],
+  solicitudes_anulacion_boletos: [
+    "id_solicitud",
+    "id_boleto",
+    "id_agencia",
+    "solicitado_por",
+    "estado",
+  ],
+  documentos_operativos: [
+    "id_documento",
+    "id_agencia",
+    "titular_tipo",
+    "id_vehiculo",
+    "id_conductor",
+    "tipo_documento",
+    "fecha_vencimiento",
+    "estado",
   ],
 };
 

@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { vehicleLocationUpdateSchema } from "@/lib/validation/schemas";
 import {
   getVehicleLocations,
@@ -17,11 +18,7 @@ const LOCATION_UPDATE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function GET() {
   try {
-    const user = await requireApiRole([
-      "OPERADOR",
-      "CONDUCTOR",
-      "ADMINISTRADOR",
-    ]);
+    const user = await requireApiPermission(PERMISSIONS.FLEET_VIEW);
     const locations = await getVehicleLocations(user);
     return noStoreJson({ locations });
   } catch (error) {
@@ -32,7 +29,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole(["CONDUCTOR"]);
+    const user = await requireApiPermission(PERMISSIONS.GPS_PUBLISH);
     const rateLimit = await consumeRateLimit(
       `location:${user.id}`,
       LOCATION_UPDATE_LIMIT,

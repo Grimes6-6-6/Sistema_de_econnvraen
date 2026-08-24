@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { tripStatusSchema } from "@/lib/validation/schemas";
 import { updateTripStatus } from "@/server/data/operations";
 import {
@@ -14,7 +15,7 @@ export async function PATCH(
 ) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole(["CONDUCTOR", "ADMINISTRADOR"]);
+    const user = await requireApiPermission(PERMISSIONS.TRIP_STATUS_MANAGE);
     const input = await parseJsonBody(request, tripStatusSchema);
     const { id } = await params;
     const item = await updateTripStatus(user, id, input);

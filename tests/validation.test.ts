@@ -10,6 +10,10 @@ import {
   ticketInputSchema,
   pickupStatusSchema,
   cancellationSchema,
+  cancellationResolutionSchema,
+  changePasswordSchema,
+  adminUserCreateSchema,
+  operationalDocumentSchema,
   tripStatusSchema,
   vehicleLocationUpdateSchema,
 } from "@/lib/validation/schemas";
@@ -209,5 +213,64 @@ describe("validaciones de entrada", () => {
   it("exige un motivo útil para anulaciones", () => {
     expect(cancellationSchema.safeParse({ reason: "Cliente desistió" }).success).toBe(true);
     expect(cancellationSchema.safeParse({ reason: "no" }).success).toBe(false);
+  });
+
+  it("exige contraseñas empresariales fuertes y confirmadas", () => {
+    expect(
+      changePasswordSchema.safeParse({
+        currentPassword: "Temporal-2026!",
+        newPassword: "Nueva-Segura-2026!",
+        confirmation: "Nueva-Segura-2026!",
+      }).success,
+    ).toBe(true);
+    expect(
+      changePasswordSchema.safeParse({
+        currentPassword: "Temporal-2026!",
+        newPassword: "debil",
+        confirmation: "debil",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("obliga a registrar licencia cuando el usuario es conductor", () => {
+    const base = {
+      username: "conductor.nuevo",
+      dni: "12345678",
+      names: "Juan",
+      surnames: "Pérez Ramos",
+      role: "CONDUCTOR" as const,
+      agencyIds: ["A01"],
+    };
+    expect(adminUserCreateSchema.safeParse(base).success).toBe(false);
+    expect(
+      adminUserCreateSchema.safeParse({
+        ...base,
+        driver: {
+          licenseNumber: "Q12345678",
+          licenseCategory: "AIIIB",
+          licenseExpiresAt: "2028-10-30",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("valida aprobaciones y documentos contra titulares incorrectos", () => {
+    expect(
+      cancellationResolutionSchema.safeParse({
+        decision: "APROBADA",
+        reason: "Solicitud verificada por administración",
+      }).success,
+    ).toBe(true);
+    expect(
+      operationalDocumentSchema.safeParse({
+        holderType: "VEHICULO",
+        holderId: "C01",
+        documentType: "SOAT",
+        number: "SOAT-2026-001",
+        issuedAt: "2026-01-01",
+        expiresAt: "2027-01-01",
+        state: "VIGENTE",
+      }).success,
+    ).toBe(false);
   });
 });

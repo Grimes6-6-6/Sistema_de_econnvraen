@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { cancelTicket } from "@/server/data/operations";
 import { cancellationSchema } from "@/lib/validation/schemas";
 import {
@@ -14,7 +15,7 @@ export async function POST(
 ) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole(["OPERADOR", "ADMINISTRADOR"]);
+    const user = await requireApiPermission(PERMISSIONS.TICKET_CANCEL_APPROVE);
     const { id } = await params;
     const input = await parseJsonBody(request, cancellationSchema);
     await cancelTicket(user, id, input);

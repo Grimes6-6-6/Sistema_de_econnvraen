@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { parseEntityId } from "@/lib/domain/ids";
 import { query } from "@/server/db/pool";
 import { handleRouteError, noStoreJson } from "@/server/http";
@@ -6,7 +7,7 @@ import { notFound } from "@/server/errors";
 
 export async function GET() {
   try {
-    const user = await requireApiRole(["CONDUCTOR"]);
+    const user = await requireApiPermission(PERMISSIONS.DRIVER_SELF_MANAGE);
     const driverId = user.conductorId
       ? parseEntityId(user.conductorId, "C")
       : null;

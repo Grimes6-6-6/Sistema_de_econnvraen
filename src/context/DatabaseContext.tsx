@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { SessionUser } from "@/lib/auth/types";
+import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import type {
   Boleto,
   DatabaseState,
@@ -51,7 +52,10 @@ interface DatabaseContextType {
       "id" | "codigo" | "fechaEmision" | "sunat_estado" | "estado" | "precio"
     >,
   ) => Promise<Boleto | null>;
-  anularBoleto: (boletoId: string, reason: string) => Promise<void>;
+  anularBoleto: (
+    boletoId: string,
+    reason: string,
+  ) => Promise<"requested" | "cancelled">;
   addEncomienda: (
     encomienda: Omit<
       Encomienda,
@@ -229,7 +233,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
       readOfflineQueue(payload.user.id, payload.user.agenciaId),
     );
     setDataError(null);
-    await refreshDatabase();
+    if (!payload.user.mustChangePassword) {
+      await refreshDatabase();
+    }
     return payload.user;
   };
 
@@ -256,6 +262,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
         setOfflineQueue(
           readOfflineQueue(payload.user.id, payload.user.agenciaId),
         );
+        if (payload.user.mustChangePassword) return;
         const data = await apiRequest<{ data: DatabaseState }>("/api/data");
         if (!cancelled) {
           setDb(data.data);
@@ -284,9 +291,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [refreshDatabase]);
 
-  const hasRole = (...roles: Usuario["rol"][]) =>
-    currentUser !== null &&
-    (currentUser.rol === "SUPER_ADMIN" || roles.includes(currentUser.rol));
+  const hasPermission = (permission: Parameters<typeof roleHasPermission>[1]) =>
+    currentUser !== null && roleHasPermission(currentUser.rol, permission);
 
   const addBoleto = async (
     boletoData: Omit<
@@ -294,7 +300,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
       "id" | "codigo" | "fechaEmision" | "sunat_estado" | "estado" | "precio"
     >,
   ): Promise<Boleto | null> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.TICKET_SELL)) {
       throw new Error("No tienes permisos para vender pasajes.");
     }
     const payload = await apiRequest<{ item: Boleto }>("/api/tickets", {
@@ -308,15 +314,22 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
   const anularBoleto = async (
     boletoId: string,
     reason: string,
-  ): Promise<void> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
-      throw new Error("No tienes permisos para anular pasajes.");
+  ): Promise<"requested" | "cancelled"> => {
+    if (!hasPermission(PERMISSIONS.TICKET_CANCEL_REQUEST)) {
+      throw new Error("No tienes permisos para solicitar anulaciones.");
     }
-    await apiRequest(`/api/tickets/${encodeURIComponent(boletoId)}/cancel`, {
+    const canApprove = hasPermission(PERMISSIONS.TICKET_CANCEL_APPROVE);
+    await apiRequest(
+      canApprove
+        ? `/api/tickets/${encodeURIComponent(boletoId)}/cancel`
+        : `/api/tickets/${encodeURIComponent(boletoId)}/cancellation-requests`,
+      {
       method: "POST",
       body: JSON.stringify({ reason }),
-    });
-    await refreshDatabase();
+      },
+    );
+    if (canApprove) await refreshDatabase();
+    return canApprove ? "cancelled" : "requested";
   };
 
   const addEncomienda = async (
@@ -325,7 +338,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
       "id" | "codigo_tracking" | "estado" | "fechaRegistro" | "historial"
     >,
   ): Promise<Encomienda | null> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.PARCEL_CREATE)) {
       throw new Error("No tienes permisos para registrar encomiendas.");
     }
     const payload = await apiRequest<{ item: Encomienda }>("/api/parcels", {
@@ -339,7 +352,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
   const addViaje = async (
     viajeData: Omit<Viaje, "id" | "estado">,
   ): Promise<Viaje | null> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.TRIP_MANAGE)) {
       throw new Error("No tienes permisos para programar viajes.");
     }
     const payload = await apiRequest<{ item: Viaje }>("/api/trips", {
@@ -354,7 +367,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     viajeId: string,
     reason: string,
   ): Promise<void> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.TRIP_MANAGE)) {
       throw new Error("No tienes permisos para cancelar viajes.");
     }
     await apiRequest(`/api/trips/${encodeURIComponent(viajeId)}/cancel`, {
@@ -368,7 +381,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     viajeId: string,
     newState: Extract<Viaje["estado"], "en_curso" | "completado">,
   ): Promise<Viaje | null> => {
-    if (!hasRole("CONDUCTOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.TRIP_STATUS_MANAGE)) {
       throw new Error("No tienes permisos para actualizar viajes.");
     }
     const payload = await apiRequest<{ item: Viaje }>(
@@ -385,7 +398,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
   const addRecojo = async (
     recojoData: Omit<Recojo, "id" | "estado" | "asignado">,
   ): Promise<Recojo | null> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.PICKUP_CREATE)) {
       throw new Error("No tienes permisos para registrar recojos.");
     }
     const payload = await apiRequest<{ item: Recojo }>("/api/pickups", {
@@ -400,7 +413,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     recojoId: string,
     driverId: string,
   ): Promise<void> => {
-    if (!hasRole("OPERADOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.PICKUP_ASSIGN)) {
       throw new Error("No tienes permisos para asignar recojos.");
     }
     const driver = db.conductores.find((item) => item.id === driverId);
@@ -419,7 +432,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
       "en_camino" | "completado" | "cancelado"
     >,
   ): Promise<void> => {
-    if (!hasRole("CONDUCTOR", "OPERADOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.PICKUP_STATUS_MANAGE)) {
       throw new Error("No tienes permisos para actualizar recojos.");
     }
     await apiRequest(`/api/pickups/${encodeURIComponent(recojoId)}/status`, {
@@ -509,7 +522,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [currentUser, offlineQueue, syncOfflineQueue]);
 
   const toggleOffline = () => {
-    if (!hasRole("CONDUCTOR", "ADMINISTRADOR")) return;
+    if (!hasPermission(PERMISSIONS.PARCEL_STATUS_MANAGE)) return;
     if (!navigator.onLine) return;
     setIsOffline((current) => {
       const next = !current;
@@ -527,7 +540,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     evidence: DeliveryEvidence | null = null,
     coordinates: { latitude: number; longitude: number } | null = null,
   ): Promise<void> => {
-    if (!hasRole("CONDUCTOR", "ADMINISTRADOR", "OPERADOR")) {
+    if (!hasPermission(PERMISSIONS.PARCEL_STATUS_MANAGE)) {
       throw new Error("No tienes permisos para actualizar encomiendas.");
     }
 
@@ -617,7 +630,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
       longitude?: number | null;
     },
   ): Promise<IncidenciaViaje> => {
-    if (!hasRole("CONDUCTOR", "ADMINISTRADOR")) {
+    if (!hasPermission(PERMISSIONS.INCIDENT_CREATE)) {
       throw new Error("No tienes permisos para reportar incidencias.");
     }
     const payload = await apiRequest<{ incident: IncidenciaViaje }>(

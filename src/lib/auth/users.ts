@@ -18,6 +18,7 @@ interface UserRow {
   id_conductor: number | null;
   id_agencia: number | null;
   agencia_nombre: string | null;
+  must_change_password: boolean;
 }
 
 function toSessionUser(row: UserRow): SessionUser {
@@ -37,6 +38,7 @@ function toSessionUser(row: UserRow): SessionUser {
         ? null
         : `A${String(row.id_agencia).padStart(3, "0")}`,
     agenciaNombre: row.agencia_nombre,
+    mustChangePassword: row.must_change_password,
   };
 }
 
@@ -56,6 +58,7 @@ export async function authenticateUser(
        driver.id_conductor,
        membership.id_agencia,
        agency.nombre AS agencia_nombre
+       , u.must_change_password
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
@@ -74,6 +77,10 @@ export async function authenticateUser(
      LEFT JOIN agencias agency ON agency.id_agencia = membership.id_agencia
      WHERE LOWER(u.username) = LOWER($1)
        AND u.estado = 'ACTIVO'
+       AND (
+         u.must_change_password = FALSE
+         OR u.temporary_password_expires_at > NOW()
+       )
        AND (r.nombre = 'SUPER_ADMIN' OR membership.id_agencia IS NOT NULL)
      LIMIT 1`,
     [username],
@@ -108,6 +115,7 @@ export async function findUserById(userId: number): Promise<SessionUser | null> 
        driver.id_conductor,
        membership.id_agencia,
        agency.nombre AS agencia_nombre
+       , u.must_change_password
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
@@ -126,6 +134,10 @@ export async function findUserById(userId: number): Promise<SessionUser | null> 
      LEFT JOIN agencias agency ON agency.id_agencia = membership.id_agencia
      WHERE u.id_usuario = $1
        AND u.estado = 'ACTIVO'
+       AND (
+         u.must_change_password = FALSE
+         OR u.temporary_password_expires_at > NOW()
+       )
        AND (r.nombre = 'SUPER_ADMIN' OR membership.id_agencia IS NOT NULL)
      LIMIT 1`,
     [userId],

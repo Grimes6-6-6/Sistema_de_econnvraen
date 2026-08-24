@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { VehicleLocation } from "@/lib/domain/types";
+import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import { useDatabase } from "@/context/DatabaseContext";
 
 export type { VehicleLocation } from "@/lib/domain/types";
@@ -164,6 +165,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
   const lastBroadcastPositionRef = useRef<SimpleCoords | null>(null);
   const pendingPayloadRef = useRef<ActiveLocationPayload | null>(null);
   const activeMetaRef = useRef<{ conductorId: string } | null>(null);
+  const canReadFleet = Boolean(
+    currentUser && roleHasPermission(currentUser.rol, PERMISSIONS.FLEET_VIEW),
+  );
 
   const syncLocations = useCallback(async (
     userId: string,
@@ -197,7 +201,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         setTransmissionStatus("synced");
         setLastSyncedAt(Date.now());
-        if (currentUser) void syncLocations(currentUser.id);
+        if (currentUser && canReadFleet) void syncLocations(currentUser.id);
       } catch (error) {
         pendingPayloadRef.current = payload;
         setTransmissionStatus(navigator.onLine ? "error" : "offline");
@@ -210,7 +214,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
         );
       }
     },
-    [currentUser, syncLocations],
+    [canReadFleet, currentUser, syncLocations],
   );
 
   const broadcastPosition = useCallback(
@@ -274,7 +278,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
         conductorId: meta.conductorId,
         isActive: false,
       }).then(() => {
-        if (currentUser) void syncLocations(currentUser.id);
+        if (currentUser && canReadFleet) void syncLocations(currentUser.id);
       }).catch(() => {
         // A stale active marker disappears automatically after five minutes.
       });
@@ -286,7 +290,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
     setTransmissionStatus("idle");
     setTransmissionError(null);
     setLastSyncedAt(null);
-  }, [currentUser, syncLocations]);
+  }, [canReadFleet, currentUser, syncLocations]);
 
   const startTracking = useCallback(
     (conductorId: string) => {
@@ -352,7 +356,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !canReadFleet) {
+      return;
+    }
 
     const controller = new AbortController();
     const initialSync = window.setTimeout(() => {
@@ -367,7 +373,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
       window.clearTimeout(initialSync);
       window.clearInterval(interval);
     };
-  }, [currentUser, syncLocations]);
+  }, [canReadFleet, currentUser, syncLocations]);
 
   useEffect(() => {
     const retryPendingPosition = () => {
@@ -401,7 +407,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
     <LocationContext.Provider
       value={{
         locations:
-          currentUser && locationSnapshot.userId === currentUser.id
+          canReadFleet && currentUser && locationSnapshot.userId === currentUser.id
             ? locationSnapshot.items
             : [],
         ownPosition,

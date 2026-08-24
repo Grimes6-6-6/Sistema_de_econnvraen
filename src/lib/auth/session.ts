@@ -25,6 +25,7 @@ interface SessionRow {
   id_conductor: number | null;
   id_agencia: number | null;
   agencia_nombre: string | null;
+  must_change_password: boolean;
 }
 
 function hashToken(token: string): string {
@@ -61,6 +62,7 @@ function toSessionUser(row: SessionRow): SessionUser {
         ? null
         : `A${String(row.id_agencia).padStart(3, "0")}`,
     agenciaNombre: row.agencia_nombre,
+    mustChangePassword: row.must_change_password,
   };
 }
 
@@ -80,6 +82,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
        driver.id_conductor,
        s.id_agencia_activa AS id_agencia,
        agency.nombre AS agencia_nombre
+       , u.must_change_password
      FROM sesiones s
      JOIN usuarios u ON u.id_usuario = s.id_usuario
      JOIN roles r ON r.id_rol = u.id_rol
@@ -94,6 +97,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
        AND s.last_seen_at > NOW() - ($2::integer * INTERVAL '1 minute')
        AND s.created_at >= u.password_changed_at
        AND u.estado = 'ACTIVO'
+       AND (
+         u.must_change_password = FALSE
+         OR u.temporary_password_expires_at > NOW()
+       )
        AND agency.id_agencia IS NOT NULL
        AND (
          r.nombre = 'SUPER_ADMIN'

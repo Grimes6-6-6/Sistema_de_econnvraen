@@ -5,13 +5,17 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 ## Funcionalidad disponible
 
 - Acceso seguro por roles: superadministrador, administrador, operador y conductor.
+- Matriz central de permisos aplicada tanto en la interfaz como en cada API; una URL directa no evita la autorización.
 - Operación multiagencia con separación de datos y selección de agencia activa.
+- Administración de usuarios por ámbito, bloqueo, cambio de rol/agencia y restablecimiento mediante contraseña temporal de un solo uso obligatorio.
 - Venta de pasajes con precio controlado por el servidor y aforo máximo de cuatro asientos.
 - Programación y cancelación auditada de viajes, con prevención de cruces de conductor o vehículo.
 - Registro de encomiendas, código de seguimiento verificable e historial público completo.
 - Solicitudes de recojo, asignación de conductor y seguimiento de estados.
 - Manifiesto del conductor, incidencias de ruta, GPS ligado al viaje activo con historial, modo sin conexión y entrega con firma.
 - Reporte financiero por período y ruta, impresión/PDF y exportación CSV compatible con Excel.
+- Flujo de anulación con solicitud del operador y aprobación o rechazo del administrador, más auditoría global para el superadministrador.
+- Gestión de rutas, precios, vehículos y vencimientos documentarios (licencia, SOAT, CITV, TUC y tarjeta de propiedad).
 - Diseño adaptable a escritorio, tableta y teléfono, con navegación por teclado y avisos accesibles.
 
 ## Requisitos
@@ -71,6 +75,7 @@ npm audit
 4. Activar `TRUST_PROXY=true` solo si el proxy elimina y vuelve a escribir de forma confiable los encabezados reenviados.
 5. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
 6. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
+   La reversión controlada de la migración empresarial 008 está en `db/rollbacks/008_enterprise_rbac_down.sql` y debe usarse únicamente sobre un respaldo o una rama aislada.
 7. Compilar e iniciar:
 
    ```bash
@@ -94,6 +99,7 @@ npm audit
 - No ejecutar `db:seed` sobre una empresa ya operativa salvo que se haya revisado expresamente el efecto de actualizar las cuentas iniciales.
 - Probar restauraciones de respaldo de forma periódica; una copia no verificada no constituye un plan de recuperación.
 - Revisar usuarios, agencias y permisos cuando un colaborador cambia de función o deja la empresa.
+- Entregar las contraseñas temporales por un canal privado: se muestran una sola vez, vencen en 24 horas y obligan a crear una contraseña nueva.
 - Las anulaciones y cancelaciones exigen motivo y se registran para auditoría.
 - El GPS web requiere mantener abierta la aplicación del conductor. Para seguimiento continuo con la pantalla bloqueada se necesita una aplicación móvil con permiso de ubicación en segundo plano o un rastreador dedicado.
 

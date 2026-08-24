@@ -43,6 +43,31 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+export const strongPasswordSchema = z
+  .string()
+  .min(12, "La contraseña debe tener al menos 12 caracteres.")
+  .max(128)
+  .regex(/[A-Z]/, "Incluye al menos una mayúscula.")
+  .regex(/[a-z]/, "Incluye al menos una minúscula.")
+  .regex(/[0-9]/, "Incluye al menos un número.")
+  .regex(/[^A-Za-z0-9]/, "Incluye al menos un símbolo.")
+  .refine((value) => !/\s/.test(value), "La contraseña no debe contener espacios.");
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(8).max(128),
+    newPassword: strongPasswordSchema,
+    confirmation: z.string().min(12).max(128),
+  })
+  .refine((value) => value.newPassword === value.confirmation, {
+    path: ["confirmation"],
+    message: "La confirmación no coincide.",
+  })
+  .refine((value) => value.currentPassword !== value.newPassword, {
+    path: ["newPassword"],
+    message: "La nueva contraseña debe ser diferente.",
+  });
+
 export const agencyIdSchema = z.object({
   agencyId: z.string().regex(/^A\d{2,10}$/),
 });
@@ -66,6 +91,161 @@ export const agencyInputSchema = z.object({
     .or(z.literal("")),
   email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
 });
+
+export const agencyUpdateSchema = agencyInputSchema.partial().extend({
+  state: z.enum(["ACTIVA", "INACTIVA"]).optional(),
+});
+
+const userRoleSchema = z.enum([
+  "SUPER_ADMIN",
+  "ADMINISTRADOR",
+  "OPERADOR",
+  "CONDUCTOR",
+]);
+
+const driverAccountSchema = z.object({
+  licenseNumber: safeText(5, 20).transform((value) => value.toUpperCase()),
+  licenseCategory: safeText(2, 10).transform((value) => value.toUpperCase()),
+  licenseExpiresAt: z.iso.date(),
+});
+
+export const adminUserCreateSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .min(3)
+      .max(50)
+      .regex(/^[a-z0-9._-]+$/),
+    dni: dniSchema,
+    names: personName,
+    surnames: personName,
+    phone: phoneSchema.optional().or(z.literal("")),
+    email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
+    role: userRoleSchema,
+    agencyIds: z.array(z.string().regex(/^A\d{2,10}$/)).min(1).max(20),
+    driver: driverAccountSchema.optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.role === "CONDUCTOR" && !value.driver) {
+      context.addIssue({
+        code: "custom",
+        path: ["driver"],
+        message: "El conductor requiere licencia, categoría y vencimiento.",
+      });
+    }
+  });
+
+export const adminUserUpdateSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .min(3)
+      .max(50)
+      .regex(/^[a-z0-9._-]+$/)
+      .optional(),
+    names: personName.optional(),
+    surnames: personName.optional(),
+    phone: phoneSchema.optional().or(z.literal("")),
+    email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
+    role: userRoleSchema.optional(),
+    state: z.enum(["ACTIVO", "INACTIVO", "BLOQUEADO"]).optional(),
+    agencyIds: z.array(z.string().regex(/^A\d{2,10}$/)).min(1).max(20).optional(),
+    driver: driverAccountSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "No hay cambios para guardar.");
+
+export const cancellationResolutionSchema = z.object({
+  decision: z.enum(["APROBADA", "RECHAZADA"]),
+  reason: safeText(5, 300),
+});
+
+export const operationalDocumentSchema = z
+  .object({
+    holderType: z.enum(["CONDUCTOR", "VEHICULO"]),
+    holderId: z.string().regex(/^[CV]\d{2,10}$/),
+    documentType: z.enum([
+      "LICENCIA",
+      "SOAT",
+      "CITV",
+      "TUC",
+      "TARJETA_PROPIEDAD",
+      "ANTECEDENTES",
+      "SALUD",
+      "OTRO",
+    ]),
+    number: safeText(2, 60),
+    issuedAt: z.iso.date().optional().or(z.literal("")),
+    expiresAt: z.iso.date(),
+    state: z.enum(["VIGENTE", "POR_VENCER", "VENCIDO", "OBSERVADO"]),
+    notes: safeText(3, 300).optional().or(z.literal("")),
+  })
+  .superRefine((value, context) => {
+    const expectedPrefix = value.holderType === "CONDUCTOR" ? "C" : "V";
+    if (!value.holderId.startsWith(expectedPrefix)) {
+      context.addIssue({
+        code: "custom",
+        path: ["holderId"],
+        message: "El titular no corresponde al tipo seleccionado.",
+      });
+    }
+    if (value.issuedAt && value.expiresAt < value.issuedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["expiresAt"],
+        message: "El vencimiento no puede ser anterior a la emisión.",
+      });
+    }
+  });
+
+const managedRouteBaseSchema = z.object({
+  originAgencyId: z.string().regex(/^A\d{2,10}$/),
+  destinationAgencyId: z.string().regex(/^A\d{2,10}$/),
+  distanceKm: z.number().finite().positive().max(5_000),
+  durationHours: z.number().finite().positive().max(100),
+  price: z.number().finite().min(0).max(100_000),
+  state: z.enum(["ACTIVO", "INACTIVO"]).default("ACTIVO"),
+});
+
+export const managedRouteSchema = managedRouteBaseSchema
+  .refine((value) => value.originAgencyId !== value.destinationAgencyId, {
+    path: ["destinationAgencyId"],
+    message: "El destino debe ser diferente del origen.",
+  });
+
+export const managedRouteUpdateSchema = managedRouteBaseSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, "No hay cambios para guardar.")
+  .refine(
+    (value) =>
+      !value.originAgencyId ||
+      !value.destinationAgencyId ||
+      value.originAgencyId !== value.destinationAgencyId,
+    {
+      path: ["destinationAgencyId"],
+      message: "El destino debe ser diferente del origen.",
+    },
+  );
+
+export const managedVehicleSchema = z.object({
+  agencyId: z.string().regex(/^A\d{2,10}$/),
+  plate: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9-]{5,10}$/),
+  type: safeText(2, 50),
+  brand: safeText(2, 40),
+  model: safeText(1, 50),
+  capacity: z.number().int().min(1).max(80),
+  year: z.number().int().min(1990).max(2100).optional().nullable(),
+  state: z.enum(["ACTIVO", "MANTENIMIENTO", "DE_BAJA"]).default("ACTIVO"),
+});
+
+export const managedVehicleUpdateSchema = managedVehicleSchema.partial();
 
 export const ticketInputSchema = z
   .object({
@@ -299,6 +479,16 @@ export const driverProfileUpdateSchema = z.object({
 
 export type TicketInput = z.infer<typeof ticketInputSchema>;
 export type AgencyInput = z.infer<typeof agencyInputSchema>;
+export type AgencyUpdateInput = z.infer<typeof agencyUpdateSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type AdminUserCreateInput = z.infer<typeof adminUserCreateSchema>;
+export type AdminUserUpdateInput = z.infer<typeof adminUserUpdateSchema>;
+export type CancellationResolutionInput = z.infer<typeof cancellationResolutionSchema>;
+export type OperationalDocumentInput = z.infer<typeof operationalDocumentSchema>;
+export type ManagedRouteInput = z.infer<typeof managedRouteSchema>;
+export type ManagedRouteUpdateInput = z.infer<typeof managedRouteUpdateSchema>;
+export type ManagedVehicleInput = z.infer<typeof managedVehicleSchema>;
+export type ManagedVehicleUpdateInput = z.infer<typeof managedVehicleUpdateSchema>;
 export type ParcelInput = z.infer<typeof parcelInputSchema>;
 export type TripInput = z.infer<typeof tripInputSchema>;
 export type TripStatusInput = z.infer<typeof tripStatusSchema>;

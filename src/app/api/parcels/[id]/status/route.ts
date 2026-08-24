@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { parcelStatusSchema } from "@/lib/validation/schemas";
 import { updateParcelStatus } from "@/server/data/operations";
 import {
@@ -14,11 +15,7 @@ export async function PATCH(
 ) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole([
-      "CONDUCTOR",
-      "ADMINISTRADOR",
-      "OPERADOR",
-    ]);
+    const user = await requireApiPermission(PERMISSIONS.PARCEL_STATUS_MANAGE);
     const { id } = await params;
     const input = await parseJsonBody(request, parcelStatusSchema);
     const item = await updateParcelStatus(user, id, input);

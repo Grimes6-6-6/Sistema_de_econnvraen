@@ -1,5 +1,5 @@
-import { getSessionUser } from "@/lib/auth/session";
-import { roleCanAccess } from "@/lib/auth/users";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { dniLookupSchema } from "@/lib/validation/schemas";
 import {
   assertTrustedMutation,
@@ -154,13 +154,7 @@ async function queryDniProvider(
 export async function POST(request: Request) {
   try {
     assertTrustedMutation(request);
-    const user = await getSessionUser();
-    if (!user) {
-      return noStoreJson({ error: { code: "UNAUTHORIZED", message: "No autenticado." } }, { status: 401 });
-    }
-    if (!roleCanAccess(user.rol, ["OPERADOR", "ADMINISTRADOR"])) {
-      return noStoreJson({ error: { code: "FORBIDDEN", message: "No autorizado." } }, { status: 403 });
-    }
+    const user = await requireApiPermission(PERMISSIONS.DNI_LOOKUP);
 
     const rateLimit = await consumeRateLimit(
       `dni:${user.id}:${getClientAddressHash(request)}`,

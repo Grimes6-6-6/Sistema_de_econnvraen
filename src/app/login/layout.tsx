@@ -6,7 +6,13 @@ export default async function LoginLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const user = await getSessionUser();
   if (user) {
-    redirect(user.rol === "CONDUCTOR" ? "/conductor" : "/dashboard");
+    redirect(
+      user.mustChangePassword
+        ? "/change-password"
+        : user.rol === "CONDUCTOR"
+          ? "/conductor"
+          : "/dashboard",
+    );
   }
   return children;
 }

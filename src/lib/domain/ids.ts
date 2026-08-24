@@ -8,7 +8,9 @@ export type EntityIdPrefix =
   | "E"
   | "P"
   | "U"
-  | "INC";
+  | "INC"
+  | "CR"
+  | "DOC";
 
 export function formatEntityId(
   prefix: EntityIdPrefix,

@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { pickupStatusSchema } from "@/lib/validation/schemas";
 import { updatePickupStatus } from "@/server/data/operations";
 import {
@@ -14,11 +15,7 @@ export async function PATCH(
 ) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole([
-      "CONDUCTOR",
-      "OPERADOR",
-      "ADMINISTRADOR",
-    ]);
+    const user = await requireApiPermission(PERMISSIONS.PICKUP_STATUS_MANAGE);
     const { id } = await params;
     const input = await parseJsonBody(request, pickupStatusSchema);
     const item = await updatePickupStatus(user, id, input);

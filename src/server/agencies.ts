@@ -4,7 +4,7 @@ import type { QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth/types";
 import type { Agency } from "@/lib/domain/agency";
 import { formatEntityId, parseEntityId } from "@/lib/domain/ids";
-import type { AgencyInput } from "@/lib/validation/schemas";
+import type { AgencyInput, AgencyUpdateInput } from "@/lib/validation/schemas";
 import { writeAuditLog } from "@/server/audit";
 import { query, withTransaction } from "@/server/db/pool";
 import { conflict, forbidden } from "@/server/errors";
@@ -120,5 +120,86 @@ export async function createAgency(
       }
       throw error;
     }
+  });
+}
+
+export async function listAllAgencies(user: SessionUser): Promise<Agency[]> {
+  if (user.rol !== "SUPER_ADMIN") throw forbidden();
+  const result = await query<AgencyRow>(
+    `SELECT id_agencia, codigo, nombre, ciudad, direccion, telefono, email, estado
+     FROM agencias
+     ORDER BY estado DESC, ciudad, nombre`,
+  );
+  return result.rows.map(mapAgency);
+}
+
+export async function updateAgency(
+  user: SessionUser,
+  agencyIdValue: string,
+  input: AgencyUpdateInput,
+): Promise<Agency> {
+  if (user.rol !== "SUPER_ADMIN") throw forbidden();
+  const userId = parseEntityId(user.id, "U");
+  const agencyId = parseEntityId(agencyIdValue, "A");
+  if (!userId || !agencyId) throw forbidden("La agencia no es válida.");
+
+  return withTransaction(async (client) => {
+    const current = await client.query<AgencyRow>(
+      `SELECT id_agencia, codigo, nombre, ciudad, direccion, telefono, email, estado
+       FROM agencias WHERE id_agencia = $1 FOR UPDATE`,
+      [agencyId],
+    );
+    if (!current.rows[0]) throw forbidden("La agencia no existe.");
+
+    if (input.state === "INACTIVA") {
+      const activeTrips = await client.query(
+        `SELECT 1 FROM viajes
+         WHERE id_agencia = $1 AND estado IN ('PROGRAMADO', 'EN_CURSO')
+         LIMIT 1`,
+        [agencyId],
+      );
+      if (activeTrips.rowCount) {
+        throw conflict(
+          "AGENCY_HAS_ACTIVE_TRIPS",
+          "No se puede desactivar una agencia con viajes pendientes o en curso.",
+        );
+      }
+    }
+
+    const updated = await client.query<AgencyRow>(
+      `UPDATE agencias
+       SET codigo = COALESCE($1, codigo),
+           nombre = COALESCE($2, nombre),
+           ciudad = COALESCE($3, ciudad),
+           direccion = COALESCE($4, direccion),
+           telefono = CASE WHEN $5::text IS NULL THEN telefono ELSE NULLIF($5, '') END,
+           email = CASE WHEN $6::text IS NULL THEN email ELSE NULLIF($6, '') END,
+           estado = COALESCE($7, estado),
+           updated_at = NOW()
+       WHERE id_agencia = $8
+       RETURNING id_agencia, codigo, nombre, ciudad, direccion, telefono, email, estado`,
+      [
+        input.code ?? null,
+        input.name ?? null,
+        input.city ?? null,
+        input.address ?? null,
+        input.phone ?? null,
+        input.email ?? null,
+        input.state ?? null,
+        agencyId,
+      ],
+    );
+    await writeAuditLog(
+      {
+        userId,
+        agencyId,
+        action: "AGENCY_UPDATED",
+        entity: "agencia",
+        entityId: agencyIdValue,
+        metadata: { fields: Object.keys(input), state: input.state },
+      },
+      client,
+    );
+    return mapAgency(updated.rows[0]);
   });
 }

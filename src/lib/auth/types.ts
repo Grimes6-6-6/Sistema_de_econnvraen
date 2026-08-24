@@ -14,6 +14,7 @@ export interface SessionUser {
   conductorId: string | null;
   agenciaId: string | null;
   agenciaNombre: string | null;
+  mustChangePassword: boolean;
 }
 
 export function toClientSessionUser(user: SessionUser): SessionUser {

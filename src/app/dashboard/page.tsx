@@ -6,8 +6,10 @@ import dynamic from "next/dynamic";
 import { useDatabase, Viaje, Boleto } from "@/context/DatabaseContext";
 import { useLocation } from "@/context/LocationContext";
 import AgencySwitcher from "@/components/AgencySwitcher";
+import AdminWorkspace from "@/components/AdminWorkspace";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import {
   LayoutDashboard,
   Ticket,
@@ -27,6 +29,7 @@ import {
   ArrowRight,
   MapPin,
   X,
+  Settings,
 } from "lucide-react";
 
 // Map loaded client-side only (Leaflet needs window)
@@ -119,8 +122,11 @@ export default function DashboardPage() {
     | "recojos"
     | "reportes"
     | "flota"
+    | "administracion"
   >("dashboard");
   const { locations } = useLocation();
+  const can = (permission: Parameters<typeof roleHasPermission>[1]) =>
+    Boolean(currentUser && roleHasPermission(currentUser.rol, permission));
 
   const handleLogout = async () => {
     await logoutUser();
@@ -596,11 +602,16 @@ export default function DashboardPage() {
   };
 
   const handleCancelTicket = async (ticket: Boleto) => {
+    const canApproveCancellation = can(PERMISSIONS.TICKET_CANCEL_APPROVE);
     const result = await requestConfirmation({
-      title: `Anular boleto ${ticket.codigo}`,
+      title: canApproveCancellation
+        ? `Anular boleto ${ticket.codigo}`
+        : `Solicitar anulación de ${ticket.codigo}`,
       message:
-        "Esta acción libera el asiento y deja una constancia de auditoría. Registra el motivo informado al pasajero.",
-      confirmLabel: "Anular boleto",
+        canApproveCancellation
+          ? "Esta acción libera el asiento y deja una constancia de auditoría. Registra el motivo informado al pasajero."
+          : "Un administrador revisará la solicitud. El asiento seguirá ocupado hasta que sea aprobada.",
+      confirmLabel: canApproveCancellation ? "Anular boleto" : "Enviar solicitud",
       cancelLabel: "Conservar boleto",
       tone: "danger",
       input: {
@@ -613,11 +624,14 @@ export default function DashboardPage() {
 
     setPendingAction(`cancel-ticket-${ticket.id}`);
     try {
-      await anularBoleto(ticket.id, result.value);
+      const outcome = await anularBoleto(ticket.id, result.value);
       notify({
         type: "success",
-        title: "Boleto anulado",
-        message: `${ticket.codigo} quedó anulado y el asiento fue liberado.`,
+        title: outcome === "cancelled" ? "Boleto anulado" : "Solicitud enviada",
+        message:
+          outcome === "cancelled"
+            ? `${ticket.codigo} quedó anulado y el asiento fue liberado.`
+            : `La anulación de ${ticket.codigo} quedó pendiente de aprobación administrativa.`,
       });
     } catch (error) {
       notify({
@@ -819,34 +833,48 @@ export default function DashboardPage() {
                 id: "venta",
                 label: "Venta Pasajes",
                 icon: Ticket,
+                permission: PERMISSIONS.TICKET_SELL,
               },
               {
                 id: "encomiendas",
                 label: "Encomiendas",
                 icon: Package,
+                permission: PERMISSIONS.PARCEL_CREATE,
               },
               {
                 id: "viajes",
                 label: "Itinerario Viajes",
                 icon: Calendar,
+                permission: PERMISSIONS.TRIP_VIEW,
               },
               {
                 id: "recojos",
                 label: "Recojos Domicilio",
                 icon: Home,
+                permission: PERMISSIONS.PICKUP_CREATE,
               },
               {
                 id: "reportes",
                 label: "Reportes e Ingresos",
                 icon: FileSpreadsheet,
+                permission: PERMISSIONS.REPORTS_AGENCY,
               },
               {
                 id: "flota",
                 label: "Flota en Vivo",
                 icon: Navigation,
+                permission: PERMISSIONS.FLEET_VIEW,
+              },
+              {
+                id: "administracion",
+                label: "Administración",
+                icon: Settings,
+                permission: PERMISSIONS.USER_MANAGE,
               },
             ] as const
-          ).map((tab) => {
+          )
+            .filter((tab) => !("permission" in tab) || can(tab.permission))
+            .map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -873,7 +901,7 @@ export default function DashboardPage() {
                   )}
               </button>
             );
-          })}
+            })}
         </nav>
 
         <details className="mx-3 mb-3 rounded-2xl border border-white/10 bg-slate-950/60 lg:hidden">
@@ -1749,7 +1777,8 @@ export default function DashboardPage() {
                               </span>
                             </td>
                             <td className="py-3 px-3 text-center">
-                              {b.estado !== "anulado" && (
+                              {b.estado !== "anulado" &&
+                                can(PERMISSIONS.TICKET_CANCEL_REQUEST) && (
                                 <button
                                   type="button"
                                   onClick={() => void handleCancelTicket(b)}
@@ -1757,8 +1786,10 @@ export default function DashboardPage() {
                                   className="min-h-11 rounded-lg px-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
                                 >
                                   {pendingAction === `cancel-ticket-${b.id}`
-                                    ? "Anulando…"
-                                    : "Anular"}
+                                    ? "Procesando…"
+                                    : can(PERMISSIONS.TICKET_CANCEL_APPROVE)
+                                      ? "Anular"
+                                      : "Solicitar anulación"}
                                 </button>
                               )}
                             </td>
@@ -2220,12 +2251,14 @@ export default function DashboardPage() {
                   Control de horarios de salida, asignación de conductores y vehículos.
                 </p>
               </div>
-              <button
-                onClick={() => setIsTripModalOpen(true)}
-                className="rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 shadow-lg flex items-center gap-2 cursor-pointer transition"
-              >
-                <Plus className="h-4 w-4" /> Programar Nuevo Viaje
-              </button>
+              {can(PERMISSIONS.TRIP_MANAGE) && (
+                <button
+                  onClick={() => setIsTripModalOpen(true)}
+                  className="rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 shadow-lg flex items-center gap-2 cursor-pointer transition"
+                >
+                  <Plus className="h-4 w-4" /> Programar Nuevo Viaje
+                </button>
+              )}
             </div>
 
             {/* Trips Table */}
@@ -2311,7 +2344,7 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="py-3 px-3 text-center">
-                            {t.estado === "programado" && (
+                            {t.estado === "programado" && can(PERMISSIONS.TRIP_MANAGE) && (
                               <button
                                 type="button"
                                 onClick={() => void handleCancelTrip(t)}
@@ -2584,7 +2617,7 @@ export default function DashboardPage() {
                           </td>
                           <td className="py-3 px-3 text-center">
                             <div className="flex justify-center gap-2">
-                              {rec.estado === "pendiente" && (
+                              {rec.estado === "pendiente" && can(PERMISSIONS.PICKUP_ASSIGN) && (
                                 <button
                                   type="button"
                                   onClick={() => assignDriverToRecojo(rec.id)}
@@ -2593,7 +2626,8 @@ export default function DashboardPage() {
                                   Asignar Chofer
                                 </button>
                               )}
-                              {rec.estado !== "completado" &&
+                              {can(PERMISSIONS.PICKUP_STATUS_MANAGE) &&
+                                rec.estado !== "completado" &&
                                 rec.estado !== "cancelado" && (
                                   <>
                                     {rec.estado === "asignado" && (
@@ -3090,6 +3124,8 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {activeTab === "administracion" && <AdminWorkspace />}
       </main>
     </div>
   );

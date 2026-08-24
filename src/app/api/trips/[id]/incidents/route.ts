@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { tripIncidentSchema } from "@/lib/validation/schemas";
 import {
   createTripIncident,
@@ -16,11 +17,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireApiRole([
-      "CONDUCTOR",
-      "ADMINISTRADOR",
-      "OPERADOR",
-    ]);
+    const user = await requireApiPermission(PERMISSIONS.INCIDENT_VIEW);
     const { id } = await params;
     const incidents = await getTripIncidents(user, id);
     return noStoreJson({ incidents });
@@ -35,7 +32,7 @@ export async function POST(
 ) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole(["CONDUCTOR", "ADMINISTRADOR"]);
+    const user = await requireApiPermission(PERMISSIONS.INCIDENT_CREATE);
     const { id } = await params;
     const input = await parseJsonBody(request, tripIncidentSchema);
     const incident = await createTripIncident(user, id, input);

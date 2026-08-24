@@ -45,7 +45,13 @@ export default function LoginPage() {
       const user = await loginUser(username, password);
       if (!user) throw new Error("Usuario o contraseña incorrectos.");
 
-      router.replace(user.rol === "CONDUCTOR" ? "/conductor" : "/dashboard");
+      router.replace(
+        user.mustChangePassword
+          ? "/change-password"
+          : user.rol === "CONDUCTOR"
+            ? "/conductor"
+            : "/dashboard",
+      );
       router.refresh();
     } catch (loginError) {
       setError(

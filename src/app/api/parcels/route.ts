@@ -1,4 +1,5 @@
-import { requireApiRole } from "@/lib/auth/authorization";
+import { requireApiPermission } from "@/lib/auth/authorization";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 import { parcelInputSchema } from "@/lib/validation/schemas";
 import { createParcel } from "@/server/data/operations";
 import {
@@ -11,7 +12,7 @@ import {
 export async function POST(request: Request) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole(["OPERADOR", "ADMINISTRADOR"]);
+    const user = await requireApiPermission(PERMISSIONS.PARCEL_CREATE);
     const input = await parseJsonBody(request, parcelInputSchema);
     const item = await createParcel(user, input);
     return noStoreJson({ item }, { status: 201 });

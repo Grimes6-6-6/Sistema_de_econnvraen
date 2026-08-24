@@ -3,6 +3,11 @@ import "server-only";
 import type { QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth/types";
 import {
+  PERMISSIONS,
+  roleHasPermission,
+  type Permission,
+} from "@/lib/auth/permissions";
+import {
   type Boleto,
   type Conductor,
   type DatabaseState,
@@ -160,9 +165,6 @@ interface VehicleLocationRow extends QueryResultRow {
   age_seconds: number;
   is_active: boolean;
 }
-
-const DRIVER_ROLES = ["CONDUCTOR", "ADMINISTRADOR"] as const;
-const OPERATOR_ROLES = ["OPERADOR", "ADMINISTRADOR"] as const;
 
 const STATUS_TO_DB: Record<Encomienda["estado"], string> = {
   registrado: "REGISTRADO",
@@ -407,8 +409,15 @@ async function readSnapshot(
          JOIN viajes v ON v.id_viaje = b.id_viaje
          WHERE ($1::integer IS NULL OR v.id_agencia = $1)
            AND ($2::integer IS NULL OR v.id_conductor = $2)
+           AND (
+             $3::boolean = FALSE
+             OR b.fecha_emision >= (
+               DATE_TRUNC('day', NOW() AT TIME ZONE 'America/Lima')
+               AT TIME ZONE 'America/Lima'
+             )
+           )
          ORDER BY b.fecha_emision DESC`,
-        [agencyId, driverId],
+        [agencyId, driverId, user.rol === "OPERADOR"],
       ),
       executor.query<ParcelRow>(
         `SELECT e.id_encomienda, e.codigo_tracking, e.id_viaje,
@@ -503,8 +512,8 @@ export async function getDatabaseSnapshot(
   return readSnapshot({ query }, user);
 }
 
-function requireRole(user: SessionUser, roles: readonly SessionUser["rol"][]) {
-  if (user.rol !== "SUPER_ADMIN" && !roles.includes(user.rol)) {
+function requirePermission(user: SessionUser, permission: Permission) {
+  if (!roleHasPermission(user.rol, permission)) {
     throw forbidden();
   }
 }
@@ -582,7 +591,7 @@ export async function createTicket(
   user: SessionUser,
   input: TicketInput,
 ): Promise<Boleto> {
-  requireRole(user, OPERATOR_ROLES);
+  requirePermission(user, PERMISSIONS.TICKET_SELL);
   const userId = requireUserId(user);
   const activeAgencyId = requireAgencyId(user);
   const scopeAgencyId = agencyScopeId(user);
@@ -690,7 +699,7 @@ export async function cancelTicket(
   ticketIdValue: string,
   input: CancellationInput,
 ): Promise<void> {
-  requireRole(user, OPERATOR_ROLES);
+  requirePermission(user, PERMISSIONS.TICKET_CANCEL_APPROVE);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const ticketId = parseEntityId(ticketIdValue, "B");
@@ -804,7 +813,7 @@ export async function createParcel(
   user: SessionUser,
   input: ParcelInput,
 ): Promise<Encomienda> {
-  requireRole(user, OPERATOR_ROLES);
+  requirePermission(user, PERMISSIONS.PARCEL_CREATE);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const tripId = parseEntityId(input.id_viaje, "T");
@@ -918,7 +927,7 @@ export async function createTrip(
   user: SessionUser,
   input: TripInput,
 ): Promise<Viaje> {
-  requireRole(user, OPERATOR_ROLES);
+  requirePermission(user, PERMISSIONS.TRIP_MANAGE);
   const userId = requireUserId(user);
   const activeAgencyId = requireAgencyId(user);
   const routeId = parseEntityId(input.id_ruta, "R");
@@ -1096,7 +1105,7 @@ export async function updateTripStatus(
   tripValue: string,
   input: TripStatusInput,
 ): Promise<Viaje> {
-  requireRole(user, DRIVER_ROLES);
+  requirePermission(user, PERMISSIONS.TRIP_STATUS_MANAGE);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const tripId = parseEntityId(tripValue, "T");
@@ -1194,7 +1203,7 @@ export async function cancelTrip(
   tripValue: string,
   input: CancellationInput,
 ): Promise<void> {
-  requireRole(user, OPERATOR_ROLES);
+  requirePermission(user, PERMISSIONS.TRIP_MANAGE);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const tripId = parseEntityId(tripValue, "T");
@@ -1270,7 +1279,7 @@ export async function updateParcelStatus(
   parcelValue: string,
   input: ParcelStatusInput,
 ): Promise<Encomienda> {
-  requireRole(user, ["CONDUCTOR", "ADMINISTRADOR", "OPERADOR"]);
+  requirePermission(user, PERMISSIONS.PARCEL_STATUS_MANAGE);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const parcelId = parseEntityId(parcelValue, "E");
@@ -1388,7 +1397,7 @@ export async function createPickup(
   user: SessionUser,
   input: PickupInput,
 ): Promise<Recojo> {
-  requireRole(user, OPERATOR_ROLES);
+  requirePermission(user, PERMISSIONS.PICKUP_CREATE);
   const userId = requireUserId(user);
   const activeAgencyId = requireAgencyId(user);
   return withTransaction(async (client) => {
@@ -1485,7 +1494,7 @@ export async function updatePickupStatus(
   pickupValue: string,
   input: PickupStatusInput,
 ): Promise<Recojo> {
-  requireRole(user, ["CONDUCTOR", "OPERADOR", "ADMINISTRADOR"]);
+  requirePermission(user, PERMISSIONS.PICKUP_STATUS_MANAGE);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const pickupId = parseEntityId(pickupValue, "P");
@@ -1563,7 +1572,7 @@ export async function assignPickup(
   pickupValue: string,
   input: PickupAssignmentInput,
 ): Promise<Recojo> {
-  requireRole(user, OPERATOR_ROLES);
+  requirePermission(user, PERMISSIONS.PICKUP_ASSIGN);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const pickupId = parseEntityId(pickupValue, "P");
@@ -1763,7 +1772,7 @@ export async function updateVehicleLocation(
   user: SessionUser,
   input: VehicleLocationUpdateInput,
 ): Promise<void> {
-  requireRole(user, ["CONDUCTOR"] as const);
+  requirePermission(user, PERMISSIONS.GPS_PUBLISH);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const sessionDriverId =
@@ -2103,7 +2112,7 @@ export async function createTripIncident(
   tripValue: string,
   input: TripIncidentInput,
 ): Promise<IncidenciaViaje> {
-  requireRole(user, DRIVER_ROLES);
+  requirePermission(user, PERMISSIONS.INCIDENT_CREATE);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const tripId = parseEntityId(tripValue, "T");
