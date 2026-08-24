@@ -570,14 +570,14 @@ export default function ConductorPage() {
                 icon: <LayoutGrid className="h-4 w-4" />,
               },
               {
+                key: "gps",
+                label: "GPS en Ruta",
+                icon: <Navigation className="h-4 w-4" />,
+              },
+              {
                 key: "perfil",
                 label: "Mi Perfil",
                 icon: <User className="h-4 w-4" />,
-              },
-              {
-                key: "gps",
-                label: "Ubicación",
-                icon: <Navigation className="h-4 w-4" />,
               },
             ] as const
           ).map((tab) => (

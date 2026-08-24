@@ -831,13 +831,13 @@ export default function DashboardPage() {
               },
               {
                 id: "viajes",
-                label: "Itinerario Viajes",
+                label: "Itinerario de Viajes",
                 icon: Calendar,
                 permission: PERMISSIONS.TRIP_VIEW,
               },
               {
                 id: "venta",
-                label: "Venta Pasajes",
+                label: "Venta de Pasajes",
                 icon: Ticket,
                 permission: PERMISSIONS.TICKET_SELL,
               },
@@ -849,21 +849,21 @@ export default function DashboardPage() {
               },
               {
                 id: "recojos",
-                label: "Recojos Domicilio",
+                label: "Recojos a Domicilio",
                 icon: Home,
                 permission: PERMISSIONS.PICKUP_CREATE,
-              },
-              {
-                id: "reportes",
-                label: "Reportes e Ingresos",
-                icon: FileSpreadsheet,
-                permission: PERMISSIONS.REPORTS_AGENCY,
               },
               {
                 id: "flota",
                 label: "Flota en Vivo",
                 icon: Navigation,
                 permission: PERMISSIONS.FLEET_VIEW,
+              },
+              {
+                id: "reportes",
+                label: "Reportes e Ingresos",
+                icon: FileSpreadsheet,
+                permission: PERMISSIONS.REPORTS_AGENCY,
               },
               {
                 id: "administracion",
