@@ -78,7 +78,7 @@ npm audit
 5. Activar `TRUST_PROXY=true` solo si el proxy elimina y vuelve a escribir de forma confiable los encabezados reenviados.
 6. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
 7. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
-   Vercel valida y aplica las migraciones pendientes de producción antes de compilar. Las reversiones controladas 008 y 009 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
+   Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las reversiones controladas 008 y 009 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
 8. Compilar e iniciar:
 
    ```bash
