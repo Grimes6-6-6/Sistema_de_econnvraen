@@ -15,7 +15,11 @@ interface TwilioMessageResponse {
 }
 
 export class SmsProviderError extends Error {
-  constructor(public readonly providerCode: number | null = null) {
+  constructor(
+    public readonly providerCode: number | null = null,
+    public readonly httpStatus: number | null = null,
+    public readonly failureKind: "NETWORK" | "REJECTED" | "INVALID_RESPONSE" = "REJECTED",
+  ) {
     super("SMS_PROVIDER_ERROR");
     this.name = "SmsProviderError";
   }
@@ -99,15 +103,21 @@ export async function sendSmsOtp(phone: string): Promise<{ code: string; message
       },
     );
   } catch {
-    throw new SmsProviderError();
+    throw new SmsProviderError(null, null, "NETWORK");
   }
 
   const payload = (await response.json().catch(() => null)) as TwilioMessageResponse | null;
   if (!response.ok || !payload?.sid) {
-    throw new SmsProviderError(payload?.code || null);
+    throw new SmsProviderError(
+      payload?.code || null,
+      response.status,
+      "REJECTED",
+    );
   }
 
   const code = trialMode ? extractTrialCode(payload.body) : generatedCode;
-  if (!code) throw new SmsProviderError();
+  if (!code) {
+    throw new SmsProviderError(null, response.status, "INVALID_RESPONSE");
+  }
   return { code, messageSid: payload.sid };
 }

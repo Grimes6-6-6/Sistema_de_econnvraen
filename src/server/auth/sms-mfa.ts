@@ -160,6 +160,20 @@ export async function issueSmsChallenge(
       provider: "TWILIO",
       providerCode:
         error instanceof SmsProviderError ? error.providerCode : null,
+      providerStatus:
+        error instanceof SmsProviderError ? error.httpStatus : null,
+      failureKind:
+        error instanceof SmsProviderError
+          ? error.failureKind
+          : error instanceof Error &&
+              [
+                "SMS_PROVIDER_NOT_CONFIGURED",
+                "TWILIO_ACCOUNT_SID_INVALID",
+                "TWILIO_API_KEY_SID_INVALID",
+                "TWILIO_FROM_NUMBER_INVALID",
+              ].includes(error.message)
+            ? error.message
+            : "INTERNAL",
     });
     if (error instanceof AppError) throw error;
     throw new AppError(
