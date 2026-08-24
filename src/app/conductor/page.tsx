@@ -81,7 +81,7 @@ export default function ConductorPage() {
   const { notify, requestConfirmation } = useFeedback();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<"trips" | "perfil" | "gps">(
-    "trips",
+    "perfil",
   );
   const {
     ownPosition,
@@ -565,6 +565,11 @@ export default function ConductorPage() {
           {(
             [
               {
+                key: "perfil",
+                label: "Mi Perfil",
+                icon: <User className="h-4 w-4" />,
+              },
+              {
                 key: "trips",
                 label: "Mis Viajes",
                 icon: <LayoutGrid className="h-4 w-4" />,
@@ -573,11 +578,6 @@ export default function ConductorPage() {
                 key: "gps",
                 label: "GPS en Ruta",
                 icon: <Navigation className="h-4 w-4" />,
-              },
-              {
-                key: "perfil",
-                label: "Mi Perfil",
-                icon: <User className="h-4 w-4" />,
               },
             ] as const
           ).map((tab) => (
