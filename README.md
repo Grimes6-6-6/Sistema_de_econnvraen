@@ -83,7 +83,7 @@ npm audit
 
 ## Integraciones que requieren provisión empresarial
 
-- Consulta oficial de DNI: configurar `RENIEC_API_TOKEN`. El modo simulado debe permanecer desactivado en demostración y producción.
+- Consulta de datos por DNI mediante un proveedor externo: configurar `RENIEC_API_TOKEN`. ApiPeruDev usa registros públicos y no es una conexión directa con RENIEC. El modo simulado debe permanecer desactivado en demostración y producción.
 - Emisión fiscal SUNAT/PSE: la plataforma conserva el estado interno del comprobante, pero el envío a un proveedor fiscal requiere contratar y configurar dicho servicio.
 - Mapas: la visualización usa teselas de OpenStreetMap; para operación intensiva debe contratarse un proveedor con garantía de servicio o alojar teselas propias.
 - Correo, SMS o WhatsApp: requieren proveedor, credenciales y consentimiento de los destinatarios antes de activarse.

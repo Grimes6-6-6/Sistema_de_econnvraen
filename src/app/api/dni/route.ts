@@ -90,7 +90,7 @@ async function queryDniProvider(
   const isApiPeruDev = /^[0-9a-fA-F]{64}$/.test(token);
 
   if (isApiPeruDev) {
-    const payload = await fetchProviderJson("https://apiperu.dev/api/dni", {
+    const payload = await fetchProviderJson("https://api.apiperu.dev/dni", {
       method: "POST",
       headers: {
         Accept: "application/json",
