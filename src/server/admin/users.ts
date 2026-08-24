@@ -31,6 +31,7 @@ interface ManagedUserRow extends QueryResultRow {
   agency_ids: number[] | null;
   agency_names: string[] | null;
   must_change_password: boolean;
+  mfa_enabled: boolean;
   last_login_at: string | null;
   id_conductor: number | null;
   nro_licencia: string | null;
@@ -72,6 +73,7 @@ function mapUser(row: ManagedUserRow): ManagedUser {
     agencyIds: (row.agency_ids || []).map((id) => formatEntityId("A", id)),
     agencyNames: row.agency_names || [],
     mustChangePassword: row.must_change_password,
+    mfaEnabled: row.mfa_enabled,
     lastLoginAt: row.last_login_at,
     driver:
       row.id_conductor && row.nro_licencia && row.categoria_licencia && row.fecha_vencimiento
@@ -108,6 +110,7 @@ const USER_SELECT = `
       ARRAY[]::varchar[]
     ) AS agency_names,
     u.must_change_password,
+    u.mfa_enabled,
     u.last_login_at::text,
     c.id_conductor,
     c.nro_licencia,
@@ -483,6 +486,47 @@ export async function resetManagedUserPassword(
     );
   });
   return { temporaryPassword, expiresAt: expiresAt.toISOString() };
+}
+
+export async function resetManagedUserMfa(
+  actor: SessionUser,
+  userIdValue: string,
+): Promise<void> {
+  const userId = parseEntityId(userIdValue, "U");
+  if (!userId) throw notFound("El usuario no existe.");
+  const target = await findTarget(userId);
+  assertCanManageTarget(actor, target);
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE usuarios
+       SET mfa_enabled = FALSE,
+           mfa_secret_encrypted = NULL,
+           mfa_enrolled_at = NULL,
+           mfa_last_used_step = NULL,
+           updated_at = NOW()
+       WHERE id_usuario = $1`,
+      [userId],
+    );
+    await client.query(
+      "DELETE FROM mfa_recovery_codes WHERE id_usuario = $1",
+      [userId],
+    );
+    await client.query(
+      "UPDATE sesiones SET revoked_at = NOW() WHERE id_usuario = $1 AND revoked_at IS NULL",
+      [userId],
+    );
+    await writeAuditLog(
+      {
+        userId: actorId(actor),
+        agencyId: target.agency_ids[0] || null,
+        action: "USER_MFA_RESET",
+        entity: "usuario",
+        entityId: userIdValue,
+      },
+      client,
+    );
+  });
 }
 
 export async function changeOwnPassword(

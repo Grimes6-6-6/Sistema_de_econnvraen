@@ -13,6 +13,7 @@ export const SESSION_COOKIE_NAME =
     : "econnvrae_session";
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
 const SESSION_IDLE_TIMEOUT_MINUTES = 30;
+const MFA_CHALLENGE_DURATION_SECONDS = 5 * 60;
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 interface SessionRow {
@@ -26,6 +27,22 @@ interface SessionRow {
   id_agencia: number | null;
   agencia_nombre: string | null;
   must_change_password: boolean;
+}
+
+interface MfaChallengeRow extends SessionRow {
+  id_usuario: number;
+  mfa_enabled: boolean;
+  mfa_secret_encrypted: string | null;
+  mfa_setup_secret_encrypted: string | null;
+}
+
+export interface MfaChallenge {
+  tokenHash: string;
+  userId: number;
+  user: SessionUser;
+  mfaEnabled: boolean;
+  mfaSecretEncrypted: string | null;
+  mfaSetupSecretEncrypted: string | null;
 }
 
 function hashToken(token: string): string {
@@ -97,6 +114,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
        AND s.last_seen_at > NOW() - ($2::integer * INTERVAL '1 minute')
        AND s.created_at >= u.password_changed_at
        AND u.estado = 'ACTIVO'
+       AND (u.must_change_password = TRUE OR s.mfa_verified_at IS NOT NULL)
        AND (
          u.must_change_password = FALSE
          OR u.temporary_password_expires_at > NOW()
@@ -126,18 +144,23 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 export async function createSession(
   user: SessionUser,
   metadata?: { ipHash?: string | null; userAgent?: string | null },
+  options?: { mfaVerified?: boolean; mfaChallenge?: boolean },
 ): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const userId = numericUserId(user);
   const agencyId = numericAgencyId(user);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_SECONDS * 1000);
+  const mfaChallengeExpiresAt = options?.mfaChallenge
+    ? new Date(Date.now() + MFA_CHALLENGE_DURATION_SECONDS * 1000)
+    : null;
 
   await query(
     `INSERT INTO sesiones (
-       token_hash, id_usuario, id_agencia_activa, expires_at, ip_hash, user_agent
+       token_hash, id_usuario, id_agencia_activa, expires_at, ip_hash, user_agent,
+       mfa_verified_at, mfa_challenge_expires_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       tokenHash,
       userId,
@@ -145,6 +168,8 @@ export async function createSession(
       expiresAt,
       metadata?.ipHash || null,
       metadata?.userAgent?.slice(0, 255) || null,
+      options?.mfaVerified ? new Date() : null,
+      mfaChallengeExpiresAt,
     ],
   );
 
@@ -157,6 +182,110 @@ export async function createSession(
     maxAge: SESSION_DURATION_SECONDS,
     path: "/",
   });
+}
+
+export async function getMfaChallenge(): Promise<MfaChallenge | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token || !SESSION_TOKEN_PATTERN.test(token)) return null;
+  const tokenHash = hashToken(token);
+
+  const result = await query<MfaChallengeRow>(
+    `SELECT
+       u.id_usuario,
+       u.username,
+       r.nombre AS rol,
+       p.nombres,
+       p.apellidos,
+       p.nro_documento AS dni,
+       driver.id_conductor,
+       s.id_agencia_activa AS id_agencia,
+       agency.nombre AS agencia_nombre,
+       u.must_change_password,
+       u.mfa_enabled,
+       u.mfa_secret_encrypted,
+       s.mfa_setup_secret_encrypted
+     FROM sesiones s
+     JOIN usuarios u ON u.id_usuario = s.id_usuario
+     JOIN roles r ON r.id_rol = u.id_rol
+     LEFT JOIN personas p ON p.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
+     LEFT JOIN agencias agency
+       ON agency.id_agencia = s.id_agencia_activa
+      AND agency.estado = 'ACTIVA'
+     WHERE s.token_hash = $1
+       AND s.revoked_at IS NULL
+       AND s.expires_at > NOW()
+       AND s.mfa_verified_at IS NULL
+       AND s.mfa_challenge_expires_at > NOW()
+       AND s.created_at >= u.password_changed_at
+       AND u.estado = 'ACTIVO'
+       AND u.must_change_password = FALSE
+       AND agency.id_agencia IS NOT NULL
+       AND (
+         r.nombre = 'SUPER_ADMIN'
+         OR EXISTS (
+           SELECT 1
+           FROM usuarios_agencias membership
+           WHERE membership.id_usuario = u.id_usuario
+             AND membership.id_agencia = s.id_agencia_activa
+             AND membership.estado = 'ACTIVO'
+         )
+       )
+     LIMIT 1`,
+    [tokenHash],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    tokenHash,
+    userId: row.id_usuario,
+    user: toSessionUser(row),
+    mfaEnabled: row.mfa_enabled,
+    mfaSecretEncrypted: row.mfa_secret_encrypted,
+    mfaSetupSecretEncrypted: row.mfa_setup_secret_encrypted,
+  };
+}
+
+export async function saveMfaSetupSecret(
+  challenge: MfaChallenge,
+  encryptedSecret: string,
+): Promise<void> {
+  const updated = await query(
+    `UPDATE sesiones
+     SET mfa_setup_secret_encrypted = $1
+     WHERE token_hash = $2
+       AND id_usuario = $3
+       AND revoked_at IS NULL
+       AND mfa_verified_at IS NULL
+       AND mfa_challenge_expires_at > NOW()`,
+    [encryptedSecret, challenge.tokenHash, challenge.userId],
+  );
+  if (!updated.rowCount) throw unauthorized("La verificación venció. Inicia sesión nuevamente.");
+}
+
+export async function completeMfaSession(
+  challenge: MfaChallenge,
+): Promise<void> {
+  const updated = await query(
+    `UPDATE sesiones
+     SET mfa_verified_at = NOW(),
+         mfa_setup_secret_encrypted = NULL,
+         mfa_challenge_expires_at = NULL,
+         last_seen_at = NOW()
+     WHERE token_hash = $1
+       AND id_usuario = $2
+       AND revoked_at IS NULL
+       AND mfa_verified_at IS NULL
+       AND mfa_challenge_expires_at > NOW()`,
+    [challenge.tokenHash, challenge.userId],
+  );
+  if (!updated.rowCount) throw unauthorized("La verificación venció. Inicia sesión nuevamente.");
+  await query(
+    "UPDATE usuarios SET last_login_at = NOW(), updated_at = NOW() WHERE id_usuario = $1",
+    [challenge.userId],
+  );
 }
 
 export async function deleteSession(): Promise<void> {

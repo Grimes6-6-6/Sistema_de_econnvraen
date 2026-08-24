@@ -49,12 +49,12 @@ export async function POST(request: Request) {
     }
 
     const credentials = await parseJsonBody(request, loginSchema);
-    const user = await authenticateUser(
+    const authenticated = await authenticateUser(
       credentials.username,
       credentials.password,
     );
 
-    if (!user) {
+    if (!authenticated) {
       await writeAuditLog({
         userId: null,
         action: "AUTH_LOGIN_FAILED",
@@ -76,12 +76,35 @@ export async function POST(request: Request) {
       );
     }
 
+    const { user, mfaEnabled } = authenticated;
     const userId = parseEntityId(user.id, "U");
-    await createSession(user, {
-      ipHash,
-      userAgent: request.headers.get("user-agent"),
-    });
+    await createSession(
+      user,
+      {
+        ipHash,
+        userAgent: request.headers.get("user-agent"),
+      },
+      user.mustChangePassword ? undefined : { mfaChallenge: true },
+    );
     await clearRateLimit(rateLimitKey);
+
+    if (!user.mustChangePassword) {
+      await writeAuditLog({
+        userId,
+        agencyId: user.agenciaId
+          ? parseEntityId(user.agenciaId, "A")
+          : null,
+        action: "AUTH_MFA_CHALLENGE_STARTED",
+        entity: "usuario",
+        entityId: user.id,
+        metadata: { mode: mfaEnabled ? "VERIFY" : "SETUP" },
+        ipHash,
+      });
+      return noStoreJson({
+        nextStep: mfaEnabled ? "MFA_VERIFY" : "MFA_SETUP",
+      });
+    }
+
     await writeAuditLog({
       userId,
       agencyId: user.agenciaId

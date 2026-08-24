@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,17 +14,37 @@ import {
   ShieldCheck,
   User,
   Sparkles,
+  Copy,
+  QrCode,
+  Smartphone,
 } from "lucide-react";
-import { useDatabase } from "@/context/DatabaseContext";
+import {
+  useDatabase,
+  type MfaSetupDetails,
+  type Usuario,
+} from "@/context/DatabaseContext";
 
 type LoginMode = "selector" | "operador" | "conductor";
+type AuthStage = "credentials" | "mfa_setup" | "mfa_verify" | "recovery_codes";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginUser } = useDatabase();
+  const {
+    loginUser,
+    startMfaSetup,
+    confirmMfaSetup,
+    verifyMfa,
+    logoutUser,
+  } = useDatabase();
   const [loginMode, setLoginMode] = useState<LoginMode>("selector");
+  const [authStage, setAuthStage] = useState<AuthStage>("credentials");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [mfaSetup, setMfaSetup] = useState<MfaSetupDetails | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [authenticatedUser, setAuthenticatedUser] = useState<Usuario | null>(null);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,7 +52,20 @@ export default function LoginPage() {
     setError("");
     setUsername("");
     setPassword("");
+    setMfaCode("");
+    setAuthStage("credentials");
     setLoginMode(mode);
+  };
+
+  const routeAuthenticatedUser = (user: Usuario) => {
+    router.replace(
+      user.mustChangePassword
+        ? "/change-password"
+        : user.rol === "CONDUCTOR"
+          ? "/conductor"
+          : "/dashboard",
+    );
+    router.refresh();
   };
 
   const handleLoginSubmit = async (
@@ -42,17 +76,20 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const user = await loginUser(username, password);
-      if (!user) throw new Error("Usuario o contraseña incorrectos.");
+      const loginResult = await loginUser(username, password);
+      if ("user" in loginResult) {
+        routeAuthenticatedUser(loginResult.user);
+        return;
+      }
 
-      router.replace(
-        user.mustChangePassword
-          ? "/change-password"
-          : user.rol === "CONDUCTOR"
-            ? "/conductor"
-            : "/dashboard",
-      );
-      router.refresh();
+      setPassword("");
+      setMfaCode("");
+      if (loginResult.nextStep === "MFA_SETUP") {
+        setMfaSetup(await startMfaSetup());
+        setAuthStage("mfa_setup");
+      } else {
+        setAuthStage("mfa_verify");
+      }
     } catch (loginError) {
       setError(
         loginError instanceof Error
@@ -62,6 +99,61 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleMfaSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const code = useRecoveryCode
+        ? mfaCode.trim().toUpperCase()
+        : mfaCode.replace(/\D/g, "");
+      const user = await verifyMfa(code);
+      routeAuthenticatedUser(user);
+    } catch (verificationError) {
+      setError(
+        verificationError instanceof Error
+          ? verificationError.message
+          : "No se pudo verificar el código.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleMfaSetupSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const result = await confirmMfaSetup(mfaCode.replace(/\D/g, ""));
+      setAuthenticatedUser(result.user);
+      setRecoveryCodes(result.recoveryCodes);
+      setAuthStage("recovery_codes");
+      setMfaCode("");
+    } catch (setupError) {
+      setError(
+        setupError instanceof Error
+          ? setupError.message
+          : "No se pudo activar la autenticación en dos pasos.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const cancelMfa = async () => {
+    await logoutUser();
+    setError("");
+    setMfaCode("");
+    setMfaSetup(null);
+    setRecoveryCodes([]);
+    setAuthenticatedUser(null);
+    setUseRecoveryCode(false);
+    setAuthStage("credentials");
   };
 
   return (
@@ -164,22 +256,45 @@ export default function LoginPage() {
               </div>
             ) : (
               <div className="animate-slide-in-left space-y-5">
-                <button
-                  onClick={() => setLoginMode("selector")}
-                  className="group inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
-                >
-                  <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                  Volver a seleccionar módulo
-                </button>
+                {authStage !== "recovery_codes" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (authStage === "credentials") {
+                        setLoginMode("selector");
+                      } else {
+                        void cancelMfa();
+                      }
+                    }}
+                    className="group inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                    {authStage === "credentials"
+                      ? "Volver a seleccionar módulo"
+                      : "Volver al inicio de sesión"}
+                  </button>
+                )}
 
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                    {loginMode === "operador"
-                      ? "Acceso de Agencia"
-                      : "Acceso Conductor"}
+                    {authStage === "mfa_setup"
+                      ? "Protege tu cuenta"
+                      : authStage === "mfa_verify"
+                        ? "Verificación en dos pasos"
+                        : authStage === "recovery_codes"
+                          ? "Guarda tus códigos"
+                          : loginMode === "operador"
+                            ? "Acceso de Agencia"
+                            : "Acceso Conductor"}
                   </h2>
                   <p className="mt-1 text-xs text-slate-400 font-medium">
-                    Ingresa tus credenciales autorizadas por la empresa
+                    {authStage === "mfa_setup"
+                      ? "Vincula una aplicación autenticadora antes de continuar"
+                      : authStage === "mfa_verify"
+                        ? "Confirma el código generado en tu dispositivo"
+                        : authStage === "recovery_codes"
+                          ? "Se muestran una sola vez; consérvalos en un lugar seguro"
+                          : "Ingresa tus credenciales autorizadas por la empresa"}
                   </p>
                 </div>
 
@@ -190,53 +305,188 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                <form onSubmit={handleLoginSubmit} className="space-y-4">
-                  <div className="space-y-1">
+                {authStage === "credentials" && (
+                  <form onSubmit={handleLoginSubmit} className="space-y-4">
+                    <div className="space-y-1">
                       <label htmlFor="login-username" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                      Usuario / DNI
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                        Usuario / DNI
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                        <input
+                          id="login-username"
+                          type="text"
+                          required
+                          autoComplete="username"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                          placeholder="Ingresa tu usuario"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label htmlFor="login-password" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                        Contraseña
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                        <input
+                          id="login-password"
+                          type="password"
+                          required
+                          autoComplete="current-password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      aria-busy={isSubmitting}
+                      className="w-full rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-extrabold text-xs uppercase tracking-widest py-3.5 flex justify-center items-center gap-2 shadow-lg shadow-emerald-950/50 hover:shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50 mt-2"
+                    >
+                      {isSubmitting ? "Autenticando..." : "Ingresar al Sistema"}
+                      {!isSubmitting && <ArrowRight className="h-4 w-4" />}
+                    </button>
+                  </form>
+                )}
+
+                {authStage === "mfa_verify" && (
+                  <form onSubmit={handleMfaSubmit} className="space-y-4">
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-xs text-emerald-100">
+                      <div className="flex items-center gap-2 font-black">
+                        <Smartphone className="h-4 w-4" />
+                        Segundo factor requerido
+                      </div>
+                      <p className="mt-1 text-emerald-100/70">
+                        Usa tu aplicación autenticadora o uno de tus códigos de recuperación.
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="mfa-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                        {useRecoveryCode ? "Código de recuperación" : "Código de 6 dígitos"}
+                      </label>
                       <input
-                        id="login-username"
+                        id="mfa-code"
                         type="text"
                         required
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
-                        placeholder="Ingresa tu usuario"
+                        autoFocus
+                        autoComplete="one-time-code"
+                        inputMode={useRecoveryCode ? "text" : "numeric"}
+                        value={mfaCode}
+                        onChange={(event) =>
+                          setMfaCode(
+                            useRecoveryCode
+                              ? event.target.value.toUpperCase().slice(0, 14)
+                              : event.target.value.replace(/\D/g, "").slice(0, 6),
+                          )
+                        }
+                        placeholder={useRecoveryCode ? "XXXX-XXXX-XXXX" : "000000"}
+                        className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 text-center font-mono text-lg font-black tracking-[0.3em] text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       />
                     </div>
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMfaCode("");
+                        setUseRecoveryCode((current) => !current);
+                      }}
+                      className="w-full text-xs font-bold text-emerald-300 hover:text-emerald-200"
+                    >
+                      {useRecoveryCode
+                        ? "Usar código de la aplicación"
+                        : "Usar código de recuperación"}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3.5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      {isSubmitting ? "Verificando..." : "Verificar e ingresar"}
+                    </button>
+                  </form>
+                )}
 
-                  <div className="space-y-1">
-                      <label htmlFor="login-password" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                      Contraseña
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                      <input
-                        id="login-password"
-                        type="password"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
-                        placeholder="••••••••"
+                {authStage === "mfa_setup" && mfaSetup && (
+                  <form onSubmit={handleMfaSetupSubmit} className="space-y-4">
+                    <ol className="space-y-2 text-xs text-slate-300">
+                      <li><b className="text-white">1.</b> Abre Google Authenticator o Microsoft Authenticator.</li>
+                      <li><b className="text-white">2.</b> Escanea este QR y escribe el código generado.</li>
+                    </ol>
+                    <div className="mx-auto w-fit rounded-2xl bg-white p-2">
+                      <Image
+                        src={mfaSetup.qrCodeDataUrl}
+                        alt="QR para activar autenticación en dos pasos"
+                        width={192}
+                        height={192}
+                        unoptimized
+                        priority
                       />
                     </div>
-                  </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-center">
+                      <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Clave manual</span>
+                      <code className="mt-1 block break-all text-xs font-bold text-emerald-300">{mfaSetup.manualKey}</code>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      value={mfaCode}
+                      onChange={(event) =>
+                        setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                      placeholder="Código de 6 dígitos"
+                      aria-label="Código de 6 dígitos"
+                      className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 text-center font-mono text-lg font-black tracking-[0.3em] text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || mfaCode.length !== 6}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3.5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
+                    >
+                      <QrCode className="h-4 w-4" />
+                      {isSubmitting ? "Activando..." : "Activar seguridad"}
+                    </button>
+                  </form>
+                )}
 
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    aria-busy={isSubmitting}
-                    className="w-full rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-extrabold text-xs uppercase tracking-widest py-3.5 flex justify-center items-center gap-2 shadow-lg shadow-emerald-950/50 hover:shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50 mt-2"
-                  >
-                    {isSubmitting ? "Autenticando..." : "Ingresar al Sistema"}
-                    {!isSubmitting && <ArrowRight className="h-4 w-4" />}
-                  </button>
-                </form>
+                {authStage === "recovery_codes" && authenticatedUser && (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs font-bold text-amber-200">
+                      Cada código permite ingresar una sola vez si pierdes acceso a tu aplicación autenticadora.
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                      {recoveryCodes.map((code) => (
+                        <code key={code} className="text-center text-xs font-bold text-white">
+                          {code}
+                        </code>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void navigator.clipboard.writeText(recoveryCodes.join("\n"))}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-800 py-3 text-xs font-bold text-white"
+                    >
+                      <Copy className="h-4 w-4" /> Copiar códigos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => routeAuthenticatedUser(authenticatedUser)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3.5 text-xs font-black uppercase tracking-widest text-white"
+                    >
+                      He guardado los códigos <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

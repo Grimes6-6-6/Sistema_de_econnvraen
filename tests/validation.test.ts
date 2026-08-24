@@ -16,6 +16,8 @@ import {
   operationalDocumentSchema,
   tripStatusSchema,
   vehicleLocationUpdateSchema,
+  mfaSetupSchema,
+  mfaVerificationSchema,
 } from "@/lib/validation/schemas";
 import { createTrackingCode } from "@/lib/domain/tracking";
 
@@ -230,6 +232,21 @@ describe("validaciones de entrada", () => {
         confirmation: "debil",
       }).success,
     ).toBe(false);
+  });
+
+  it("valida códigos temporales y de recuperación de segundo factor", () => {
+    expect(
+      mfaSetupSchema.safeParse({ action: "confirm", code: "123456" }).success,
+    ).toBe(true);
+    expect(mfaVerificationSchema.safeParse({ code: "123456" }).success).toBe(
+      true,
+    );
+    expect(
+      mfaVerificationSchema.safeParse({ code: "ABCD-EFGH-JKLM" }).success,
+    ).toBe(true);
+    expect(mfaVerificationSchema.safeParse({ code: "12345" }).success).toBe(
+      false,
+    );
   });
 
   it("obliga a registrar licencia cuando el usuario es conductor", () => {

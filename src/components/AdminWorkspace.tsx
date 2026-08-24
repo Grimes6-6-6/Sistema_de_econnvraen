@@ -278,6 +278,27 @@ export default function AdminWorkspace() {
     }
   };
 
+  const resetMfa = async (managedUser: ManagedUser) => {
+    const confirmation = await requestConfirmation({
+      title: "Restablecer segundo factor",
+      message: "Se cerrarán las sesiones y el usuario deberá vincular nuevamente su aplicación autenticadora.",
+      confirmLabel: "Restablecer 2FA",
+      cancelLabel: "Volver",
+      tone: "danger",
+    });
+    if (!confirmation.confirmed) return;
+    setBusy(true);
+    try {
+      await api<{ success: boolean }>(`/api/admin/users/${managedUser.id}/reset-mfa`, { method: "POST" });
+      notify({ type: "success", title: "Segundo factor restablecido", message: "El usuario deberá configurarlo en su próximo ingreso." });
+      await load();
+    } catch (reason) {
+      notify({ type: "error", title: "No se pudo restablecer 2FA", message: reason instanceof Error ? reason.message : undefined });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const resolveCancellation = async (request: TicketCancellationRequest, decision: "APROBADA" | "RECHAZADA") => {
     const confirmation = await requestConfirmation({
       title: decision === "APROBADA" ? "Aprobar anulación" : "Rechazar anulación",
@@ -508,7 +529,7 @@ export default function AdminWorkspace() {
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead><tr className="border-b border-white/10 text-left text-[10px] uppercase text-slate-500"><th className="p-2">Usuario</th><th className="p-2">Rol</th><th className="p-2">Agencia</th><th className="p-2">Estado</th><th className="p-2 text-right">Acciones</th></tr></thead>
-              <tbody>{users.map((item) => <tr key={item.id} className="border-b border-white/5 text-slate-300"><td className="p-2"><b className="text-white">{item.username}</b><span className="block text-[10px] text-slate-500">{item.names} {item.surnames}</span></td><td className="p-2">{item.role}</td><td className="p-2">{item.agencyNames.join(", ")}</td><td className="p-2"><span className={item.state === "ACTIVO" ? "text-emerald-300" : "text-rose-300"}>{item.state}</span>{item.mustChangePassword && <span className="block text-[9px] text-amber-300">Cambio de clave pendiente</span>}</td><td className="p-2"><div className="flex justify-end gap-1"><button type="button" onClick={() => { setEditingUser(item); setEditingRole(item.role); }} className="rounded-lg border border-white/10 px-2 py-1">Editar</button><button type="button" onClick={() => void resetPassword(item)} className="rounded-lg border border-amber-500/30 px-2 py-1 text-amber-300"><KeyRound className="h-3.5 w-3.5" /></button><button type="button" onClick={() => void toggleUser(item)} className="rounded-lg border border-rose-500/30 px-2 py-1 text-rose-300">{item.state === "ACTIVO" ? "Bloquear" : "Activar"}</button></div></td></tr>)}</tbody>
+              <tbody>{users.map((item) => <tr key={item.id} className="border-b border-white/5 text-slate-300"><td className="p-2"><b className="text-white">{item.username}</b><span className="block text-[10px] text-slate-500">{item.names} {item.surnames}</span></td><td className="p-2">{item.role}</td><td className="p-2">{item.agencyNames.join(", ")}</td><td className="p-2"><span className={item.state === "ACTIVO" ? "text-emerald-300" : "text-rose-300"}>{item.state}</span><span className={`block text-[9px] ${item.mfaEnabled ? "text-emerald-300" : "text-slate-500"}`}>{item.mfaEnabled ? "2FA activo" : "2FA pendiente"}</span>{item.mustChangePassword && <span className="block text-[9px] text-amber-300">Cambio de clave pendiente</span>}</td><td className="p-2"><div className="flex justify-end gap-1"><button type="button" onClick={() => { setEditingUser(item); setEditingRole(item.role); }} className="rounded-lg border border-white/10 px-2 py-1">Editar</button><button type="button" aria-label={`Restablecer contraseña de ${item.username}`} onClick={() => void resetPassword(item)} className="rounded-lg border border-amber-500/30 px-2 py-1 text-amber-300"><KeyRound className="h-3.5 w-3.5" /></button>{item.mfaEnabled && <button type="button" aria-label={`Restablecer segundo factor de ${item.username}`} onClick={() => void resetMfa(item)} className="rounded-lg border border-blue-500/30 px-2 py-1 text-blue-300"><ShieldCheck className="h-3.5 w-3.5" /></button>}<button type="button" onClick={() => void toggleUser(item)} className="rounded-lg border border-rose-500/30 px-2 py-1 text-rose-300">{item.state === "ACTIVO" ? "Bloquear" : "Activar"}</button></div></td></tr>)}</tbody>
             </table>
           </div>
           {editingUser && (

@@ -38,6 +38,13 @@ export type {
   Viaje,
 } from "@/lib/domain/types";
 export type Usuario = SessionUser;
+export type LoginResult =
+  | { user: Usuario }
+  | { nextStep: "MFA_SETUP" | "MFA_VERIFY" };
+export interface MfaSetupDetails {
+  qrCodeDataUrl: string;
+  manualKey: string;
+}
 
 interface DatabaseContextType {
   db: DatabaseState;
@@ -105,7 +112,12 @@ interface DatabaseContextType {
   }) => Promise<{ phone: string; email: string; address: string }>;
   refreshDatabase: () => Promise<void>;
   currentUser: Usuario | null;
-  loginUser: (username: string, password: string) => Promise<Usuario | null>;
+  loginUser: (username: string, password: string) => Promise<LoginResult>;
+  startMfaSetup: () => Promise<MfaSetupDetails>;
+  confirmMfaSetup: (
+    code: string,
+  ) => Promise<{ user: Usuario; recoveryCodes: string[] }>;
+  verifyMfa: (code: string) => Promise<Usuario>;
   logoutUser: () => Promise<void>;
 }
 
@@ -220,23 +232,58 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  const establishAuthenticatedUser = useCallback(async (user: Usuario) => {
+    setCurrentUser(user);
+    setOfflineQueue(readOfflineQueue(user.id, user.agenciaId));
+    setDataError(null);
+    if (!user.mustChangePassword) {
+      await refreshDatabase();
+    }
+    return user;
+  }, [refreshDatabase]);
+
   const loginUser = async (
     username: string,
     password: string,
-  ): Promise<Usuario | null> => {
-    const payload = await apiRequest<{ user: Usuario }>("/api/auth/login", {
+  ): Promise<LoginResult> => {
+    const payload = await apiRequest<LoginResult>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     });
-    setCurrentUser(payload.user);
-    setOfflineQueue(
-      readOfflineQueue(payload.user.id, payload.user.agenciaId),
-    );
-    setDataError(null);
-    if (!payload.user.mustChangePassword) {
-      await refreshDatabase();
+    if ("user" in payload) {
+      await establishAuthenticatedUser(payload.user);
     }
-    return payload.user;
+    return payload;
+  };
+
+  const startMfaSetup = async (): Promise<MfaSetupDetails> => {
+    const payload = await apiRequest<{ setup: MfaSetupDetails }>(
+      "/api/auth/mfa/setup",
+      { method: "POST", body: JSON.stringify({ action: "start" }) },
+    );
+    return payload.setup;
+  };
+
+  const confirmMfaSetup = async (
+    code: string,
+  ): Promise<{ user: Usuario; recoveryCodes: string[] }> => {
+    const payload = await apiRequest<{
+      user: Usuario;
+      recoveryCodes: string[];
+    }>("/api/auth/mfa/setup", {
+      method: "POST",
+      body: JSON.stringify({ action: "confirm", code }),
+    });
+    await establishAuthenticatedUser(payload.user);
+    return payload;
+  };
+
+  const verifyMfa = async (code: string): Promise<Usuario> => {
+    const payload = await apiRequest<{ user: Usuario }>(
+      "/api/auth/mfa/verify",
+      { method: "POST", body: JSON.stringify({ code }) },
+    );
+    return establishAuthenticatedUser(payload.user);
   };
 
   const logoutUser = async () => {
@@ -690,6 +737,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
         refreshDatabase,
         currentUser,
         loginUser,
+        startMfaSetup,
+        confirmMfaSetup,
+        verifyMfa,
         logoutUser,
       }}
     >

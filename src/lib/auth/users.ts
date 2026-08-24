@@ -19,6 +19,7 @@ interface UserRow {
   id_agencia: number | null;
   agencia_nombre: string | null;
   must_change_password: boolean;
+  mfa_enabled?: boolean;
 }
 
 function toSessionUser(row: UserRow): SessionUser {
@@ -45,7 +46,7 @@ function toSessionUser(row: UserRow): SessionUser {
 export async function authenticateUser(
   username: string,
   password: string,
-): Promise<SessionUser | null> {
+): Promise<{ user: SessionUser; mfaEnabled: boolean } | null> {
   const result = await query<UserRow>(
     `SELECT
        u.id_usuario,
@@ -59,6 +60,7 @@ export async function authenticateUser(
        membership.id_agencia,
        agency.nombre AS agencia_nombre
        , u.must_change_password
+       , u.mfa_enabled
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
@@ -94,12 +96,7 @@ export async function authenticateUser(
 
   if (!row || !matches) return null;
 
-  await query(
-    "UPDATE usuarios SET last_login_at = NOW(), updated_at = NOW() WHERE id_usuario = $1",
-    [row.id_usuario],
-  );
-
-  return toSessionUser(row);
+  return { user: toSessionUser(row), mfaEnabled: Boolean(row.mfa_enabled) };
 }
 
 export async function findUserById(userId: number): Promise<SessionUser | null> {

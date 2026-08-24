@@ -43,6 +43,23 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+const totpCodeSchema = z.string().trim().regex(/^\d{6}$/);
+const recoveryCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .transform((value) => value.replace(/-/g, ""))
+  .pipe(z.string().regex(/^[A-HJ-NP-Z2-9]{12}$/));
+
+export const mfaSetupSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("start") }),
+  z.object({ action: z.literal("confirm"), code: totpCodeSchema }),
+]);
+
+export const mfaVerificationSchema = z.object({
+  code: z.union([totpCodeSchema, recoveryCodeSchema]),
+});
+
 export const strongPasswordSchema = z
   .string()
   .min(12, "La contraseña debe tener al menos 12 caracteres.")

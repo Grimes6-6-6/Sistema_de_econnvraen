@@ -5,6 +5,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 ## Funcionalidad disponible
 
 - Acceso seguro por roles: superadministrador, administrador, operador y conductor.
+- Autenticación obligatoria en dos pasos mediante aplicación TOTP, códigos de recuperación de un solo uso y restablecimiento administrativo auditado.
 - Matriz central de permisos aplicada tanto en la interfaz como en cada API; una URL directa no evita la autorización.
 - Operación multiagencia con separación de datos y selección de agencia activa.
 - Administración de usuarios por ámbito, bloqueo, cambio de rol/agencia y restablecimiento mediante contraseña temporal de un solo uso obligatorio.
@@ -36,6 +37,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 
    - `DATABASE_URL`
    - `AUTH_HASH_PEPPER` con un valor aleatorio de 32 caracteres o más
+   - `MFA_ENCRYPTION_KEY` con 32 bytes aleatorios codificados en base64url
    - las cuatro contraseñas `SEED_*_PASSWORD` únicamente durante la carga inicial
 
 3. Preparar y validar la base de datos:
@@ -72,11 +74,12 @@ npm audit
 1. Crear una base PostgreSQL exclusiva y una cuenta con los permisos mínimos necesarios.
 2. Configurar `DATABASE_SSL=true` y `DATABASE_CA_CERT` cuando el proveedor exija TLS.
 3. Definir `AUTH_HASH_PEPPER`; el servidor rechaza la operación de producción si falta.
-4. Activar `TRUST_PROXY=true` solo si el proxy elimina y vuelve a escribir de forma confiable los encabezados reenviados.
-5. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
-6. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
-   La reversión controlada de la migración empresarial 008 está en `db/rollbacks/008_enterprise_rbac_down.sql` y debe usarse únicamente sobre un respaldo o una rama aislada.
-7. Compilar e iniciar:
+4. Definir `MFA_ENCRYPTION_KEY` con 32 bytes aleatorios codificados en base64url y conservarla en el gestor de secretos. Perderla impide validar los autenticadores vinculados.
+5. Activar `TRUST_PROXY=true` solo si el proxy elimina y vuelve a escribir de forma confiable los encabezados reenviados.
+6. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
+7. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
+   Vercel valida y aplica las migraciones pendientes de producción antes de compilar. Las reversiones controladas 008 y 009 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
+8. Compilar e iniciar:
 
    ```bash
    npm ci
@@ -84,7 +87,7 @@ npm audit
    npm run start
    ```
 
-8. Configurar copias de seguridad automáticas, monitoreo, alertas y rotación de registros en la infraestructura de la empresa.
+9. Configurar copias de seguridad automáticas, monitoreo, alertas y rotación de registros en la infraestructura de la empresa.
 
 ## Integraciones que requieren provisión empresarial
 

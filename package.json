@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "node scripts/vercel-build.mjs",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -24,6 +25,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1.24.0",
     "next": "^16.2.12",
+    "otpauth": "^9.5.1",
     "pg": "^8.22.0",
     "postcss": "^8.5.24",
     "qr-scanner": "^1.4.2",

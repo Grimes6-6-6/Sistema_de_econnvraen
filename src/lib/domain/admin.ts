@@ -13,6 +13,7 @@ export interface ManagedUser {
   agencyIds: string[];
   agencyNames: string[];
   mustChangePassword: boolean;
+  mfaEnabled: boolean;
   lastLoginAt: string | null;
   driver: {
     id: string;
