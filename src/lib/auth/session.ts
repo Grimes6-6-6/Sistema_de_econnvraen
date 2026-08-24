@@ -13,7 +13,7 @@ export const SESSION_COOKIE_NAME =
     : "econnvrae_session";
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
 const SESSION_IDLE_TIMEOUT_MINUTES = 30;
-const MFA_CHALLENGE_DURATION_SECONDS = 5 * 60;
+const MFA_CHALLENGE_DURATION_SECONDS = 10 * 60;
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 interface SessionRow {
@@ -31,9 +31,14 @@ interface SessionRow {
 
 interface MfaChallengeRow extends SessionRow {
   id_usuario: number;
+  telefono: string | null;
   mfa_enabled: boolean;
   mfa_secret_encrypted: string | null;
   mfa_setup_secret_encrypted: string | null;
+  sms_code_hash: string | null;
+  sms_sent_at: Date | null;
+  sms_expires_at: Date | null;
+  sms_attempts: number;
 }
 
 export interface MfaChallenge {
@@ -43,6 +48,11 @@ export interface MfaChallenge {
   mfaEnabled: boolean;
   mfaSecretEncrypted: string | null;
   mfaSetupSecretEncrypted: string | null;
+  phone: string | null;
+  smsCodeHash: string | null;
+  smsSentAt: Date | null;
+  smsExpiresAt: Date | null;
+  smsAttempts: number;
 }
 
 function hashToken(token: string): string {
@@ -145,7 +155,7 @@ export async function createSession(
   user: SessionUser,
   metadata?: { ipHash?: string | null; userAgent?: string | null },
   options?: { mfaVerified?: boolean; mfaChallenge?: boolean },
-): Promise<void> {
+): Promise<{ tokenHash: string; userId: number }> {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const userId = numericUserId(user);
@@ -182,6 +192,7 @@ export async function createSession(
     maxAge: SESSION_DURATION_SECONDS,
     path: "/",
   });
+  return { tokenHash, userId };
 }
 
 export async function getMfaChallenge(): Promise<MfaChallenge | null> {
@@ -202,9 +213,14 @@ export async function getMfaChallenge(): Promise<MfaChallenge | null> {
        s.id_agencia_activa AS id_agencia,
        agency.nombre AS agencia_nombre,
        u.must_change_password,
+       p.telefono,
        u.mfa_enabled,
        u.mfa_secret_encrypted,
-       s.mfa_setup_secret_encrypted
+       s.mfa_setup_secret_encrypted,
+       s.sms_code_hash,
+       s.sms_sent_at,
+       s.sms_expires_at,
+       s.sms_attempts
      FROM sesiones s
      JOIN usuarios u ON u.id_usuario = s.id_usuario
      JOIN roles r ON r.id_rol = u.id_rol
@@ -245,6 +261,11 @@ export async function getMfaChallenge(): Promise<MfaChallenge | null> {
     mfaEnabled: row.mfa_enabled,
     mfaSecretEncrypted: row.mfa_secret_encrypted,
     mfaSetupSecretEncrypted: row.mfa_setup_secret_encrypted,
+    phone: row.telefono,
+    smsCodeHash: row.sms_code_hash,
+    smsSentAt: row.sms_sent_at,
+    smsExpiresAt: row.sms_expires_at,
+    smsAttempts: row.sms_attempts,
   };
 }
 
@@ -273,6 +294,9 @@ export async function completeMfaSession(
      SET mfa_verified_at = NOW(),
          mfa_setup_secret_encrypted = NULL,
          mfa_challenge_expires_at = NULL,
+         sms_code_hash = NULL,
+         sms_expires_at = NULL,
+         sms_attempts = 0,
          last_seen_at = NOW()
      WHERE token_hash = $1
        AND id_usuario = $2

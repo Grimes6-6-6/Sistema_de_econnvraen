@@ -238,15 +238,24 @@ describe("validaciones de entrada", () => {
     expect(
       mfaSetupSchema.safeParse({ action: "confirm", code: "123456" }).success,
     ).toBe(true);
-    expect(mfaVerificationSchema.safeParse({ code: "123456" }).success).toBe(
-      true,
-    );
     expect(
-      mfaVerificationSchema.safeParse({ code: "ABCD-EFGH-JKLM" }).success,
+      mfaVerificationSchema.safeParse({ method: "sms", code: "123456" })
+        .success,
     ).toBe(true);
-    expect(mfaVerificationSchema.safeParse({ code: "12345" }).success).toBe(
-      false,
-    );
+    expect(
+      mfaVerificationSchema.safeParse({ method: "totp", code: "123456" })
+        .success,
+    ).toBe(true);
+    expect(
+      mfaVerificationSchema.safeParse({
+        method: "recovery",
+        code: "ABCD-EFGH-JKLM",
+      }).success,
+    ).toBe(true);
+    expect(
+      mfaVerificationSchema.safeParse({ method: "sms", code: "12345" })
+        .success,
+    ).toBe(false);
   });
 
   it("obliga a registrar licencia cuando el usuario es conductor", () => {
@@ -255,6 +264,7 @@ describe("validaciones de entrada", () => {
       dni: "12345678",
       names: "Juan",
       surnames: "Pérez Ramos",
+      phone: "973187642",
       role: "CONDUCTOR" as const,
       agencyIds: ["A01"],
     };

@@ -40,7 +40,16 @@ export type {
 export type Usuario = SessionUser;
 export type LoginResult =
   | { user: Usuario }
-  | { nextStep: "MFA_SETUP" | "MFA_VERIFY" };
+  | {
+      nextStep: "MFA_SETUP" | "MFA_VERIFY";
+      notice?: string;
+    }
+  | {
+      nextStep: "SMS_VERIFY";
+      maskedPhone: string;
+      retryAfterSeconds: number;
+      authenticatorAvailable: boolean;
+    };
 export interface MfaSetupDetails {
   qrCodeDataUrl: string;
   manualKey: string;
@@ -117,7 +126,14 @@ interface DatabaseContextType {
   confirmMfaSetup: (
     code: string,
   ) => Promise<{ user: Usuario; recoveryCodes: string[] }>;
-  verifyMfa: (code: string) => Promise<Usuario>;
+  verifyMfa: (
+    code: string,
+    method: "sms" | "totp" | "recovery",
+  ) => Promise<Usuario>;
+  resendSmsCode: () => Promise<{
+    maskedPhone: string;
+    retryAfterSeconds: number;
+  }>;
   logoutUser: () => Promise<void>;
 }
 
@@ -278,13 +294,22 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     return payload;
   };
 
-  const verifyMfa = async (code: string): Promise<Usuario> => {
+  const verifyMfa = async (
+    code: string,
+    method: "sms" | "totp" | "recovery",
+  ): Promise<Usuario> => {
     const payload = await apiRequest<{ user: Usuario }>(
       "/api/auth/mfa/verify",
-      { method: "POST", body: JSON.stringify({ code }) },
+      { method: "POST", body: JSON.stringify({ code, method }) },
     );
     return establishAuthenticatedUser(payload.user);
   };
+
+  const resendSmsCode = async () =>
+    apiRequest<{ maskedPhone: string; retryAfterSeconds: number }>(
+      "/api/auth/mfa/sms/resend",
+      { method: "POST", body: JSON.stringify({ action: "resend" }) },
+    );
 
   const logoutUser = async () => {
     try {
@@ -740,6 +765,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
         startMfaSetup,
         confirmMfaSetup,
         verifyMfa,
+        resendSmsCode,
         logoutUser,
       }}
     >

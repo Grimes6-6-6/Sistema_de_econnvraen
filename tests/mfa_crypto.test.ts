@@ -28,7 +28,9 @@ describe("protección de secretos MFA", () => {
 
   it("rechaza un secreto cifrado que fue manipulado", () => {
     const encrypted = encryptMfaSecret("JBSWY3DPEHPK3PXP");
-    const tampered = `${encrypted.slice(0, -1)}${encrypted.endsWith("A") ? "B" : "A"}`;
+    const parts = encrypted.split(".");
+    parts[2] = `${parts[2][0] === "A" ? "B" : "A"}${parts[2].slice(1)}`;
+    const tampered = parts.join(".");
     expect(() => decryptMfaSecret(tampered)).toThrow();
   });
 

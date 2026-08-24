@@ -15,6 +15,7 @@ interface UserRow {
   nombres: string | null;
   apellidos: string | null;
   dni: string | null;
+  telefono: string | null;
   id_conductor: number | null;
   id_agencia: number | null;
   agencia_nombre: string | null;
@@ -46,7 +47,7 @@ function toSessionUser(row: UserRow): SessionUser {
 export async function authenticateUser(
   username: string,
   password: string,
-): Promise<{ user: SessionUser; mfaEnabled: boolean } | null> {
+): Promise<{ user: SessionUser; mfaEnabled: boolean; phone: string | null } | null> {
   const result = await query<UserRow>(
     `SELECT
        u.id_usuario,
@@ -56,6 +57,7 @@ export async function authenticateUser(
        p.nombres,
        p.apellidos,
        p.nro_documento AS dni,
+       p.telefono,
        driver.id_conductor,
        membership.id_agencia,
        agency.nombre AS agencia_nombre
@@ -96,7 +98,11 @@ export async function authenticateUser(
 
   if (!row || !matches) return null;
 
-  return { user: toSessionUser(row), mfaEnabled: Boolean(row.mfa_enabled) };
+  return {
+    user: toSessionUser(row),
+    mfaEnabled: Boolean(row.mfa_enabled),
+    phone: row.telefono,
+  };
 }
 
 export async function findUserById(userId: number): Promise<SessionUser | null> {
@@ -109,6 +115,7 @@ export async function findUserById(userId: number): Promise<SessionUser | null> 
        p.nombres,
        p.apellidos,
        p.nro_documento AS dni,
+       p.telefono,
        driver.id_conductor,
        membership.id_agencia,
        agency.nombre AS agencia_nombre

@@ -420,7 +420,7 @@ export async function updateManagedUser(
       );
     }
 
-    if (input.role || input.state || agencyIds) {
+    if (input.role || input.state || agencyIds || input.phone !== undefined) {
       await client.query(
         "UPDATE sesiones SET revoked_at = NOW() WHERE id_usuario = $1 AND revoked_at IS NULL",
         [userId],

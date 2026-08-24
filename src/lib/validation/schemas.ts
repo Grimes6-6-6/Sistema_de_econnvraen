@@ -56,8 +56,14 @@ export const mfaSetupSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("confirm"), code: totpCodeSchema }),
 ]);
 
-export const mfaVerificationSchema = z.object({
-  code: z.union([totpCodeSchema, recoveryCodeSchema]),
+export const mfaVerificationSchema = z.discriminatedUnion("method", [
+  z.object({ method: z.literal("sms"), code: totpCodeSchema }),
+  z.object({ method: z.literal("totp"), code: totpCodeSchema }),
+  z.object({ method: z.literal("recovery"), code: recoveryCodeSchema }),
+]);
+
+export const mfaSmsResendSchema = z.object({
+  action: z.literal("resend"),
 });
 
 export const strongPasswordSchema = z
@@ -138,7 +144,7 @@ export const adminUserCreateSchema = z
     dni: dniSchema,
     names: personName,
     surnames: personName,
-    phone: phoneSchema.optional().or(z.literal("")),
+    phone: phoneSchema,
     email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
     role: userRoleSchema,
     agencyIds: z.array(z.string().regex(/^A\d{2,10}$/)).min(1).max(20),

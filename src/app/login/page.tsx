@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -25,7 +25,12 @@ import {
 } from "@/context/DatabaseContext";
 
 type LoginMode = "selector" | "operador" | "conductor";
-type AuthStage = "credentials" | "mfa_setup" | "mfa_verify" | "recovery_codes";
+type AuthStage =
+  | "credentials"
+  | "sms_verify"
+  | "mfa_setup"
+  | "mfa_verify"
+  | "recovery_codes";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,6 +39,7 @@ export default function LoginPage() {
     startMfaSetup,
     confirmMfaSetup,
     verifyMfa,
+    resendSmsCode,
     logoutUser,
   } = useDatabase();
   const [loginMode, setLoginMode] = useState<LoginMode>("selector");
@@ -42,6 +48,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [maskedPhone, setMaskedPhone] = useState("");
+  const [authenticatorAvailable, setAuthenticatorAvailable] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
   const [mfaSetup, setMfaSetup] = useState<MfaSetupDetails | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [authenticatedUser, setAuthenticatedUser] = useState<Usuario | null>(null);
@@ -53,9 +62,21 @@ export default function LoginPage() {
     setUsername("");
     setPassword("");
     setMfaCode("");
+    setMaskedPhone("");
+    setAuthenticatorAvailable(false);
+    setResendSeconds(0);
     setAuthStage("credentials");
     setLoginMode(mode);
   };
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = window.setInterval(
+      () => setResendSeconds((current) => Math.max(0, current - 1)),
+      1_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
 
   const routeAuthenticatedUser = (user: Usuario) => {
     router.replace(
@@ -84,11 +105,19 @@ export default function LoginPage() {
 
       setPassword("");
       setMfaCode("");
-      if (loginResult.nextStep === "MFA_SETUP") {
+      if (loginResult.nextStep === "SMS_VERIFY") {
+        setMaskedPhone(loginResult.maskedPhone);
+        setAuthenticatorAvailable(loginResult.authenticatorAvailable);
+        setResendSeconds(loginResult.retryAfterSeconds);
+        setAuthStage("sms_verify");
+      } else if (loginResult.nextStep === "MFA_SETUP") {
         setMfaSetup(await startMfaSetup());
         setAuthStage("mfa_setup");
       } else {
         setAuthStage("mfa_verify");
+      }
+      if ("notice" in loginResult && loginResult.notice) {
+        setError(loginResult.notice);
       }
     } catch (loginError) {
       setError(
@@ -109,13 +138,38 @@ export default function LoginPage() {
       const code = useRecoveryCode
         ? mfaCode.trim().toUpperCase()
         : mfaCode.replace(/\D/g, "");
-      const user = await verifyMfa(code);
+      const method =
+        authStage === "sms_verify"
+          ? "sms"
+          : useRecoveryCode
+            ? "recovery"
+            : "totp";
+      const user = await verifyMfa(code, method);
       routeAuthenticatedUser(user);
     } catch (verificationError) {
       setError(
         verificationError instanceof Error
           ? verificationError.message
           : "No se pudo verificar el código.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSmsResend = async () => {
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const result = await resendSmsCode();
+      setMaskedPhone(result.maskedPhone);
+      setResendSeconds(result.retryAfterSeconds);
+      setMfaCode("");
+    } catch (resendError) {
+      setError(
+        resendError instanceof Error
+          ? resendError.message
+          : "No se pudo reenviar el código.",
       );
     } finally {
       setIsSubmitting(false);
@@ -153,6 +207,9 @@ export default function LoginPage() {
     setRecoveryCodes([]);
     setAuthenticatedUser(null);
     setUseRecoveryCode(false);
+    setMaskedPhone("");
+    setAuthenticatorAvailable(false);
+    setResendSeconds(0);
     setAuthStage("credentials");
   };
 
@@ -277,7 +334,9 @@ export default function LoginPage() {
 
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                    {authStage === "mfa_setup"
+                    {authStage === "sms_verify"
+                      ? "Confirma tu identidad"
+                      : authStage === "mfa_setup"
                       ? "Protege tu cuenta"
                       : authStage === "mfa_verify"
                         ? "Verificación en dos pasos"
@@ -288,7 +347,9 @@ export default function LoginPage() {
                             : "Acceso Conductor"}
                   </h2>
                   <p className="mt-1 text-xs text-slate-400 font-medium">
-                    {authStage === "mfa_setup"
+                    {authStage === "sms_verify"
+                      ? `Escribe el código enviado a ${maskedPhone}`
+                      : authStage === "mfa_setup"
                       ? "Vincula una aplicación autenticadora antes de continuar"
                       : authStage === "mfa_verify"
                         ? "Confirma el código generado en tu dispositivo"
@@ -357,6 +418,70 @@ export default function LoginPage() {
                   </form>
                 )}
 
+                {authStage === "sms_verify" && (
+                  <form onSubmit={handleMfaSubmit} className="space-y-4">
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-xs text-emerald-100">
+                      <div className="flex items-center gap-2 font-black">
+                        <Smartphone className="h-4 w-4" />
+                        Código enviado por SMS
+                      </div>
+                      <p className="mt-1 text-emerald-100/70">
+                        Revisa el mensaje enviado a <b>{maskedPhone}</b>. El código vence en 5 minutos.
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="sms-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                        Código de 6 dígitos
+                      </label>
+                      <input
+                        id="sms-code"
+                        type="text"
+                        required
+                        autoFocus
+                        autoComplete="one-time-code"
+                        inputMode="numeric"
+                        value={mfaCode}
+                        onChange={(event) =>
+                          setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                        }
+                        placeholder="000000"
+                        className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 text-center font-mono text-lg font-black tracking-[0.3em] text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || mfaCode.length !== 6}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3.5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      {isSubmitting ? "Verificando..." : "Verificar e ingresar"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmitting || resendSeconds > 0}
+                      onClick={() => void handleSmsResend()}
+                      className="w-full text-xs font-bold text-emerald-300 hover:text-emerald-200 disabled:text-slate-500"
+                    >
+                      {resendSeconds > 0
+                        ? `Reenviar código en ${resendSeconds} s`
+                        : "Reenviar código por SMS"}
+                    </button>
+                    {authenticatorAvailable && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMfaCode("");
+                          setUseRecoveryCode(false);
+                          setAuthStage("mfa_verify");
+                        }}
+                        className="w-full text-xs font-bold text-slate-400 hover:text-white"
+                      >
+                        Usar mi aplicación autenticadora
+                      </button>
+                    )}
+                  </form>
+                )}
+
                 {authStage === "mfa_verify" && (
                   <form onSubmit={handleMfaSubmit} className="space-y-4">
                     <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-xs text-emerald-100">
@@ -403,6 +528,19 @@ export default function LoginPage() {
                         ? "Usar código de la aplicación"
                         : "Usar código de recuperación"}
                     </button>
+                    {maskedPhone && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMfaCode("");
+                          setUseRecoveryCode(false);
+                          setAuthStage("sms_verify");
+                        }}
+                        className="w-full text-xs font-bold text-slate-400 hover:text-white"
+                      >
+                        Usar el código enviado por SMS
+                      </button>
+                    )}
                     <button
                       type="submit"
                       disabled={isSubmitting}

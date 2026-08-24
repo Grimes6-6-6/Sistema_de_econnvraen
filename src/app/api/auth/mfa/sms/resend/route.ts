@@ -1,10 +1,6 @@
 import { getMfaChallenge } from "@/lib/auth/session";
-import { toClientSessionUser } from "@/lib/auth/types";
-import { mfaSetupSchema } from "@/lib/validation/schemas";
-import {
-  beginMfaSetup,
-  confirmMfaSetup,
-} from "@/server/auth/mfa";
+import { mfaSmsResendSchema } from "@/lib/validation/schemas";
+import { issueSmsChallenge } from "@/server/auth/sms-mfa";
 import { unauthorized } from "@/server/errors";
 import {
   assertTrustedMutation,
@@ -13,40 +9,32 @@ import {
   parseJsonBody,
 } from "@/server/http";
 import { getClientAddressHash } from "@/server/security/request";
-import {
-  clearRateLimit,
-  consumeRateLimit,
-} from "@/server/security/rate-limit";
+import { consumeRateLimit } from "@/server/security/rate-limit";
 
-const MFA_ATTEMPT_LIMIT = 5;
-const MFA_WINDOW_MS = 5 * 60 * 1000;
+const SMS_RESEND_LIMIT = 3;
+const SMS_RESEND_WINDOW_MS = 15 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
     assertTrustedMutation(request);
-    const input = await parseJsonBody(request, mfaSetupSchema);
+    await parseJsonBody(request, mfaSmsResendSchema);
     const challenge = await getMfaChallenge();
     if (!challenge) {
       throw unauthorized("La verificación venció. Inicia sesión nuevamente.");
     }
 
-    if (input.action === "start") {
-      return noStoreJson({ setup: await beginMfaSetup(challenge) });
-    }
-
     const ipHash = getClientAddressHash(request);
-    const rateLimitKey = `mfa:${ipHash}:${challenge.userId}`;
     const rateLimit = await consumeRateLimit(
-      rateLimitKey,
-      MFA_ATTEMPT_LIMIT,
-      MFA_WINDOW_MS,
+      `mfa-sms-resend:${ipHash}:${challenge.userId}`,
+      SMS_RESEND_LIMIT,
+      SMS_RESEND_WINDOW_MS,
     );
     if (!rateLimit.allowed) {
       return noStoreJson(
         {
           error: {
             code: "RATE_LIMITED",
-            message: "Demasiados intentos. Intenta nuevamente más tarde.",
+            message: "Se solicitaron demasiados códigos. Intenta más tarde.",
           },
         },
         {
@@ -56,17 +44,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const recoveryCodes = await confirmMfaSetup(
-      challenge,
-      input.code,
+    const result = await issueSmsChallenge(
+      {
+        tokenHash: challenge.tokenHash,
+        userId: challenge.userId,
+        user: challenge.user,
+        phone: challenge.phone,
+      },
       ipHash,
     );
-    await clearRateLimit(rateLimitKey);
-    await clearRateLimit(`login:${ipHash}`);
-    return noStoreJson({
-      user: toClientSessionUser(challenge.user),
-      recoveryCodes,
-    });
+    return noStoreJson(result);
   } catch (error) {
     return handleRouteError(error);
   }

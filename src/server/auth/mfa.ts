@@ -234,12 +234,13 @@ export async function verifyMfaChallenge(
   challenge: MfaChallenge,
   code: string,
   ipHash: string,
+  requestedMethod: "totp" | "recovery",
 ): Promise<"TOTP" | "RECOVERY"> {
   if (!challenge.mfaEnabled) {
     throw unauthorized("Primero debes configurar la autenticación en dos pasos.");
   }
 
-  const method = /^\d{6}$/.test(code) ? "TOTP" : "RECOVERY";
+  const method = requestedMethod === "totp" ? "TOTP" : "RECOVERY";
   const accepted =
     method === "TOTP"
       ? await consumeTotp(challenge, code)

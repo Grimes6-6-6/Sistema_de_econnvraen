@@ -5,7 +5,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 ## Funcionalidad disponible
 
 - Acceso seguro por roles: superadministrador, administrador, operador y conductor.
-- Autenticación obligatoria en dos pasos mediante aplicación TOTP, códigos de recuperación de un solo uso y restablecimiento administrativo auditado.
+- Autenticación obligatoria en dos pasos con código por SMS, aplicación TOTP y códigos de recuperación como respaldo, reenvío limitado y restablecimiento administrativo auditado.
 - Matriz central de permisos aplicada tanto en la interfaz como en cada API; una URL directa no evita la autorización.
 - Operación multiagencia con separación de datos y selección de agencia activa.
 - Administración de usuarios por ámbito, bloqueo, cambio de rol/agencia y restablecimiento mediante contraseña temporal de un solo uso obligatorio.
@@ -38,6 +38,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
    - `DATABASE_URL`
    - `AUTH_HASH_PEPPER` con un valor aleatorio de 32 caracteres o más
    - `MFA_ENCRYPTION_KEY` con 32 bytes aleatorios codificados en base64url
+   - credenciales `TWILIO_*` para habilitar los códigos por SMS
    - las cuatro contraseñas `SEED_*_PASSWORD` únicamente durante la carga inicial
 
 3. Preparar y validar la base de datos:
@@ -77,9 +78,10 @@ npm audit
 4. Definir `MFA_ENCRYPTION_KEY` con 32 bytes aleatorios codificados en base64url y conservarla en el gestor de secretos. Perderla impide validar los autenticadores vinculados.
 5. Activar `TRUST_PROXY=true` solo si el proxy elimina y vuelve a escribir de forma confiable los encabezados reenviados.
 6. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
-7. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
-   Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las reversiones controladas 008 y 009 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
-8. Compilar e iniciar:
+7. Configurar `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET` y `TWILIO_FROM_NUMBER`. `TWILIO_SMS_TRIAL_TEMPLATE=true` se usa únicamente durante la prueba gratuita y debe cambiarse a `false` al actualizar la cuenta.
+8. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
+   Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las reversiones controladas 008, 009 y 010 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
+9. Compilar e iniciar:
 
    ```bash
    npm ci
@@ -87,14 +89,15 @@ npm audit
    npm run start
    ```
 
-9. Configurar copias de seguridad automáticas, monitoreo, alertas y rotación de registros en la infraestructura de la empresa.
+10. Configurar copias de seguridad automáticas, monitoreo, alertas y rotación de registros en la infraestructura de la empresa.
 
 ## Integraciones que requieren provisión empresarial
 
 - Consulta de datos por DNI mediante un proveedor externo: configurar `RENIEC_API_TOKEN`. ApiPeruDev usa registros públicos y no es una conexión directa con RENIEC. El modo simulado debe permanecer desactivado en demostración y producción.
 - Emisión fiscal SUNAT/PSE: la plataforma conserva el estado interno del comprobante, pero el envío a un proveedor fiscal requiere contratar y configurar dicho servicio.
 - Mapas: la visualización usa teselas de OpenStreetMap; para operación intensiva debe contratarse un proveedor con garantía de servicio o alojar teselas propias.
-- Correo, SMS o WhatsApp: requieren proveedor, credenciales y consentimiento de los destinatarios antes de activarse.
+- SMS: la integración está preparada con Twilio; la cuenta gratuita solo admite destinatarios verificados y vence a los 30 días. Para operar con todo el personal debe actualizarse la cuenta y registrarse un celular real para cada usuario.
+- Correo o WhatsApp: requieren proveedor, credenciales y consentimiento de los destinatarios antes de activarse.
 
 ## Operación y seguridad
 
