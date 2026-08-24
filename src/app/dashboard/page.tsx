@@ -830,6 +830,12 @@ export default function DashboardPage() {
                 icon: LayoutDashboard,
               },
               {
+                id: "viajes",
+                label: "Itinerario Viajes",
+                icon: Calendar,
+                permission: PERMISSIONS.TRIP_VIEW,
+              },
+              {
                 id: "venta",
                 label: "Venta Pasajes",
                 icon: Ticket,
@@ -840,12 +846,6 @@ export default function DashboardPage() {
                 label: "Encomiendas",
                 icon: Package,
                 permission: PERMISSIONS.PARCEL_CREATE,
-              },
-              {
-                id: "viajes",
-                label: "Itinerario Viajes",
-                icon: Calendar,
-                permission: PERMISSIONS.TRIP_VIEW,
               },
               {
                 id: "recojos",
