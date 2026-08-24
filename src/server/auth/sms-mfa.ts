@@ -87,7 +87,7 @@ export async function issueSmsChallenge(
 
   const reserved = await query<{ sms_sent_at: Date }>(
     `UPDATE sesiones
-     SET sms_sent_at = NOW(),
+     SET sms_sent_at = date_trunc('milliseconds', NOW()),
          sms_code_hash = NULL,
          sms_expires_at = NULL,
          sms_attempts = 0
