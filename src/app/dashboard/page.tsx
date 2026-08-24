@@ -2,14 +2,17 @@
 
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import dynamic from "next/dynamic";
-import { useDatabase, Viaje, Boleto } from "@/context/DatabaseContext";
+import QRCode from "qrcode";
+import { useDatabase, Viaje, Boleto, Encomienda } from "@/context/DatabaseContext";
 import { useLocation } from "@/context/LocationContext";
 import AgencySwitcher from "@/components/AgencySwitcher";
 import AdminWorkspace from "@/components/AdminWorkspace";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
+import { buildParcelTrackingUrl, maskDni } from "@/lib/domain/parcel-receipt";
 import {
   LayoutDashboard,
   Ticket,
@@ -298,6 +301,8 @@ export default function DashboardPage() {
   const [searchParcelText, setSearchParcelText] = useState("");
   const [filterParcelState, setFilterParcelState] = useState("");
   const [isParcelModalOpen, setIsParcelModalOpen] = useState(false);
+  const [emittedParcel, setEmittedParcel] = useState<Encomienda | null>(null);
+  const [parcelQrDataUrl, setParcelQrDataUrl] = useState("");
 
   // Form states
   const [parcelRemDni, setParcelRemDni] = useState("");
@@ -328,6 +333,37 @@ export default function DashboardPage() {
       }),
     [db.encomiendas, filterParcelState, searchParcelText],
   );
+
+  const parcelReceiptTrip = emittedParcel
+    ? db.viajes.find((trip) => trip.id === emittedParcel.id_viaje)
+    : null;
+  const parcelReceiptRoute = parcelReceiptTrip
+    ? db.rutas.find((route) => route.id === parcelReceiptTrip.id_ruta)
+    : null;
+
+  const prepareParcelReceipt = async (parcel: Encomienda) => {
+    setEmittedParcel(parcel);
+    try {
+      const trackingUrl = buildParcelTrackingUrl(
+        window.location.origin,
+        parcel.codigo_tracking,
+      );
+      const dataUrl = await QRCode.toDataURL(trackingUrl, {
+        errorCorrectionLevel: "M",
+        margin: 1,
+        width: 256,
+        color: { dark: "#020617", light: "#ffffff" },
+      });
+      setParcelQrDataUrl(dataUrl);
+    } catch {
+      setParcelQrDataUrl("");
+      notify({
+        type: "warning",
+        title: "Encomienda registrada sin QR",
+        message: "Puedes volver a generar el recibo desde la lista de encomiendas.",
+      });
+    }
+  };
 
   const searchParcelClient = async (role: "rem" | "dest") => {
     const dni = role === "rem" ? parcelRemDni : parcelDestDni;
@@ -396,10 +432,11 @@ export default function DashboardPage() {
       });
 
       if (res) {
+        await prepareParcelReceipt(res);
         notify({
           type: "success",
           title: "Encomienda registrada",
-          message: `Código de seguimiento: ${res.codigo_tracking}`,
+          message: `Recibo con QR generado: ${res.codigo_tracking}`,
           duration: 7000,
         });
         setIsParcelModalOpen(false);
@@ -1807,8 +1844,8 @@ export default function DashboardPage() {
         {/* TAB 3: GESTIÓN DE ENCOMIENDAS */}
         {/* ================================================================== */}
         {activeTab === "encomiendas" && (
-          <div className="space-y-6 animate-fade-in no-print">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-white/10">
+          <div className="ticket-print-context space-y-6 animate-fade-in">
+            <div className="no-print flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-white/10">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white">
                   Gestión de Encomiendas
@@ -1818,7 +1855,11 @@ export default function DashboardPage() {
                 </p>
               </div>
               <button
-                onClick={() => setIsParcelModalOpen(true)}
+                onClick={() => {
+                  setEmittedParcel(null);
+                  setParcelQrDataUrl("");
+                  setIsParcelModalOpen(true);
+                }}
                 className="rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 shadow-lg flex items-center gap-2 cursor-pointer transition"
               >
                 <Plus className="h-4 w-4" /> Registrar Encomienda
@@ -1826,7 +1867,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Filter bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className="no-print grid grid-cols-1 sm:grid-cols-12 gap-3">
               <div className="sm:col-span-8 relative">
                 <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
@@ -1855,7 +1896,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Parcels Table */}
-            <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-premium backdrop-blur-md space-y-4">
+            <div className="no-print rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-premium backdrop-blur-md space-y-4">
               <div className="overflow-x-auto">
                 <table className="min-w-full">
                   <thead>
@@ -1875,12 +1916,15 @@ export default function DashboardPage() {
                       <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
                         Estado
                       </th>
+                      <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Recibo
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredParcels.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-xs text-slate-500">
+                        <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
                           No hay encomiendas que coincidan con los filtros.
                         </td>
                       </tr>
@@ -1934,6 +1978,15 @@ export default function DashboardPage() {
                               >
                                 {p.estado.replaceAll("_", " ")}
                               </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => void prepareParcelReceipt(p)}
+                                className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[10px] font-black uppercase text-emerald-300 transition hover:bg-emerald-500/20"
+                              >
+                                Ver recibo
+                              </button>
                             </td>
                           </tr>
                         );
@@ -2233,6 +2286,117 @@ export default function DashboardPage() {
                   </form>
                 </div>
               </div>
+            )}
+
+            {emittedParcel && (
+              <section
+                aria-label={`Recibo de encomienda ${emittedParcel.codigo_tracking}`}
+                className="ticket-print-area print-area mx-auto max-w-2xl space-y-5 rounded-3xl border border-emerald-500/30 bg-slate-900/80 p-6 shadow-2xl backdrop-blur-md sm:p-8"
+              >
+                <header className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-400">
+                      ECONNVRAE
+                    </p>
+                    <h3 className="mt-1 text-2xl font-black text-white">
+                      Recibo de encomienda
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {currentUser?.agenciaNombre || "Agencia de transporte"} · {emittedParcel.fechaRegistro}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-center">
+                    <span className="block text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      Código de seguimiento
+                    </span>
+                    <strong className="font-mono text-sm text-emerald-300">
+                      {emittedParcel.codigo_tracking}
+                    </strong>
+                  </div>
+                </header>
+
+                <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="grid gap-3 text-xs sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                      <span className="text-[9px] font-black uppercase text-slate-500">Remitente</span>
+                      <p className="mt-1 font-bold text-white">{emittedParcel.remitenteNombre}</p>
+                      <p className="font-mono text-slate-400">DNI {maskDni(emittedParcel.remitenteDni)}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                      <span className="text-[9px] font-black uppercase text-slate-500">Destinatario</span>
+                      <p className="mt-1 font-bold text-white">{emittedParcel.destinatarioNombre}</p>
+                      <p className="font-mono text-slate-400">DNI {maskDni(emittedParcel.destinatarioDni)}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3 sm:col-span-2">
+                      <span className="text-[9px] font-black uppercase text-slate-500">Ruta asignada</span>
+                      <p className="mt-1 font-bold text-white">
+                        {parcelReceiptRoute
+                          ? `${parcelReceiptRoute.origen} → ${parcelReceiptRoute.destino}`
+                          : emittedParcel.id_viaje}
+                      </p>
+                      {parcelReceiptTrip && (
+                        <p className="text-slate-400">
+                          Salida: {parcelReceiptTrip.fecha} · {parcelReceiptTrip.hora}
+                        </p>
+                      )}
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3 sm:col-span-2">
+                      <span className="text-[9px] font-black uppercase text-slate-500">Detalle del envío</span>
+                      <p className="mt-1 font-bold text-white">{emittedParcel.descripcion}</p>
+                      <p className="text-slate-400">
+                        {emittedParcel.peso} kg · {emittedParcel.dimensiones} · Valor declarado S/ {emittedParcel.valor.toFixed(2)}
+                      </p>
+                      <p className="mt-2 text-base font-black text-emerald-300">
+                        Flete pagado: S/ {emittedParcel.costo.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mx-auto w-48 text-center">
+                    <div className="flex aspect-square items-center justify-center rounded-2xl bg-white p-2">
+                      {parcelQrDataUrl ? (
+                        <Image
+                          src={parcelQrDataUrl}
+                          alt={`QR de seguimiento ${emittedParcel.codigo_tracking}`}
+                          width={176}
+                          height={176}
+                          unoptimized
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-slate-500">Generando QR…</span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[10px] font-bold text-slate-400">
+                      Escanea para consultar el envío. Se solicitarán los últimos 4 dígitos del DNI del destinatario.
+                    </p>
+                  </div>
+                </div>
+
+                <p className="border-t border-white/10 pt-4 text-center text-[10px] text-slate-500">
+                  Constancia operativa de recepción. No sustituye un comprobante electrónico autorizado por SUNAT.
+                </p>
+
+                <div className="no-print flex flex-col justify-center gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    disabled={!parcelQrDataUrl}
+                    onClick={() => window.print()}
+                    className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase text-white disabled:opacity-50"
+                  >
+                    <Printer className="mr-2 inline h-4 w-4" /> Imprimir recibo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmittedParcel(null);
+                      setParcelQrDataUrl("");
+                    }}
+                    className="rounded-xl bg-slate-800 px-5 py-2.5 text-xs font-bold text-slate-300"
+                  >
+                    Cerrar recibo
+                  </button>
+                </div>
+              </section>
             )}
           </div>
         )}

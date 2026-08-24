@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -38,6 +38,17 @@ export default function PublicClientPage() {
   const [result, setResult] = useState<PublicTrackingResult | null>(null);
   const [error, setError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const trackingCode = new URLSearchParams(window.location.search)
+      .get("tracking")
+      ?.trim()
+      .toUpperCase();
+    if (trackingCode && /^ECV-\d{6}-\d{5}$/.test(trackingCode)) {
+      const timer = window.setTimeout(() => setQuery(trackingCode), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, []);
 
   const handleSearch = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
