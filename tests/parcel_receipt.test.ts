@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildParcelTrackingUrl, maskDni } from "@/lib/domain/parcel-receipt";
+import {
+  buildParcelTrackingUrl,
+  extractParcelTrackingCode,
+  maskDni,
+} from "@/lib/domain/parcel-receipt";
 
 describe("recibo de encomienda", () => {
   it("crea un enlace público con el tracking sin incluir el DNI", () => {
@@ -22,5 +26,25 @@ describe("recibo de encomienda", () => {
     expect(() =>
       buildParcelTrackingUrl("https://example.com", "<script>"),
     ).toThrow("INVALID_TRACKING_CODE");
+  });
+
+  it("extrae el código desde el QR del recibo", () => {
+    expect(
+      extractParcelTrackingCode(
+        "https://econnvrae-next.vercel.app/public?tracking=ECV-260823-00001",
+      ),
+    ).toBe("ECV-260823-00001");
+    expect(extractParcelTrackingCode("ecv-260823-00001")).toBe(
+      "ECV-260823-00001",
+    );
+  });
+
+  it("ignora QR que no pertenecen al formato de seguimiento", () => {
+    expect(extractParcelTrackingCode("https://example.com/phishing")).toBeNull();
+    expect(
+      extractParcelTrackingCode(
+        "https://example.com/public?tracking=<script>",
+      ),
+    ).toBeNull();
   });
 });

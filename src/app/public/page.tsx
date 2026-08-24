@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -13,7 +13,10 @@ import {
   MapPin,
   Clock,
   Sparkles,
+  QrCode,
 } from "lucide-react";
+import ParcelQrScanner from "@/components/ParcelQrScanner";
+import { extractParcelTrackingCode } from "@/lib/domain/parcel-receipt";
 import type { PublicTrackingResult } from "@/lib/domain/types";
 
 const TRACKING_STEPS = [
@@ -38,6 +41,8 @@ export default function PublicClientPage() {
   const [result, setResult] = useState<PublicTrackingResult | null>(null);
   const [error, setError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [scanMessage, setScanMessage] = useState("");
 
   useEffect(() => {
     const trackingCode = new URLSearchParams(window.location.search)
@@ -48,6 +53,19 @@ export default function PublicClientPage() {
       const timer = window.setTimeout(() => setQuery(trackingCode), 0);
       return () => window.clearTimeout(timer);
     }
+  }, []);
+
+  const closeQrScanner = useCallback(() => setIsQrScannerOpen(false), []);
+  const handleQrScanned = useCallback((value: string) => {
+    const trackingCode = extractParcelTrackingCode(value);
+    if (!trackingCode) return;
+
+    setQuery(trackingCode);
+    setResult(null);
+    setError("");
+    setScanMessage(
+      "QR leído correctamente. Completa los últimos 4 dígitos del DNI para consultar.",
+    );
   }, []);
 
   const handleSearch = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -198,6 +216,26 @@ export default function PublicClientPage() {
               </div>
 
               <form onSubmit={handleSearch} className="space-y-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScanMessage("");
+                    setIsQrScannerOpen(true);
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3.5 text-xs font-black uppercase tracking-wider text-emerald-300 transition hover:bg-emerald-500/20"
+                >
+                  <QrCode className="h-4 w-4" />
+                  Escanear QR del recibo
+                </button>
+
+                <div className="flex items-center gap-3" aria-hidden="true">
+                  <span className="h-px flex-1 bg-white/10" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    o escribe el código
+                  </span>
+                  <span className="h-px flex-1 bg-white/10" />
+                </div>
+
                 <div className="space-y-1.5">
                   <label htmlFor="tracking-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
                     Código de Tracking *
@@ -219,6 +257,12 @@ export default function PublicClientPage() {
                     />
                   </div>
                 </div>
+
+                {scanMessage && (
+                  <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-bold text-emerald-200">
+                    {scanMessage}
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <label htmlFor="tracking-security-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -370,6 +414,13 @@ export default function PublicClientPage() {
           <span>Consulta protegida por validación de identidad</span>
         </footer>
       </div>
+
+      {isQrScannerOpen && (
+        <ParcelQrScanner
+          onClose={closeQrScanner}
+          onCodeScanned={handleQrScanned}
+        />
+      )}
     </main>
   );
 }
