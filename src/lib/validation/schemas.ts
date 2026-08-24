@@ -181,18 +181,47 @@ export const parcelStatusSchema = z
   });
 
 const vehicleLocationCoordinatesSchema = z.object({
+  requestId: requestIdSchema,
+  capturedAt: z.iso.datetime(),
   latitude: z.number().finite().min(-90).max(90),
   longitude: z.number().finite().min(-180).max(180),
-  accuracy: z.number().finite().min(0).max(100_000),
+  accuracy: z.number().finite().min(0).max(5_000),
   speed: z.number().finite().min(0).max(300).nullable(),
   heading: z.number().finite().min(0).max(360).nullable(),
 });
 
-export const vehicleLocationUpdateSchema = z.discriminatedUnion("isActive", [
-  vehicleLocationCoordinatesSchema.extend({
+const activeVehicleLocationUpdateSchema = vehicleLocationCoordinatesSchema
+  .extend({
     conductorId: z.string().regex(/^C\d{2,10}$/).optional(),
     isActive: z.literal(true),
-  }),
+  })
+  .superRefine((value, context) => {
+  const capturedAt = Date.parse(value.capturedAt);
+  const now = Date.now();
+  if (capturedAt < now - 15 * 60 * 1000 || capturedAt > now + 60 * 1000) {
+    context.addIssue({
+      code: "custom",
+      path: ["capturedAt"],
+      message: "La hora de captura GPS no es válida.",
+    });
+  }
+
+  const isInsidePeru =
+    value.latitude >= -19 &&
+    value.latitude <= 1 &&
+    value.longitude >= -82 &&
+    value.longitude <= -68;
+  if (!isInsidePeru) {
+    context.addIssue({
+      code: "custom",
+      path: ["latitude"],
+      message: "La posición GPS está fuera del área operativa de Perú.",
+    });
+  }
+  });
+
+export const vehicleLocationUpdateSchema = z.discriminatedUnion("isActive", [
+  activeVehicleLocationUpdateSchema,
   z.object({
     conductorId: z.string().regex(/^C\d{2,10}$/).optional(),
     isActive: z.literal(false),

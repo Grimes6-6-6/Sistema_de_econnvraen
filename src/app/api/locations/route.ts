@@ -32,7 +32,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     assertTrustedMutation(request);
-    const user = await requireApiRole(["CONDUCTOR", "ADMINISTRADOR"]);
+    const user = await requireApiRole(["CONDUCTOR"]);
     const rateLimit = await consumeRateLimit(
       `location:${user.id}`,
       LOCATION_UPDATE_LIMIT,

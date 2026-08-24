@@ -19,6 +19,7 @@ export interface SimpleCoords {
   accuracy: number;
   speed: number | null;
   heading: number | null;
+  capturedAt: string;
 }
 
 interface LocationContextType {
@@ -26,6 +27,9 @@ interface LocationContextType {
   ownPosition: SimpleCoords | null;
   gpsStatus: "idle" | "requesting" | "active" | "error";
   gpsError: string | null;
+  transmissionStatus: "idle" | "sending" | "synced" | "offline" | "error";
+  transmissionError: string | null;
+  lastSyncedAt: number | null;
   startTracking: (conductorId: string) => void;
   stopTracking: () => void;
 }
@@ -34,11 +38,39 @@ interface LocationApiPayload {
   locations: VehicleLocation[];
 }
 
+interface ActiveLocationPayload {
+  conductorId: string;
+  isActive: true;
+  requestId: string;
+  capturedAt: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  speed: number | null;
+  heading: number | null;
+}
+
 const POLL_INTERVAL_MS = 5_000;
-const BROADCAST_INTERVAL_MS = 3_000;
+const MIN_BROADCAST_INTERVAL_MS = 10_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const MIN_MOVEMENT_METERS = 15;
 const LocationContext = createContext<LocationContextType | undefined>(
   undefined,
 );
+
+function distanceMeters(from: SimpleCoords, to: SimpleCoords): number {
+  const earthRadiusMeters = 6_371_000;
+  const latitudeDelta = ((to.latitude - from.latitude) * Math.PI) / 180;
+  const longitudeDelta = ((to.longitude - from.longitude) * Math.PI) / 180;
+  const fromLatitude = (from.latitude * Math.PI) / 180;
+  const toLatitude = (to.latitude * Math.PI) / 180;
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(fromLatitude) *
+      Math.cos(toLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * earthRadiusMeters * Math.asin(Math.sqrt(haversine));
+}
 
 function isVehicleLocation(value: unknown): value is VehicleLocation {
   if (!value || typeof value !== "object") return false;
@@ -60,6 +92,8 @@ function isVehicleLocation(value: unknown): value is VehicleLocation {
       (typeof item.heading === "number" && Number.isFinite(item.heading))) &&
     typeof item.timestamp === "number" &&
     Number.isFinite(item.timestamp) &&
+    typeof item.ageSeconds === "number" &&
+    Number.isFinite(item.ageSeconds) &&
     typeof item.isActive === "boolean"
   );
 }
@@ -84,15 +118,7 @@ async function readLocations(signal?: AbortSignal): Promise<VehicleLocation[]> {
 
 async function sendLocation(
   body:
-    | {
-        conductorId: string;
-        isActive: true;
-        latitude: number;
-        longitude: number;
-        accuracy: number;
-        speed: number | null;
-        heading: number | null;
-      }
+    | ActiveLocationPayload
     | { conductorId: string; isActive: false },
 ): Promise<void> {
   const response = await fetch("/api/locations", {
@@ -105,7 +131,14 @@ async function sendLocation(
     cache: "no-store",
     keepalive: true,
   });
-  if (!response.ok) throw new Error("LOCATION_UPDATE_FAILED");
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string };
+    } | null;
+    throw new Error(
+      payload?.error?.message || "No se pudo enviar la ubicación al servidor.",
+    );
+  }
 }
 
 export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -120,8 +153,16 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
   const [gpsStatus, setGpsStatus] =
     useState<LocationContextType["gpsStatus"]>("idle");
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [transmissionStatus, setTransmissionStatus] =
+    useState<LocationContextType["transmissionStatus"]>("idle");
+  const [transmissionError, setTransmissionError] = useState<string | null>(
+    null,
+  );
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastBroadcastRef = useRef(0);
+  const lastBroadcastPositionRef = useRef<SimpleCoords | null>(null);
+  const pendingPayloadRef = useRef<ActiveLocationPayload | null>(null);
   const activeMetaRef = useRef<{ conductorId: string } | null>(null);
 
   const syncLocations = useCallback(async (
@@ -136,26 +177,86 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const broadcastPosition = useCallback((coords: SimpleCoords) => {
-    const meta = activeMetaRef.current;
-    const now = Date.now();
-    if (!meta || now - lastBroadcastRef.current < BROADCAST_INTERVAL_MS) return;
-    lastBroadcastRef.current = now;
+  const transmitPayload = useCallback(
+    async (payload: ActiveLocationPayload) => {
+      if (!navigator.onLine) {
+        pendingPayloadRef.current = payload;
+        setTransmissionStatus("offline");
+        setTransmissionError(
+          "Sin Internet. Se enviará la posición más reciente al recuperar conexión.",
+        );
+        return;
+      }
 
-    void sendLocation({
-      conductorId: meta.conductorId,
-      isActive: true,
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      accuracy: coords.accuracy,
-      speed: coords.speed,
-      heading: coords.heading,
-    }).then(() => {
-      if (currentUser) void syncLocations(currentUser.id);
-    }).catch(() => {
-      // The GPS remains active locally; the next reading retries transmission.
-    });
-  }, [currentUser, syncLocations]);
+      setTransmissionStatus("sending");
+      setTransmissionError(null);
+      try {
+        await sendLocation(payload);
+        if (pendingPayloadRef.current?.requestId === payload.requestId) {
+          pendingPayloadRef.current = null;
+        }
+        setTransmissionStatus("synced");
+        setLastSyncedAt(Date.now());
+        if (currentUser) void syncLocations(currentUser.id);
+      } catch (error) {
+        pendingPayloadRef.current = payload;
+        setTransmissionStatus(navigator.onLine ? "error" : "offline");
+        setTransmissionError(
+          navigator.onLine
+            ? error instanceof Error
+              ? `${error.message} Se reintentará automáticamente.`
+              : "El GPS está activo, pero la última posición no llegó al servidor. Se reintentará automáticamente."
+            : "Sin Internet. Se enviará la posición más reciente al recuperar conexión.",
+        );
+      }
+    },
+    [currentUser, syncLocations],
+  );
+
+  const broadcastPosition = useCallback(
+    (coords: SimpleCoords) => {
+      const meta = activeMetaRef.current;
+      const now = Date.now();
+      if (!meta) return;
+
+      if (coords.accuracy > 5_000) {
+        setTransmissionStatus("error");
+        setTransmissionError(
+          "La precisión supera 5 km. Esperando una lectura GPS más confiable.",
+        );
+        return;
+      }
+
+      const elapsed = now - lastBroadcastRef.current;
+      const previousPosition = lastBroadcastPositionRef.current;
+      const moved = previousPosition
+        ? distanceMeters(previousPosition, coords)
+        : Number.POSITIVE_INFINITY;
+      if (
+        elapsed < MIN_BROADCAST_INTERVAL_MS ||
+        (moved < MIN_MOVEMENT_METERS && elapsed < HEARTBEAT_INTERVAL_MS)
+      ) {
+        return;
+      }
+
+      const payload: ActiveLocationPayload = {
+        conductorId: meta.conductorId,
+        isActive: true,
+        requestId: crypto.randomUUID(),
+        capturedAt: coords.capturedAt,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        speed: coords.speed,
+        heading: coords.heading,
+      };
+      lastBroadcastRef.current = now;
+      lastBroadcastPositionRef.current = coords;
+      pendingPayloadRef.current = payload;
+      void transmitPayload(payload);
+    },
+    [transmitPayload],
+  );
 
   const stopTracking = useCallback(() => {
     if (watchIdRef.current !== null && "geolocation" in navigator) {
@@ -166,6 +267,8 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
     const meta = activeMetaRef.current;
     activeMetaRef.current = null;
     lastBroadcastRef.current = 0;
+    lastBroadcastPositionRef.current = null;
+    pendingPayloadRef.current = null;
     if (meta) {
       void sendLocation({
         conductorId: meta.conductorId,
@@ -180,6 +283,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
     setGpsStatus("idle");
     setGpsError(null);
     setOwnPosition(null);
+    setTransmissionStatus("idle");
+    setTransmissionError(null);
+    setLastSyncedAt(null);
   }, [currentUser, syncLocations]);
 
   const startTracking = useCallback(
@@ -195,6 +301,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
       activeMetaRef.current = { conductorId };
       setGpsStatus("requesting");
       setGpsError(null);
+      setTransmissionStatus("idle");
+      setTransmissionError(null);
+      setLastSyncedAt(null);
 
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
@@ -205,11 +314,13 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
             speed:
               position.coords.speed === null
                 ? null
-                : Math.max(0, position.coords.speed * 3.6),
+                : Math.round(Math.max(0, position.coords.speed * 3.6) * 10) /
+                  10,
             heading:
               position.coords.heading === null
                 ? null
                 : position.coords.heading,
+            capturedAt: new Date(position.timestamp).toISOString(),
           };
           setOwnPosition(coords);
           setGpsStatus("active");
@@ -259,13 +370,32 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [currentUser, syncLocations]);
 
   useEffect(() => {
+    const retryPendingPosition = () => {
+      const pending = pendingPayloadRef.current;
+      if (pending && activeMetaRef.current) void transmitPayload(pending);
+    };
+    window.addEventListener("online", retryPendingPosition);
+    return () => window.removeEventListener("online", retryPendingPosition);
+  }, [transmitPayload]);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.rol !== "CONDUCTOR") {
+      if (activeMetaRef.current) stopTracking();
+    }
+  }, [currentUser, stopTracking]);
+
+  useEffect(() => {
     return () => {
       if (watchIdRef.current !== null && "geolocation" in navigator) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
-      stopTracking();
+      const meta = activeMetaRef.current;
+      activeMetaRef.current = null;
+      if (meta) {
+        void sendLocation({ conductorId: meta.conductorId, isActive: false });
+      }
     };
-  }, [stopTracking]);
+  }, []);
 
   return (
     <LocationContext.Provider
@@ -277,6 +407,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
         ownPosition,
         gpsStatus,
         gpsError,
+        transmissionStatus,
+        transmissionError,
+        lastSyncedAt,
         startTracking,
         stopTracking,
       }}

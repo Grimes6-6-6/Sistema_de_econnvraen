@@ -157,6 +157,7 @@ interface VehicleLocationRow extends QueryResultRow {
   speed_kmh: string | null;
   heading: string | null;
   timestamp_ms: string;
+  age_seconds: number;
   is_active: boolean;
 }
 
@@ -1155,6 +1156,19 @@ export async function updateTripStatus(
       [dbState, tripId],
     );
 
+    if (input.newState === "completado") {
+      await client.query(
+        `UPDATE ubicaciones_vehiculos
+         SET is_active = FALSE,
+             updated_by = $3,
+             updated_at = NOW()
+         WHERE id_conductor = $1
+           AND id_viaje = $2
+           AND is_active = TRUE`,
+        [current.id_conductor, tripId, userId],
+      );
+    }
+
     const updated = await getTripById(client, tripId);
     if (!updated) throw new Error("TRIP_STATUS_UPDATE_FAILED");
     await writeAuditLog(
@@ -1700,8 +1714,12 @@ export async function getVehicleLocations(
        location.accuracy_m::text,
        location.speed_kmh::text,
        location.heading::text,
-       FLOOR(EXTRACT(EPOCH FROM location.updated_at) * 1000)::bigint::text
+       FLOOR(EXTRACT(EPOCH FROM location.captured_at) * 1000)::bigint::text
          AS timestamp_ms,
+       GREATEST(
+         0,
+         FLOOR(EXTRACT(EPOCH FROM (NOW() - location.updated_at)))
+       )::integer AS age_seconds,
        location.is_active
      FROM ubicaciones_vehiculos location
      JOIN conductores c ON c.id_conductor = location.id_conductor
@@ -1718,7 +1736,7 @@ export async function getVehicleLocations(
          ABS(EXTRACT(EPOCH FROM (trip.fecha_hora_salida - NOW())))
        LIMIT 1
      ) assignment ON TRUE
-     WHERE location.updated_at >= NOW() - INTERVAL '5 minutes'
+     WHERE location.updated_at >= NOW() - INTERVAL '15 minutes'
        AND ($1::integer IS NULL OR c.id_agencia_base = $1)
        AND ($2::integer IS NULL OR c.id_conductor = $2)
      ORDER BY location.updated_at DESC`,
@@ -1736,7 +1754,8 @@ export async function getVehicleLocations(
     speed: row.speed_kmh === null ? null : asNumber(row.speed_kmh),
     heading: row.heading === null ? null : asNumber(row.heading),
     timestamp: asNumber(row.timestamp_ms),
-    isActive: row.is_active,
+    ageSeconds: row.age_seconds,
+    isActive: row.is_active && row.age_seconds <= 45,
   }));
 }
 
@@ -1744,7 +1763,7 @@ export async function updateVehicleLocation(
   user: SessionUser,
   input: VehicleLocationUpdateInput,
 ): Promise<void> {
-  requireRole(user, DRIVER_ROLES);
+  requireRole(user, ["CONDUCTOR"] as const);
   const userId = requireUserId(user);
   const scopeAgencyId = agencyScopeId(user);
   const sessionDriverId =
@@ -1792,8 +1811,11 @@ export async function updateVehicleLocation(
       );
     }
 
-    const previous = await client.query<{ is_active: boolean }>(
-      `SELECT is_active
+    const previous = await client.query<{
+      is_active: boolean;
+      captured_at: string;
+    }>(
+      `SELECT is_active, captured_at::text
        FROM ubicaciones_vehiculos
        WHERE id_conductor = $1
        FOR UPDATE`,
@@ -1809,28 +1831,76 @@ export async function updateVehicleLocation(
         [driverId, userId],
       );
     } else {
-      await client.query(
-        `INSERT INTO ubicaciones_vehiculos (
-           id_conductor, latitude, longitude, accuracy_m,
-           speed_kmh, heading, is_active, updated_by
+      const activeTrip = await client.query<{ id_viaje: number }>(
+        `SELECT id_viaje
+         FROM viajes
+         WHERE id_conductor = $1
+           AND estado = 'EN_CURSO'
+         ORDER BY fecha_hora_salida DESC
+         LIMIT 1
+         FOR SHARE`,
+        [driverId],
+      );
+      const tripId = activeTrip.rows[0]?.id_viaje;
+      if (!tripId) {
+        throw conflict(
+          "GPS_ACTIVE_TRIP_REQUIRED",
+          "Inicia el viaje asignado antes de transmitir la ubicación GPS.",
+        );
+      }
+
+      const history = await client.query(
+        `INSERT INTO historial_ubicaciones_vehiculos (
+           request_id, id_conductor, id_viaje, latitude, longitude,
+           accuracy_m, speed_kmh, heading, captured_at, updated_by
          )
-         VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7)
-         ON CONFLICT (id_conductor) DO UPDATE
-         SET latitude = EXCLUDED.latitude,
-             longitude = EXCLUDED.longitude,
-             accuracy_m = EXCLUDED.accuracy_m,
-             speed_kmh = EXCLUDED.speed_kmh,
-             heading = EXCLUDED.heading,
-             is_active = TRUE,
-             updated_by = EXCLUDED.updated_by,
-             updated_at = NOW()`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10)
+         ON CONFLICT (request_id) DO NOTHING
+         RETURNING id_ubicacion`,
         [
+          input.requestId,
           driverId,
+          tripId,
           input.latitude,
           input.longitude,
           input.accuracy,
           input.speed,
           input.heading,
+          input.capturedAt,
+          userId,
+        ],
+      );
+      if (!history.rowCount) return;
+
+      await client.query(
+        `INSERT INTO ubicaciones_vehiculos (
+           id_conductor, id_viaje, request_id, latitude, longitude,
+           accuracy_m, speed_kmh, heading, captured_at, is_active, updated_by
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, TRUE, $10)
+         ON CONFLICT (id_conductor) DO UPDATE
+         SET id_viaje = EXCLUDED.id_viaje,
+             request_id = EXCLUDED.request_id,
+             latitude = EXCLUDED.latitude,
+             longitude = EXCLUDED.longitude,
+             accuracy_m = EXCLUDED.accuracy_m,
+             speed_kmh = EXCLUDED.speed_kmh,
+             heading = EXCLUDED.heading,
+             captured_at = EXCLUDED.captured_at,
+             is_active = TRUE,
+             updated_by = EXCLUDED.updated_by,
+             updated_at = NOW()
+         WHERE EXCLUDED.captured_at > ubicaciones_vehiculos.captured_at`,
+        [
+          driverId,
+          tripId,
+          input.requestId,
+          input.latitude,
+          input.longitude,
+          input.accuracy,
+          input.speed,
+          input.heading,
+          input.capturedAt,
           userId,
         ],
       );

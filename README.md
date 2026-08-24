@@ -10,7 +10,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 - Programación y cancelación auditada de viajes, con prevención de cruces de conductor o vehículo.
 - Registro de encomiendas, código de seguimiento verificable e historial público completo.
 - Solicitudes de recojo, asignación de conductor y seguimiento de estados.
-- Manifiesto del conductor, incidencias de ruta, GPS, modo sin conexión y entrega con firma.
+- Manifiesto del conductor, incidencias de ruta, GPS ligado al viaje activo con historial, modo sin conexión y entrega con firma.
 - Reporte financiero por período y ruta, impresión/PDF y exportación CSV compatible con Excel.
 - Diseño adaptable a escritorio, tableta y teléfono, con navegación por teclado y avisos accesibles.
 
@@ -95,6 +95,7 @@ npm audit
 - Probar restauraciones de respaldo de forma periódica; una copia no verificada no constituye un plan de recuperación.
 - Revisar usuarios, agencias y permisos cuando un colaborador cambia de función o deja la empresa.
 - Las anulaciones y cancelaciones exigen motivo y se registran para auditoría.
+- El GPS web requiere mantener abierta la aplicación del conductor. Para seguimiento continuo con la pantalla bloqueada se necesita una aplicación móvil con permiso de ubicación en segundo plano o un rastreador dedicado.
 
 ## Estructura principal
 

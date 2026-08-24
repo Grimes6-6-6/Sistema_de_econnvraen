@@ -83,8 +83,16 @@ export default function ConductorPage() {
   const [mainTab, setMainTab] = useState<"trips" | "perfil" | "gps">(
     "trips",
   );
-  const { ownPosition, gpsStatus, gpsError, startTracking, stopTracking } =
-    useLocation();
+  const {
+    ownPosition,
+    gpsStatus,
+    gpsError,
+    transmissionStatus,
+    transmissionError,
+    lastSyncedAt,
+    startTracking,
+    stopTracking,
+  } = useLocation();
   const [driverScreen, setDriverScreen] = useState<
     "trips" | "detail" | "delivery"
   >("trips");
@@ -178,6 +186,7 @@ export default function ConductorPage() {
   const myTrips = db.viajes.filter(
     (v) => v.id_conductor === conductorId && v.fecha === todayStr,
   );
+  const activeGpsTrip = myTrips.find((trip) => trip.estado === "en_curso");
   const getBookedSeats = (tripId: string) =>
     db.boletos.filter((b) => b.id_viaje === tripId && b.estado !== "anulado");
   const getParcelsForTrip = (tripId: string) =>
@@ -222,12 +231,17 @@ export default function ConductorPage() {
     try {
       const updated = await updateViajeStatus(selectedTrip.id, nextState);
       if (updated) setSelectedTrip(updated);
+      if (nextState === "completado") {
+        stopTracking();
+      } else {
+        setMainTab("gps");
+      }
       notify({
         type: "success",
         title: nextState === "en_curso" ? "Viaje iniciado" : "Viaje finalizado",
         message:
           nextState === "en_curso"
-            ? "La salida quedó registrada en el sistema."
+            ? "La salida quedó registrada. Activa el GPS para transmitir la ruta."
             : "La llegada quedó registrada correctamente.",
       });
     } catch (error) {
@@ -1261,14 +1275,16 @@ export default function ConductorPage() {
           (() => {
             const route = conductorRecord
               ? (() => {
-                  const myTrip = db.viajes.find(
-                    (v) => v.id_conductor === conductorId,
-                  );
-                  const r = myTrip
-                    ? db.rutas.find((r) => r.id === myTrip.id_ruta)
+                  const gpsTrip =
+                    activeGpsTrip ??
+                    myTrips.find((trip) => trip.estado === "programado");
+                  const r = gpsTrip
+                    ? db.rutas.find((route) => route.id === gpsTrip.id_ruta)
                     : null;
-                  const veh = myTrip
-                    ? db.vehiculos.find((v) => v.id === myTrip.id_vehiculo)
+                  const veh = gpsTrip
+                    ? db.vehiculos.find(
+                        (vehicle) => vehicle.id === gpsTrip.id_vehiculo,
+                      )
                     : null;
                   return {
                     label: r
@@ -1331,7 +1347,9 @@ export default function ConductorPage() {
                         {gpsStatus === "error" &&
                           (gpsError ?? "Error desconocido")}
                         {gpsStatus === "idle" &&
-                          "Pulsa GPS Real para iniciar el seguimiento"}
+                          (activeGpsTrip
+                            ? "Pulsa Iniciar GPS para comenzar el seguimiento"
+                            : "Primero inicia el viaje asignado")}
                         {gpsStatus === "requesting" &&
                           "Concede permisos en el navegador..."}
                       </p>
@@ -1343,10 +1361,11 @@ export default function ConductorPage() {
                     <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                       <button
                         onClick={() => startTracking(conductorId)}
-                        disabled={!conductorId}
+                        disabled={!conductorId || !activeGpsTrip}
                         className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
                       >
-                        <Zap className="h-3.5 w-3.5 text-yellow-400" /> GPS Real
+                        <Zap className="h-3.5 w-3.5 text-yellow-400" />
+                        {activeGpsTrip ? "Iniciar GPS" : "Viaje no iniciado"}
                       </button>
                     </div>
                   ) : (
@@ -1358,6 +1377,41 @@ export default function ConductorPage() {
                     </button>
                   )}
                 </div>
+
+                {gpsStatus === "active" && (
+                  <div
+                    aria-live="polite"
+                    className={`rounded-2xl border px-4 py-3 text-sm ${
+                      transmissionStatus === "synced"
+                        ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-200"
+                        : transmissionStatus === "sending"
+                          ? "border-sky-500/30 bg-sky-500/5 text-sky-200"
+                          : "border-amber-500/30 bg-amber-500/5 text-amber-200"
+                    }`}
+                  >
+                    <p className="font-bold">
+                      {transmissionStatus === "synced" &&
+                        `Posición recibida por la central${
+                          lastSyncedAt
+                            ? ` a las ${new Date(lastSyncedAt).toLocaleTimeString("es-PE")}`
+                            : ""
+                        }.`}
+                      {transmissionStatus === "sending" &&
+                        "Enviando posición a la central..."}
+                      {transmissionStatus === "offline" &&
+                        "GPS activo sin conexión a Internet."}
+                      {transmissionStatus === "error" &&
+                        "La central todavía no recibió la última posición."}
+                      {transmissionStatus === "idle" &&
+                        "Esperando la primera lectura GPS válida..."}
+                    </p>
+                    {transmissionError && (
+                      <p className="mt-1 text-xs opacity-90">
+                        {transmissionError}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Coordinate readout */}
                 {ownPosition && (
@@ -1440,8 +1494,10 @@ export default function ConductorPage() {
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex gap-3">
                   <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                   <p className="text-xs text-slate-400">
-                    La ubicación se actualiza automáticamente y es visible para
-                    el personal autorizado de la agencia.
+                    Mantén esta página abierta y el teléfono con ubicación e
+                    Internet activos durante el viaje. Algunos teléfonos
+                    suspenden el GPS del navegador al bloquear la pantalla; la
+                    central mostrará claramente cuándo dejó de recibir datos.
                   </p>
                 </div>
               </div>

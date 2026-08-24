@@ -51,7 +51,12 @@ function createVehiclePopup(vehicle: VehicleLocation): HTMLDivElement {
   addLine(`Conductor: ${vehicle.conductorName}`);
   addLine(`Ruta: ${vehicle.routeLabel}`);
   if (vehicle.speed !== null) addLine(`Velocidad: ${vehicle.speed} km/h`);
-  addLine(new Date(vehicle.timestamp).toLocaleTimeString(), { muted: true });
+  addLine(
+    vehicle.isActive
+      ? `Última señal: ${new Date(vehicle.timestamp).toLocaleTimeString()}`
+      : `Señal retrasada: hace ${Math.max(1, Math.round(vehicle.ageSeconds / 60))} min`,
+    { muted: true },
+  );
   return container;
 }
 

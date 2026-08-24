@@ -107,6 +107,8 @@ describe("validaciones de entrada", () => {
     const valid = {
       conductorId: "C01",
       isActive: true as const,
+      requestId: "550e8400-e29b-41d4-a716-446655440000",
+      capturedAt: new Date().toISOString(),
       latitude: -13.1588,
       longitude: -74.2236,
       accuracy: 12,
@@ -124,6 +126,19 @@ describe("validaciones de entrada", () => {
       vehicleLocationUpdateSchema.safeParse({
         ...valid,
         speed: 500,
+      }).success,
+    ).toBe(false);
+    expect(
+      vehicleLocationUpdateSchema.safeParse({
+        ...valid,
+        latitude: 40.7128,
+        longitude: -74.006,
+      }).success,
+    ).toBe(false);
+    expect(
+      vehicleLocationUpdateSchema.safeParse({
+        ...valid,
+        accuracy: 5_001,
       }).success,
     ).toBe(false);
   });

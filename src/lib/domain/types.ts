@@ -117,6 +117,7 @@ export interface VehicleLocation {
   speed: number | null;
   heading: number | null;
   timestamp: number;
+  ageSeconds: number;
   isActive: boolean;
 }
 

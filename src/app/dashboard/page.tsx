@@ -3060,10 +3060,10 @@ export default function DashboardPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-white/10">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white">
-                  Telemetría Satelital de Flota
+                  Seguimiento GPS de Flota
                 </h2>
                 <p className="text-xs text-slate-400 font-medium mt-0.5">
-                  Posicionamiento GPS en tiempo real en la ruta Ayacucho - VRAEM.
+                  Ubicación reportada por los teléfonos de los conductores en ruta.
                 </p>
               </div>
               <span className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-3.5 py-1.5 text-xs font-black uppercase text-emerald-400">

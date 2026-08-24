@@ -27,6 +27,20 @@ const CURRENT_COLUMNS = {
   ],
   encomiendas: ["id_agencia_registro", "dimensiones"],
   solicitudes_recojo: ["id_agencia", "id_usuario_asignado"],
+  ubicaciones_vehiculos: [
+    "id_conductor",
+    "id_viaje",
+    "request_id",
+    "captured_at",
+  ],
+  historial_ubicaciones_vehiculos: [
+    "id_ubicacion",
+    "request_id",
+    "id_conductor",
+    "id_viaje",
+    "captured_at",
+    "received_at",
+  ],
 };
 
 async function readColumns(pool) {
