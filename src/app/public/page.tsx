@@ -12,7 +12,6 @@ import {
   Bus,
   MapPin,
   Clock,
-  Sparkles,
   QrCode,
 } from "lucide-react";
 import ParcelQrScanner from "@/components/ParcelQrScanner";
@@ -122,19 +121,12 @@ export default function PublicClientPage() {
   const activeStepIdx = result ? getStepIndex(result.estado) : 0;
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#090d16] text-slate-100 flex flex-col justify-between">
-      {/* Background Glow effects */}
-      <div className="ambient-bg pointer-events-none">
-        <div className="ambient-blob-1"></div>
-        <div className="ambient-blob-2"></div>
-        <div className="ambient-blob-3"></div>
-      </div>
-
+    <main className="corporate-public min-h-screen overflow-hidden text-slate-800 flex flex-col justify-between">
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-8 lg:px-10 justify-between">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-white/5 pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-700 text-white shadow-lg border border-emerald-400/20">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-700 text-white">
               <Bus className="h-5 w-5" />
             </div>
             <div>
@@ -153,7 +145,7 @@ export default function PublicClientPage() {
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-bold text-slate-300 transition hover:border-emerald-500/40 hover:bg-slate-800 hover:text-white cursor-pointer backdrop-blur-md"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Acceso al Sistema
+            Acceso interno
           </button>
         </header>
 
@@ -161,18 +153,15 @@ export default function PublicClientPage() {
         <section className="grid flex-1 items-center gap-8 py-10 lg:grid-cols-12 lg:gap-12">
           {/* Left Column: Information */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-extrabold uppercase tracking-widest text-emerald-400">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              Seguimiento de estados del envío
+            <div className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+              <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+              Consulta pública de encomiendas
             </div>
-            <h1 className="text-4xl sm:text-5xl font-black leading-tight tracking-tight text-white">
-              Consulta el avance de tu encomienda en{" "}
-              <span className="bg-linear-to-r from-emerald-400 to-green-500 bg-clip-text text-transparent">
-                cada etapa.
-              </span>
+            <h1 className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight text-slate-900">
+              Consulta el estado de tu encomienda
             </h1>
             <p className="text-sm sm:text-base leading-relaxed text-slate-300 font-medium">
-              Revisa el historial registrado de tu paquete entre Ayacucho y los distritos del VRAEM, con validación de identidad.
+              Revisa el último estado registrado de tu envío entre Ayacucho y los distritos del VRAEM.
             </p>
 
             <div className="grid grid-cols-2 gap-3 pt-2">

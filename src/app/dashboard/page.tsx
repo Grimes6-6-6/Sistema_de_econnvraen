@@ -832,26 +832,19 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#090d16] text-slate-100 lg:flex-row">
-      {/* Background Glow effects */}
-      <div className="ambient-bg pointer-events-none">
-        <div className="ambient-blob-1"></div>
-        <div className="ambient-blob-2"></div>
-        <div className="ambient-blob-3"></div>
-      </div>
-
+    <div className="corporate-app flex min-h-screen flex-col text-slate-800 lg:flex-row">
       {/* ── SIDEBAR NAVIGATION ── */}
-      <aside className="no-print relative z-20 flex w-full flex-col border-b border-white/10 bg-slate-900/70 backdrop-blur-2xl lg:min-h-screen lg:w-64 lg:border-r lg:border-b-0 shrink-0">
+      <aside className="corporate-sidebar no-print relative z-20 flex w-full shrink-0 flex-col border-b border-emerald-950/20 bg-[#173d32] lg:min-h-screen lg:w-64 lg:border-r lg:border-b-0">
         {/* Brand */}
         <div className="flex h-16 items-center gap-3 border-b border-white/10 px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-700 text-white shadow-md border border-emerald-400/20">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-emerald-800">
             <Bus className="h-5 w-5" />
           </div>
           <div>
             <span className="text-base font-black tracking-wider text-white flex items-center gap-1.5">
               ECONNVRAE
-              <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                PRO
+              <span className="rounded border border-emerald-300/30 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200">
+                Operaciones
               </span>
             </span>
           </div>
@@ -1013,8 +1006,8 @@ export default function DashboardPage() {
                   Métricas operativas del día en la agencia actual.
                 </p>
               </div>
-              <span className="rounded-xl bg-slate-900/80 border border-white/10 px-4 py-2 text-xs font-bold text-slate-300 backdrop-blur-md">
-                📅 Hoy:{" "}
+              <span className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">
+                Hoy:{" "}
                 {new Date().toLocaleDateString("es-ES", {
                   day: "numeric",
                   month: "long",

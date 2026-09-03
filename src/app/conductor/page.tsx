@@ -502,12 +502,12 @@ export default function ConductorPage() {
   }
 
   return (
-    <div className="grow flex flex-col min-h-screen bg-transparent text-white">
+    <div className="corporate-app driver-portal grow flex flex-col min-h-screen text-slate-800">
       {/* ── Navigation Bar ─────────────────────────────────────────────── */}
-      <header className="bg-slate-900/40 backdrop-blur-md border-b border-white/10 shadow-2xl sticky top-0 z-30">
+      <header className="driver-header sticky top-0 z-30 border-b border-slate-200 bg-white">
         <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="min-w-0 flex items-center gap-3">
-            <span className="h-10 w-10 rounded-xl bg-linear-to-br from-emerald-500 to-green-700 flex items-center justify-center font-black text-sm text-white shadow-sm border border-emerald-400/20">
+            <span className="h-10 w-10 rounded-lg bg-emerald-700 flex items-center justify-center font-bold text-sm text-white">
               {currentUser
                 ? currentUser.nombres[0] + currentUser.apellidos[0]
                 : "--"}

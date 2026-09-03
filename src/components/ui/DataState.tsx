@@ -7,8 +7,8 @@ export function InitialDataLoading() {
     <main className="flex min-h-[70vh] items-center justify-center px-4" role="status">
       <div className="text-center">
         <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-emerald-400" />
-        <h1 className="mt-5 text-xl font-black text-white">Preparando el sistema</h1>
-        <p className="mt-2 text-sm text-slate-400">Cargando la información de la agencia…</p>
+        <h1 className="mt-5 text-xl font-bold text-slate-900">Preparando el sistema</h1>
+        <p className="mt-2 text-sm text-slate-600">Cargando la información de la agencia…</p>
       </div>
     </main>
   );
@@ -24,12 +24,12 @@ export function DataLoadError({
   return (
     <main className="flex min-h-[70vh] items-center justify-center px-4">
       <section
-        className="w-full max-w-lg rounded-3xl border border-amber-400/20 bg-slate-900/90 p-7 text-center shadow-2xl"
+        className="w-full max-w-lg rounded-xl border border-amber-200 bg-white p-7 text-center shadow-premium"
         role="alert"
       >
         <AlertTriangle className="mx-auto h-11 w-11 text-amber-300" />
-        <h1 className="mt-4 text-xl font-black text-white">No pudimos cargar los datos</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-300">{message}</p>
+        <h1 className="mt-4 text-xl font-bold text-slate-900">No pudimos cargar los datos</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
         <button
           type="button"
           onClick={onRetry}

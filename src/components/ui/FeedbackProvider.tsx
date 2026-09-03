@@ -226,7 +226,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
 
       {confirmation && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md"
+          className="dialog-backdrop fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/85 p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeConfirmation(false);
           }}
@@ -237,7 +237,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             aria-labelledby={dialogTitleId}
             aria-describedby={dialogDescriptionId}
-            className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl sm:p-7"
+            className="corporate-dialog w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-premium sm:p-7"
           >
             <div className="flex items-start gap-4">
               <div

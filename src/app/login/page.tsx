@@ -13,7 +13,6 @@ import {
   PackageSearch,
   ShieldCheck,
   User,
-  Sparkles,
   Copy,
   Eye,
   EyeOff,
@@ -218,27 +217,20 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-10 overflow-hidden">
-      {/* Background Glow effects */}
-      <div className="ambient-bg pointer-events-none">
-        <div className="ambient-blob-1"></div>
-        <div className="ambient-blob-2"></div>
-        <div className="ambient-blob-3"></div>
-      </div>
-
-      <div className="relative z-10 w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl shadow-premium grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
+    <main className="corporate-login relative flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-10 overflow-hidden">
+      <div className="login-card relative z-10 grid min-h-[580px] w-full max-w-5xl grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-premium lg:grid-cols-12">
         {/* Left Side: Form Container */}
-        <div className="lg:col-span-7 p-6 sm:p-10 lg:p-12 flex flex-col justify-center">
+        <div className="login-form-panel flex flex-col justify-center p-6 sm:p-10 lg:col-span-7 lg:p-12">
           {/* Logo / Brand */}
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-500 to-green-700 text-white shadow-lg border border-emerald-400/20">
+            <div className="brand-mark flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-700 text-white">
               <Bus className="h-6 w-6" />
             </div>
             <div>
-              <span className="text-xl font-black tracking-wider text-white flex items-center gap-2">
+              <span className="flex items-center gap-2 text-xl font-bold tracking-wide text-slate-900">
                 ECONNVRAE
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Sistema Web
+                <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                  Personal autorizado
                 </span>
               </span>
               <p className="text-[11px] text-slate-400 font-semibold tracking-wide">
@@ -252,10 +244,10 @@ export default function LoginPage() {
               <div className="animate-fade-in space-y-6">
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                    Bienvenido al Sistema
+                    Acceso al sistema
                   </h2>
                   <p className="mt-1 text-xs sm:text-sm text-slate-400 font-medium">
-                    Selecciona el módulo de acceso correspondiente:
+                    Selecciona el tipo de operación que necesitas realizar.
                   </p>
                 </div>
 
@@ -271,7 +263,7 @@ export default function LoginPage() {
                       <h3 className="font-extrabold text-sm text-white group-hover:text-blue-300 transition-colors">
                         Consultar Encomienda
                       </h3>
-                      <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
+                      <p className="mt-0.5 text-xs font-medium leading-5 text-slate-400">
                         Acceso público para clientes con código de rastreo
                       </p>
                     </div>
@@ -289,7 +281,7 @@ export default function LoginPage() {
                       <h3 className="font-extrabold text-sm text-white group-hover:text-emerald-300 transition-colors">
                         Personal de Agencia
                       </h3>
-                      <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
+                      <p className="mt-0.5 text-xs font-medium leading-5 text-slate-400">
                         Ventas de pasajes, manifiestos y control de encomiendas
                       </p>
                     </div>
@@ -307,7 +299,7 @@ export default function LoginPage() {
                       <h3 className="font-extrabold text-sm text-white group-hover:text-amber-300 transition-colors">
                         Portal de Conductores
                       </h3>
-                      <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
+                      <p className="mt-0.5 text-xs font-medium leading-5 text-slate-400">
                         Viajes asignados, firmas de entrega, GPS e incidencias
                       </p>
                     </div>
@@ -643,11 +635,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right Side: Hero Visual Panel */}
-        <div className="lg:col-span-5 relative hidden lg:flex flex-col justify-between p-10 bg-linear-to-br from-emerald-950/80 via-slate-900/90 to-[#090d16] border-l border-white/10">
+        {/* Right Side: company information */}
+        <div className="login-context-panel relative hidden flex-col justify-between border-l border-emerald-950/20 bg-[#173d32] p-10 lg:col-span-5 lg:flex">
           <div className="flex items-center gap-2 text-emerald-400 text-xs font-black uppercase tracking-widest">
-            <Sparkles className="h-4 w-4" />
-            <span>Sistema Centralizado</span>
+            <ShieldCheck className="h-4 w-4" />
+            <span>Acceso interno autorizado</span>
           </div>
 
           <div className="space-y-4">
@@ -659,16 +651,16 @@ export default function LoginPage() {
                 <Navigation className="h-6 w-6" />
               </div>
             </div>
-            <h2 className="text-2xl xl:text-3xl font-black text-white leading-tight">
-              Gestión Logística Inteligente
+            <h2 className="text-2xl xl:text-3xl font-bold text-white leading-tight">
+              Operación diaria en una sola plataforma
             </h2>
             <p className="text-xs xl:text-sm text-slate-300 font-medium leading-relaxed">
-              Plataforma para la administración de encomiendas, pasajes, incidencias y ubicación GPS de la flota.
+              Venta de pasajes, control de encomiendas, programación de viajes y seguimiento de la flota.
             </p>
           </div>
 
           <div className="pt-6 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500 font-bold tracking-wider uppercase">
-            <span>Acceso protegido por roles</span>
+            <span>ECONNVRAE</span>
             <span>Ayacucho — VRAEM</span>
           </div>
         </div>

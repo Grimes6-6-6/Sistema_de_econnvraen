@@ -32,14 +32,7 @@ export default function RootLayout({
       className={`${roboto.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-[#090d16] text-slate-100 antialiased" suppressHydrationWarning>
-        {/* Animated Glassmorphism Background Blobs */}
-        <div className="ambient-bg">
-          <div className="ambient-blob-1"></div>
-          <div className="ambient-blob-2"></div>
-          <div className="ambient-blob-3"></div>
-        </div>
-
+      <body className="design-v2 min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <FeedbackProvider>
           <DatabaseProvider>
             <LocationProvider>

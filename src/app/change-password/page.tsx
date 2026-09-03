@@ -87,10 +87,10 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center p-4">
+    <main className="corporate-login relative flex min-h-screen items-center justify-center p-4">
       <form
         onSubmit={submit}
-        className="w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl backdrop-blur-xl sm:p-8"
+        className="change-password-card w-full max-w-md space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-premium sm:p-8"
       >
         <div className="flex items-center gap-3">
           <span className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-300">

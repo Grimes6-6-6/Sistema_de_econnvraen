@@ -179,7 +179,7 @@ export default function AgencySwitcher() {
       {error && <p role="alert" className="mt-2 text-[10px] text-red-400">{error}</p>}
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+        <div className="dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
           <form
             action={(formData) => void createAgency(formData)}
             role="dialog"
@@ -189,7 +189,7 @@ export default function AgencySwitcher() {
               if (event.key === "Escape") setShowCreate(false);
               trapDialogFocus(event);
             }}
-            className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+            className="corporate-dialog w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-premium"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>

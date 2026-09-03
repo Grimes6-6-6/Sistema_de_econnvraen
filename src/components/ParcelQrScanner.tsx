@@ -112,9 +112,9 @@ export default function ParcelQrScanner({
       role="dialog"
       aria-modal="true"
       aria-labelledby="parcel-qr-scanner-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md"
+      className="dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4"
     >
-      <section className="w-full max-w-md space-y-4 rounded-3xl border border-white/10 bg-slate-900 p-5 shadow-2xl sm:p-6">
+      <section className="corporate-dialog w-full max-w-md space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-premium sm:p-6">
         <header className="flex items-start justify-between gap-4">
           <div>
             <h2 id="parcel-qr-scanner-title" className="text-lg font-black text-white">
