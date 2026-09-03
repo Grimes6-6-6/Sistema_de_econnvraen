@@ -28,7 +28,6 @@ import {
   Search,
   CalendarDays,
   Navigation,
-  Bus,
   ArrowRight,
   MapPin,
   X,
@@ -834,19 +833,18 @@ export default function DashboardPage() {
   return (
     <div className="corporate-app flex min-h-screen flex-col text-slate-800 lg:flex-row">
       {/* ── SIDEBAR NAVIGATION ── */}
-      <aside className="corporate-sidebar no-print relative z-20 flex w-full shrink-0 flex-col border-b border-emerald-950/20 bg-[#173d32] lg:min-h-screen lg:w-64 lg:border-r lg:border-b-0">
+      <aside className="corporate-sidebar no-print relative z-20 flex w-full shrink-0 flex-col border-b border-slate-800 bg-[#182235] lg:min-h-screen lg:w-64 lg:border-r lg:border-b-0">
         {/* Brand */}
-        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-emerald-800">
-            <Bus className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-base font-black tracking-wider text-white flex items-center gap-1.5">
-              ECONNVRAE
-              <span className="rounded border border-emerald-300/30 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200">
-                Operaciones
-              </span>
-            </span>
+        <div className="flex h-16 items-center border-b border-white/10 px-4">
+          <div className="flex h-12 w-full items-center rounded-lg bg-white px-2 shadow-sm">
+            <Image
+              src="/econnvrae-logo.png"
+              alt="ECONNVRAE"
+              width={2086}
+              height={754}
+              priority
+              className="h-11 w-auto max-w-full object-contain"
+            />
           </div>
         </div>
 
@@ -915,13 +913,13 @@ export default function DashboardPage() {
                 aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap lg:w-full ${
                   isActive
-                    ? "bg-linear-to-r from-emerald-600 to-green-600 text-white shadow-lg shadow-emerald-950/50"
+                    ? "bg-linear-to-r from-sky-600 to-blue-700 text-white shadow-lg shadow-slate-950/40"
                     : "text-slate-400 hover:bg-slate-800/80 hover:text-white"
                 }`}
               >
                 <Icon
                   className={`h-4 w-4 shrink-0 ${
-                    isActive ? "text-white" : "text-emerald-400"
+                    isActive ? "text-white" : "text-sky-400"
                   }`}
                 />
                 <span>{tab.label}</span>
@@ -939,7 +937,7 @@ export default function DashboardPage() {
             <span className="truncate">
               {currentUser?.agenciaNombre || "Agencia activa"}
             </span>
-            <span className="text-[10px] uppercase tracking-wider text-emerald-400">
+            <span className="text-[10px] uppercase tracking-wider text-sky-300">
               Cuenta
             </span>
           </summary>
@@ -963,7 +961,7 @@ export default function DashboardPage() {
         {/* User profile / Agency panel in Sidebar footer */}
         <div className="hidden border-t border-white/10 bg-slate-950/60 p-4 lg:block space-y-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 border border-white/10 text-emerald-400 font-black text-sm">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 border border-white/10 text-sky-300 font-black text-sm">
               {currentUser ? currentUser.nombres[0] : "U"}
             </div>
             <div className="min-w-0 grow">
@@ -972,7 +970,7 @@ export default function DashboardPage() {
                   ? `${currentUser.nombres} ${currentUser.apellidos}`
                   : "Usuario"}
               </h4>
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
+              <span className="text-[10px] text-sky-300 font-bold uppercase tracking-wider block">
                 {currentUser ? currentUser.rol : "Operador"}
               </span>
             </div>

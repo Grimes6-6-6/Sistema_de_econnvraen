@@ -285,6 +285,7 @@
 }
 
 .corporate-sidebar {
+  background-color: #182235 !important;
   background-image: none !important;
   box-shadow: none !important;
 }
@@ -299,16 +300,16 @@
 
 .corporate-sidebar nav button[aria-current="page"] {
   background: #ffffff !important;
-  color: #173d32 !important;
+  color: #1e293b !important;
   box-shadow: none !important;
 }
 
 .corporate-sidebar nav button[aria-current="page"] svg {
-  color: #176b49 !important;
+  color: #2563a8 !important;
 }
 
 .corporate-sidebar nav button:not([aria-current="page"]) {
-  color: #d0ddd7 !important;
+  color: #cbd5e1 !important;
 }
 
 .corporate-sidebar nav button:not([aria-current="page"]):hover {

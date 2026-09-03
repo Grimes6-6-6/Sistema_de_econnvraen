@@ -6,7 +6,6 @@ import Image from "next/image";
 import {
   ArrowLeft,
   ArrowRight,
-  Bus,
   KeyRound,
   Lock,
   Navigation,
@@ -222,21 +221,18 @@ export default function LoginPage() {
         {/* Left Side: Form Container */}
         <div className="login-form-panel flex flex-col justify-center p-6 sm:p-10 lg:col-span-7 lg:p-12">
           {/* Logo / Brand */}
-          <div className="flex items-center gap-3">
-            <div className="brand-mark flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-700 text-white">
-              <Bus className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="flex items-center gap-2 text-xl font-bold tracking-wide text-slate-900">
-                ECONNVRAE
-                <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                  Personal autorizado
-                </span>
-              </span>
-              <p className="text-[11px] text-slate-400 font-semibold tracking-wide">
-                Transporte y Encomiendas Ayacucho - VRAEM
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <Image
+              src="/econnvrae-logo.png"
+              alt="ECONNVRAE - Autos y camionetas al VRAEM"
+              width={2086}
+              height={754}
+              priority
+              className="h-20 w-auto max-w-[72%] object-contain object-left"
+            />
+            <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[9px] font-bold text-slate-600 sm:text-[10px]">
+              Personal autorizado
+            </span>
           </div>
 
           <div className="mt-8">

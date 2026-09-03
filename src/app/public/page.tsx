@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   ArrowLeft,
   ClipboardList,
@@ -9,7 +10,6 @@ import {
   Search,
   ShieldCheck,
   Truck,
-  Bus,
   MapPin,
   Clock,
   QrCode,
@@ -125,15 +125,17 @@ export default function PublicClientPage() {
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-8 lg:px-10 justify-between">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-white/5 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-700 text-white">
-              <Bus className="h-5 w-5" />
-            </div>
+          <div className="flex min-w-0 items-center gap-3">
+            <Image
+              src="/econnvrae-logo.png"
+              alt="ECONNVRAE"
+              width={2086}
+              height={754}
+              priority
+              className="h-10 w-auto max-w-32 object-contain object-left sm:h-12 sm:max-w-40"
+            />
             <div>
-              <span className="text-base font-black tracking-wider text-white">
-                ECONNVRAE
-              </span>
-              <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+              <p className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-500 sm:block">
                 Rastreo Público de Envíos
               </p>
             </div>

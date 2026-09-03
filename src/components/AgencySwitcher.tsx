@@ -132,9 +132,9 @@ export default function AgencySwitcher() {
   };
 
   return (
-    <div className="mb-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+    <div className="mb-3 rounded-xl border border-slate-700/80 bg-slate-950/45 p-3">
       <div className="mb-2 flex items-center gap-2">
-        <Building2 className="h-4 w-4 text-emerald-400" />
+        <Building2 className="h-4 w-4 text-sky-300" />
         <div className="min-w-0 grow">
           <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">
             {currentUser.rol === "SUPER_ADMIN"
@@ -142,7 +142,7 @@ export default function AgencySwitcher() {
               : "Agencia activa"}
           </p>
           {currentUser.rol === "SUPER_ADMIN" && (
-            <p className="text-[9px] font-bold text-emerald-400">
+            <p className="text-[9px] font-bold text-sky-300">
               Vista global habilitada
             </p>
           )}
@@ -151,7 +151,7 @@ export default function AgencySwitcher() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="rounded-lg border border-emerald-700 p-1 text-emerald-400 transition hover:bg-emerald-700 hover:text-white"
+            className="rounded-lg border border-sky-600/70 p-1 text-sky-300 transition hover:bg-sky-600 hover:text-white"
             aria-label="Crear agencia"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -162,7 +162,7 @@ export default function AgencySwitcher() {
         value={currentUser.agenciaId || ""}
         onChange={(event) => void switchAgency(event.target.value)}
         disabled={busy || agencies.length === 0}
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-[11px] font-bold text-white outline-none focus:border-emerald-500 disabled:opacity-60"
+        className="w-full rounded-lg border border-slate-600 bg-slate-950/80 px-2 py-2 text-[11px] font-bold text-white outline-none focus:border-sky-500 disabled:opacity-60"
         aria-label="Agencia activa"
       >
         {agencies.length === 0 && (
@@ -276,7 +276,7 @@ export default function AgencySwitcher() {
             <button
               type="submit"
               disabled={busy}
-              className="mt-5 w-full rounded-xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-emerald-500 disabled:opacity-60"
+              className="mt-5 w-full rounded-xl bg-blue-700 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-blue-600 disabled:opacity-60"
             >
               {busy ? "Guardando..." : "Crear agencia"}
             </button>
