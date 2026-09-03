@@ -2,7 +2,56 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, KeyRound, ShieldCheck } from "lucide-react";
+
+type PasswordFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: "current-password" | "new-password";
+  minLength: number;
+};
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  minLength,
+}: PasswordFieldProps) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div>
+      <label htmlFor={id} className="block text-xs font-bold text-slate-300">
+        {label}
+      </label>
+      <div className="relative mt-1">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          required
+          minLength={minLength}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete={autoComplete}
+          className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 pr-12 text-white outline-none focus:border-emerald-500"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((current) => !current)}
+          aria-label={visible ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
+          aria-pressed={visible}
+          className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -55,42 +104,30 @@ export default function ChangePasswordPage() {
 
         {error && <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs font-bold text-rose-200">{error}</p>}
 
-        <label className="block text-xs font-bold text-slate-300">
-          Contraseña temporal
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            autoComplete="current-password"
-            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-white outline-none focus:border-emerald-500"
-          />
-        </label>
-        <label className="block text-xs font-bold text-slate-300">
-          Nueva contraseña
-          <input
-            type="password"
-            required
-            minLength={12}
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            autoComplete="new-password"
-            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-white outline-none focus:border-emerald-500"
-          />
-        </label>
-        <label className="block text-xs font-bold text-slate-300">
-          Confirmar nueva contraseña
-          <input
-            type="password"
-            required
-            minLength={12}
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-            autoComplete="new-password"
-            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-white outline-none focus:border-emerald-500"
-          />
-        </label>
+        <PasswordField
+          id="current-password"
+          label="Contraseña temporal"
+          minLength={8}
+          value={currentPassword}
+          onChange={setCurrentPassword}
+          autoComplete="current-password"
+        />
+        <PasswordField
+          id="new-password"
+          label="Nueva contraseña"
+          minLength={12}
+          value={newPassword}
+          onChange={setNewPassword}
+          autoComplete="new-password"
+        />
+        <PasswordField
+          id="confirm-password"
+          label="Confirmar nueva contraseña"
+          minLength={12}
+          value={confirmation}
+          onChange={setConfirmation}
+          autoComplete="new-password"
+        />
         <p className="text-[11px] leading-relaxed text-slate-400">
           Usa 12 o más caracteres con mayúscula, minúscula, número y símbolo. Todas las sesiones anteriores se cerrarán.
         </p>

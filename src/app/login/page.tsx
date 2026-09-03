@@ -15,6 +15,8 @@ import {
   User,
   Sparkles,
   Copy,
+  Eye,
+  EyeOff,
   QrCode,
   Smartphone,
 } from "lucide-react";
@@ -46,6 +48,7 @@ export default function LoginPage() {
   const [authStage, setAuthStage] = useState<AuthStage>("credentials");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [maskedPhone, setMaskedPhone] = useState("");
@@ -61,6 +64,7 @@ export default function LoginPage() {
     setError("");
     setUsername("");
     setPassword("");
+    setShowPassword(false);
     setMfaCode("");
     setMaskedPhone("");
     setAuthenticatorAvailable(false);
@@ -395,14 +399,23 @@ export default function LoginPage() {
                         <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                         <input
                           id="login-password"
-                          type="password"
+                          type={showPassword ? "text" : "password"}
                           required
                           autoComplete="current-password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-4 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                          className="w-full rounded-xl bg-slate-950/80 border border-white/10 px-12 py-3 pl-10 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
                           placeholder="••••••••"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((visible) => !visible)}
+                          aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                          aria-pressed={showPassword}
+                          className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
                       </div>
                     </div>
 
