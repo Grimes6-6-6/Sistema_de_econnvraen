@@ -224,6 +224,60 @@ export const operationalDocumentSchema = z
     }
   });
 
+export const driverOperationalDocumentSchema = z
+  .object({
+    documentType: z.enum([
+      "LICENCIA",
+      "SOAT",
+      "CITV",
+      "TUC",
+      "TARJETA_PROPIEDAD",
+      "ANTECEDENTES",
+      "SALUD",
+      "OTRO",
+    ]),
+    number: safeText(2, 60),
+    issuedAt: z.iso.date().optional().or(z.literal("")),
+    expiresAt: z.iso.date(),
+    notes: safeText(3, 300).optional().or(z.literal("")),
+    vehicleId: z.string().regex(/^V\d{2,10}$/).optional().or(z.literal("")),
+  })
+  .superRefine((value, context) => {
+    const vehicleDocumentTypes = new Set([
+      "SOAT",
+      "CITV",
+      "TUC",
+      "TARJETA_PROPIEDAD",
+    ]);
+    if (vehicleDocumentTypes.has(value.documentType) && !value.vehicleId) {
+      context.addIssue({
+        code: "custom",
+        path: ["vehicleId"],
+        message: "Selecciona el vehículo al que pertenece el documento.",
+      });
+    }
+    if (value.issuedAt && value.expiresAt < value.issuedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["expiresAt"],
+        message: "El vencimiento no puede ser anterior a la emisión.",
+      });
+    }
+  });
+
+export const operationalDocumentReviewSchema = z.object({
+  decision: z.enum(["APROBAR", "OBSERVAR"]),
+  reason: safeText(3, 300).optional().or(z.literal("")),
+}).superRefine((value, context) => {
+  if (value.decision === "OBSERVAR" && !value.reason) {
+    context.addIssue({
+      code: "custom",
+      path: ["reason"],
+      message: "Indica por qué se observa el documento.",
+    });
+  }
+});
+
 const managedRouteBaseSchema = z.object({
   originAgencyId: z.string().regex(/^A\d{2,10}$/),
   destinationAgencyId: z.string().regex(/^A\d{2,10}$/),
@@ -508,6 +562,8 @@ export type AdminUserCreateInput = z.infer<typeof adminUserCreateSchema>;
 export type AdminUserUpdateInput = z.infer<typeof adminUserUpdateSchema>;
 export type CancellationResolutionInput = z.infer<typeof cancellationResolutionSchema>;
 export type OperationalDocumentInput = z.infer<typeof operationalDocumentSchema>;
+export type DriverOperationalDocumentInput = z.infer<typeof driverOperationalDocumentSchema>;
+export type OperationalDocumentReviewInput = z.infer<typeof operationalDocumentReviewSchema>;
 export type ManagedRouteInput = z.infer<typeof managedRouteSchema>;
 export type ManagedRouteUpdateInput = z.infer<typeof managedRouteUpdateSchema>;
 export type ManagedVehicleInput = z.infer<typeof managedVehicleSchema>;

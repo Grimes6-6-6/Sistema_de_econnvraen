@@ -5,6 +5,7 @@ import {
   Building2,
   CheckCircle2,
   ClipboardCopy,
+  Download,
   FileClock,
   KeyRound,
   Plus,
@@ -61,6 +62,11 @@ function formatDate(value: string | null): string {
     dateStyle: "short",
     timeStyle: value.includes("T") ? "short" : undefined,
   }).format(new Date(value));
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const panelClass =
@@ -423,6 +429,64 @@ export default function AdminWorkspace() {
     } finally { setBusy(false); }
   };
 
+  const reviewDocument = async (
+    document: OperationalDocument,
+    decision: "APROBAR" | "OBSERVAR",
+  ) => {
+    const confirmation = await requestConfirmation({
+      title: decision === "APROBAR" ? "Aprobar documento" : "Observar documento",
+      message:
+        decision === "APROBAR"
+          ? `Confirma que revisaste el archivo ${document.documentType} de ${document.holderName}.`
+          : `Indica qué debe corregir ${document.holderName}.`,
+      confirmLabel: decision === "APROBAR" ? "Aprobar" : "Enviar observación",
+      cancelLabel: "Cancelar",
+      ...(decision === "OBSERVAR"
+        ? {
+            input: {
+              label: "Motivo de la observación",
+              placeholder: "Ej.: la imagen no permite leer la fecha de vencimiento",
+              minLength: 3,
+            },
+          }
+        : {}),
+    });
+    if (!confirmation.confirmed) return;
+
+    setBusy(true);
+    try {
+      const result = await api<{ document: OperationalDocument }>(
+        `/api/admin/documents/${document.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            decision,
+            reason: confirmation.value || "",
+          }),
+        },
+      );
+      setDocuments((current) =>
+        current.map((item) =>
+          item.id === result.document.id ? result.document : item,
+        ),
+      );
+      window.dispatchEvent(new Event("operational-documents-updated"));
+      await refreshDatabase();
+      notify({
+        type: "success",
+        title: decision === "APROBAR" ? "Documento aprobado" : "Observación enviada",
+      });
+    } catch (reason) {
+      notify({
+        type: "error",
+        title: "No se pudo revisar el documento",
+        message: reason instanceof Error ? reason.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleAgency = async (agency: Agency) => {
     setBusy(true);
     try {
@@ -567,7 +631,45 @@ export default function AdminWorkspace() {
           </div>
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <div><h4 className="text-xs font-black uppercase text-slate-300"><Route className="mr-1 inline h-4 w-4" /> Rutas y precios</h4><div className="mt-2 space-y-2">{routes.map((route) => <div key={route.id} className="flex items-center justify-between rounded-xl border border-white/10 p-3 text-xs"><span><b className="text-white">{route.origin} → {route.destination}</b><small className="block text-slate-500">{route.distanceKm} km · {route.durationHours} h</small></span><button onClick={() => void updateRoutePrice(route)} className="rounded-lg border border-emerald-500/30 px-2 py-1 text-emerald-300">S/ {route.price.toFixed(2)}</button></div>)}</div></div>
-            <div><h4 className="text-xs font-black uppercase text-slate-300"><FileClock className="mr-1 inline h-4 w-4" /> Vigencias documentarias</h4><div className="mt-2 max-h-72 space-y-2 overflow-y-auto">{documents.length === 0 ? <p className="text-xs text-slate-500">Aún no hay documentos registrados.</p> : documents.map((document) => <div key={document.id} className="flex items-center justify-between rounded-xl border border-white/10 p-3 text-xs"><span><b className="text-white">{document.documentType} · {document.holderName}</b><small className="block text-slate-500">Vence {formatDate(document.expiresAt)}</small></span><span className={document.state === "VIGENTE" ? "text-emerald-300" : document.state === "POR_VENCER" ? "text-amber-300" : "text-rose-300"}>{document.state}</span></div>)}</div></div>
+            <div>
+              <h4 className="text-xs font-black uppercase text-slate-300"><FileClock className="mr-1 inline h-4 w-4" /> Vigencias documentarias</h4>
+              <div className="mt-2 max-h-96 space-y-2 overflow-y-auto">
+                {documents.length === 0 ? (
+                  <p className="text-xs text-slate-500">Aún no hay documentos registrados.</p>
+                ) : documents.map((document) => (
+                  <div key={document.id} className="rounded-xl border border-white/10 p-3 text-xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0">
+                        <b className="block truncate text-white">{document.documentType} · {document.holderName}</b>
+                        <small className="block text-slate-500">Vence {formatDate(document.expiresAt)}</small>
+                        {document.source === "CONDUCTOR" && (
+                          <small className="block font-bold text-blue-300">Subido por el conductor</small>
+                        )}
+                        {document.file && (
+                          <small className="block truncate text-slate-500">{document.file.name} · {formatFileSize(document.file.size)}</small>
+                        )}
+                      </span>
+                      <span className={document.state === "VIGENTE" ? "text-emerald-300" : document.state === "POR_VENCER" ? "text-amber-300" : document.state === "PENDIENTE" ? "text-blue-300" : "text-rose-300"}>{document.state.replace("_", " ")}</span>
+                    </div>
+                    {(document.file || document.state === "PENDIENTE") && (
+                      <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                        {document.file && (
+                          <a href={document.file.downloadUrl} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-2 py-1 font-bold text-slate-300 hover:bg-slate-800">
+                            <Download className="h-3.5 w-3.5" /> Descargar
+                          </a>
+                        )}
+                        {document.state === "PENDIENTE" && (
+                          <>
+                            <button type="button" disabled={busy} onClick={() => void reviewDocument(document, "APROBAR")} className="rounded-lg bg-emerald-700 px-2 py-1 font-bold text-white disabled:opacity-50">Aprobar</button>
+                            <button type="button" disabled={busy} onClick={() => void reviewDocument(document, "OBSERVAR")} className="rounded-lg border border-rose-500/40 px-2 py-1 font-bold text-rose-300 disabled:opacity-50">Observar</button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="mt-5">
             <h4 className="text-xs font-black uppercase text-slate-300"><Truck className="mr-1 inline h-4 w-4" /> Estado de vehículos</h4>

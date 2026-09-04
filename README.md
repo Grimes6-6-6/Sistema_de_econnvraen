@@ -16,7 +16,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 - Manifiesto del conductor, incidencias de ruta, GPS ligado al viaje activo con historial, modo sin conexión y entrega con firma.
 - Reporte financiero por período y ruta, impresión/PDF y exportación CSV compatible con Excel.
 - Flujo de anulación con solicitud del operador y aprobación o rechazo del administrador, más auditoría global para el superadministrador.
-- Gestión de rutas, precios, vehículos y vencimientos documentarios (licencia, SOAT, CITV, TUC y tarjeta de propiedad).
+- Gestión de rutas, precios, vehículos y vencimientos documentarios (licencia, SOAT, CITV, TUC y tarjeta de propiedad), con archivos enviados por el conductor, revisión administrativa y alertas persistentes al superadministrador.
 - Diseño adaptable a escritorio, tableta y teléfono, con navegación por teclado y avisos accesibles.
 
 ## Requisitos
@@ -80,7 +80,7 @@ npm audit
 6. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
 7. Configurar `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET` y `TWILIO_FROM_NUMBER`. `TWILIO_SMS_TRIAL_TEMPLATE=true` se usa únicamente durante la prueba gratuita y debe cambiarse a `false` al actualizar la cuenta.
 8. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
-   Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las reversiones controladas 008, 009 y 010 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
+   Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las reversiones controladas 008, 009, 010 y 011 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
 9. Compilar e iniciar:
 
    ```bash
@@ -107,6 +107,7 @@ npm audit
 - Revisar usuarios, agencias y permisos cuando un colaborador cambia de función o deja la empresa.
 - Entregar las contraseñas temporales por un canal privado: se muestran una sola vez, vencen en 24 horas y obligan a crear una contraseña nueva.
 - Las anulaciones y cancelaciones exigen motivo y se registran para auditoría.
+- Los documentos del conductor admiten PDF, JPG, PNG o WEBP de hasta 3 MB. Para un volumen documental mayor se debe migrar el contenido a almacenamiento privado de objetos y conservar en PostgreSQL únicamente la metadata y trazabilidad.
 - El GPS web requiere mantener abierta la aplicación del conductor. Para seguimiento continuo con la pantalla bloqueada se necesita una aplicación móvil con permiso de ubicación en segundo plano o un rastreador dedicado.
 
 ## Estructura principal

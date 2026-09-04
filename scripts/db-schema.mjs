@@ -75,6 +75,14 @@ const CURRENT_COLUMNS = {
     "tipo_documento",
     "fecha_vencimiento",
     "estado",
+    "origen_registro",
+    "archivo_nombre",
+    "archivo_mime",
+    "archivo_tamano",
+    "archivo_sha256",
+    "archivo_contenido",
+    "revisado_por",
+    "revisado_at",
   ],
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -13,6 +13,7 @@ import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import { buildParcelTrackingUrl, maskDni } from "@/lib/domain/parcel-receipt";
+import type { OperationalDocument } from "@/lib/domain/admin";
 import {
   LayoutDashboard,
   Ticket,
@@ -32,6 +33,7 @@ import {
   MapPin,
   X,
   Settings,
+  BellRing,
 } from "lucide-react";
 
 // Map loaded client-side only (Leaflet needs window)
@@ -116,6 +118,8 @@ export default function DashboardPage() {
   } = useDatabase();
   const { notify, requestConfirmation } = useFeedback();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [documentAlerts, setDocumentAlerts] = useState<OperationalDocument[]>([]);
+  const [documentAlertsError, setDocumentAlertsError] = useState(false);
   const [activeTab, setActiveTab] = useState<
     | "dashboard"
     | "venta"
@@ -129,6 +133,66 @@ export default function DashboardPage() {
   const { locations } = useLocation();
   const can = (permission: Parameters<typeof roleHasPermission>[1]) =>
     Boolean(currentUser && roleHasPermission(currentUser.rol, permission));
+
+  useEffect(() => {
+    if (currentUser?.rol !== "SUPER_ADMIN") {
+      return;
+    }
+
+    const controller = new AbortController();
+    const loadDocumentAlerts = async () => {
+      try {
+        const response = await fetch("/api/admin/documents", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as {
+          documents?: OperationalDocument[];
+        };
+        if (!response.ok || !payload.documents) {
+          throw new Error("No se pudieron cargar las alertas documentarias.");
+        }
+
+        const latestByHolderAndType = new Map<string, OperationalDocument>();
+        for (const document of payload.documents) {
+          const key = `${document.holderType}:${document.holderId}:${document.documentType}`;
+          const current = latestByHolderAndType.get(key);
+          if (!current || Number(document.id.replace("DOC", "")) > Number(current.id.replace("DOC", ""))) {
+            latestByHolderAndType.set(key, document);
+          }
+        }
+        const priority = { VENCIDO: 0, PENDIENTE: 1, POR_VENCER: 2 } as const;
+        setDocumentAlerts(
+          [...latestByHolderAndType.values()]
+            .filter((document) =>
+              document.state === "VENCIDO" ||
+              document.state === "PENDIENTE" ||
+              document.state === "POR_VENCER",
+            )
+            .sort((left, right) =>
+              priority[left.state as keyof typeof priority] -
+                priority[right.state as keyof typeof priority] ||
+              left.expiresAt.localeCompare(right.expiresAt),
+            ),
+        );
+        setDocumentAlertsError(false);
+      } catch (reason: unknown) {
+        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        setDocumentAlertsError(true);
+      }
+    };
+
+    void loadDocumentAlerts();
+    const interval = window.setInterval(() => void loadDocumentAlerts(), 60_000);
+    const refreshAlerts = () => void loadDocumentAlerts();
+    window.addEventListener("operational-documents-updated", refreshAlerts);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("operational-documents-updated", refreshAlerts);
+    };
+  }, [currentUser?.rol]);
 
   const handleLogout = async () => {
     await logoutUser();
@@ -927,6 +991,11 @@ export default function DashboardPage() {
                   locations.filter((l) => l.isActive).length > 0 && (
                     <span className="ml-auto h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   )}
+                {tab.id === "administracion" && documentAlerts.length > 0 && (
+                  <span className="ml-auto min-w-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[9px] font-black text-white">
+                    {documentAlerts.length > 99 ? "99+" : documentAlerts.length}
+                  </span>
+                )}
               </button>
             );
             })}
@@ -1013,6 +1082,41 @@ export default function DashboardPage() {
                 })}
               </span>
             </div>
+
+            {currentUser?.rol === "SUPER_ADMIN" && documentAlerts.length > 0 && (
+              <section role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-slate-800 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                      <BellRing className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <h3 className="font-bold">{documentAlerts.length} alerta{documentAlerts.length === 1 ? "" : "s"} documentaria{documentAlerts.length === 1 ? "" : "s"}</h3>
+                      <p className="text-xs text-slate-600">Incluye documentos pendientes de revisión, próximos a vencer o vencidos en todas las agencias.</p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setActiveTab("administracion")} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700">
+                    Revisar documentos
+                  </button>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {documentAlerts.slice(0, 3).map((document) => (
+                    <div key={document.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs">
+                      <b>{document.documentType} · {document.holderName}</b>
+                      <span className={`mt-0.5 block font-bold ${document.state === "VENCIDO" ? "text-rose-700" : document.state === "PENDIENTE" ? "text-blue-700" : "text-amber-700"}`}>
+                        {document.state.replace("_", " ")} · vence {new Date(`${document.expiresAt}T12:00:00`).toLocaleDateString("es-PE")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {currentUser?.rol === "SUPER_ADMIN" && documentAlertsError && (
+              <section role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
+                No se pudieron comprobar las vigencias documentarias. Revisa la conexión antes de programar viajes.
+              </section>
+            )}
 
             {/* KPI grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

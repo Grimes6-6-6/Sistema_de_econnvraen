@@ -13,6 +13,10 @@ import { useLocation } from "@/context/LocationContext";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import {
+  isVehicleDocumentType,
+  type OperationalDocument,
+} from "@/lib/domain/admin";
+import {
   ArrowLeft,
   User,
   CheckCircle2,
@@ -36,6 +40,9 @@ import {
   Zap,
   WifiOff,
   AlertOctagon,
+  Download,
+  FileCheck2,
+  Upload,
 } from "lucide-react";
 
 // Dynamically load the map — no SSR (Leaflet needs window)
@@ -58,6 +65,31 @@ function trapDialogFocus(event: React.KeyboardEvent<HTMLElement>) {
     event.preventDefault();
     first.focus();
   }
+}
+
+const DOCUMENT_LABELS: Record<OperationalDocument["documentType"], string> = {
+  LICENCIA: "Licencia de conducir",
+  SOAT: "SOAT",
+  CITV: "Revisión técnica (CITV)",
+  TUC: "TUC",
+  TARJETA_PROPIEDAD: "Tarjeta de propiedad",
+  ANTECEDENTES: "Certificado de antecedentes",
+  SALUD: "Aptitud médica",
+  OTRO: "Otro documento",
+};
+
+function formatDocumentDate(value: string): string {
+  return new Intl.DateTimeFormat("es-PE", { dateStyle: "medium" }).format(
+    new Date(`${value}T12:00:00`),
+  );
+}
+
+function documentStateLabel(state: OperationalDocument["state"]): string {
+  if (state === "PENDIENTE") return "Pendiente de revisión";
+  if (state === "POR_VENCER") return "Por vencer";
+  if (state === "VENCIDO") return "Vencido";
+  if (state === "OBSERVADO") return "Observado";
+  return "Vigente";
 }
 
 export default function ConductorPage() {
@@ -130,6 +162,11 @@ export default function ConductorPage() {
   const [profileEmail, setProfileEmail] = useState("");
   const [profileAddress, setProfileAddress] = useState("");
   const [profileLicense, setProfileLicense] = useState("");
+  const [driverDocuments, setDriverDocuments] = useState<OperationalDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [documentType, setDocumentType] = useState<OperationalDocument["documentType"]>("LICENCIA");
+  const documentFormRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +197,36 @@ export default function ConductorPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/conductor/documents", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          documents?: OperationalDocument[];
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.documents) {
+          throw new Error(payload.error?.message || "No se pudieron cargar los documentos.");
+        }
+        if (!cancelled) setDriverDocuments(payload.documents);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          notify({
+            type: "error",
+            title: "No se pudieron cargar tus documentos",
+            message: reason instanceof Error ? reason.message : undefined,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDocumentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [notify]);
+
   const handleLogout = async () => {
     stopTracking();
     await logoutUser();
@@ -183,6 +250,14 @@ export default function ConductorPage() {
   const todayStr = getTodayDateString();
   const conductorId = currentUser?.conductorId || "";
   const conductorRecord = db.conductores.find((c) => c.id === conductorId);
+  const assignedVehicleIds = new Set(
+    db.viajes
+      .filter((trip) => trip.id_conductor === conductorId)
+      .map((trip) => trip.id_vehiculo),
+  );
+  const assignedVehicles = db.vehiculos.filter((vehicle) =>
+    assignedVehicleIds.has(vehicle.id),
+  );
   const myTrips = db.viajes.filter(
     (v) => v.id_conductor === conductorId && v.fecha === todayStr,
   );
@@ -344,6 +419,41 @@ export default function ConductorPage() {
       });
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const uploadDocument = async (formData: FormData) => {
+    setIsUploadingDocument(true);
+    try {
+      const response = await fetch("/api/conductor/documents", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { document?: OperationalDocument; error?: { message?: string } }
+        | null;
+      if (!response.ok || !payload?.document) {
+        throw new Error(payload?.error?.message || "No se pudo adjuntar el documento.");
+      }
+      setDriverDocuments((current) => [
+        payload.document!,
+        ...current.filter((item) => item.id !== payload.document!.id),
+      ]);
+      documentFormRef.current?.reset();
+      setDocumentType("LICENCIA");
+      notify({
+        type: "success",
+        title: "Documento enviado",
+        message: "El superadministrador recibió una alerta para revisarlo.",
+      });
+    } catch (reason) {
+      notify({
+        type: "error",
+        title: "No se pudo subir el documento",
+        message: reason instanceof Error ? reason.message : undefined,
+      });
+    } finally {
+      setIsUploadingDocument(false);
     }
   };
 
@@ -1230,6 +1340,122 @@ export default function ConductorPage() {
                 </button>
               )}
             </div>
+
+            {driverDocuments.some((document) =>
+              document.state === "VENCIDO" || document.state === "POR_VENCER",
+            ) && (
+              <div role="alert" className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <b className="text-sm">Tienes documentos que requieren atención</b>
+                  <p className="text-xs">Renueva los documentos vencidos o próximos a vencer antes de tu siguiente viaje.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Driver documents */}
+            <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-premium">
+              <div className="flex items-start gap-3 border-b border-slate-800 pb-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                  <FileCheck2 className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="font-black text-white">Mis documentos</h3>
+                  <p className="text-xs text-slate-400">Adjunta una foto clara o un PDF. Administración revisará cada envío.</p>
+                </div>
+              </div>
+
+              <form ref={documentFormRef} action={(data) => void uploadDocument(data)} className="mt-5 grid gap-4 sm:grid-cols-2">
+                <label className="text-xs font-bold text-slate-300">
+                  Tipo de documento
+                  <select
+                    name="documentType"
+                    value={documentType}
+                    onChange={(event) => setDocumentType(event.target.value as OperationalDocument["documentType"])}
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-blue-500"
+                  >
+                    {Object.entries(DOCUMENT_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {isVehicleDocumentType(documentType) && (
+                  <label className="text-xs font-bold text-slate-300">
+                    Vehículo asignado
+                    <select name="vehicleId" required className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-blue-500">
+                      <option value="">Selecciona un vehículo</option>
+                      {assignedVehicles.map((vehicle) => (
+                        <option key={vehicle.id} value={vehicle.id}>{vehicle.placa} · {vehicle.marca} {vehicle.modelo}</option>
+                      ))}
+                    </select>
+                    {assignedVehicles.length === 0 && (
+                      <small className="mt-1 block font-medium text-amber-400">No tienes vehículos asignados para este documento.</small>
+                    )}
+                  </label>
+                )}
+
+                <label className="text-xs font-bold text-slate-300">
+                  Número del documento
+                  <input name="number" required minLength={2} maxLength={60} placeholder="Número o código" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-blue-500" />
+                </label>
+                <label className="text-xs font-bold text-slate-300">
+                  Fecha de emisión
+                  <input name="issuedAt" type="date" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-blue-500" />
+                </label>
+                <label className="text-xs font-bold text-slate-300">
+                  Fecha de vencimiento
+                  <input name="expiresAt" type="date" required className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-blue-500" />
+                </label>
+                <label className="text-xs font-bold text-slate-300">
+                  Archivo
+                  <input name="file" type="file" required accept="application/pdf,image/jpeg,image/png,image/webp" className="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-700 file:px-3 file:py-1.5 file:font-bold file:text-white" />
+                  <small className="mt-1 block font-medium text-slate-500">PDF, JPG, PNG o WEBP · máximo 3 MB</small>
+                </label>
+                <label className="text-xs font-bold text-slate-300 sm:col-span-2">
+                  Observación opcional
+                  <input name="notes" maxLength={300} placeholder="Información adicional para la revisión" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-blue-500" />
+                </label>
+                <button
+                  type="submit"
+                  disabled={isUploadingDocument || (isVehicleDocumentType(documentType) && assignedVehicles.length === 0)}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2"
+                >
+                  <Upload className="h-4 w-4" /> {isUploadingDocument ? "Subiendo..." : "Enviar documento a revisión"}
+                </button>
+              </form>
+
+              <div className="mt-6 border-t border-slate-800 pt-5">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Documentos enviados</h4>
+                {documentsLoading ? (
+                  <p className="mt-3 text-xs text-slate-500">Cargando documentos...</p>
+                ) : driverDocuments.length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500">Aún no has adjuntado documentos.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {driverDocuments.map((document) => (
+                      <article key={document.id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <b className="text-sm text-white">{DOCUMENT_LABELS[document.documentType]}</b>
+                            <p className="text-xs text-slate-400">N.° {document.number} · vence {formatDocumentDate(document.expiresAt)}</p>
+                            {document.notes && <p className="mt-1 text-xs text-rose-300">{document.notes}</p>}
+                          </div>
+                          <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${document.state === "VIGENTE" ? "bg-emerald-500/10 text-emerald-400" : document.state === "POR_VENCER" ? "bg-amber-500/10 text-amber-400" : document.state === "PENDIENTE" ? "bg-blue-500/10 text-blue-400" : "bg-rose-500/10 text-rose-400"}`}>
+                            {documentStateLabel(document.state)}
+                          </span>
+                        </div>
+                        {document.file && (
+                          <a href={document.file.downloadUrl} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800">
+                            <Download className="h-3.5 w-3.5" /> Descargar archivo
+                          </a>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4">

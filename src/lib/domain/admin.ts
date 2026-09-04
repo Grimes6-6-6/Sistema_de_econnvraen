@@ -66,8 +66,37 @@ export interface OperationalDocument {
   number: string;
   issuedAt: string;
   expiresAt: string;
-  state: "VIGENTE" | "POR_VENCER" | "VENCIDO" | "OBSERVADO";
+  state: "PENDIENTE" | "VIGENTE" | "POR_VENCER" | "VENCIDO" | "OBSERVADO";
   notes: string;
+  source: "ADMIN" | "CONDUCTOR";
+  file: {
+    name: string;
+    mimeType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+    size: number;
+    downloadUrl: string;
+  } | null;
+}
+
+export const PERSONAL_DOCUMENT_TYPES = [
+  "LICENCIA",
+  "ANTECEDENTES",
+  "SALUD",
+  "OTRO",
+] as const satisfies readonly OperationalDocument["documentType"][];
+
+export const VEHICLE_DOCUMENT_TYPES = [
+  "SOAT",
+  "CITV",
+  "TUC",
+  "TARJETA_PROPIEDAD",
+] as const satisfies readonly OperationalDocument["documentType"][];
+
+export function isVehicleDocumentType(
+  value: OperationalDocument["documentType"],
+): boolean {
+  return VEHICLE_DOCUMENT_TYPES.includes(
+    value as (typeof VEHICLE_DOCUMENT_TYPES)[number],
+  );
 }
 
 export interface ManagedRoute {
