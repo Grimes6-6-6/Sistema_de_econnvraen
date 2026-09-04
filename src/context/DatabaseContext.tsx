@@ -41,19 +41,10 @@ export type Usuario = SessionUser;
 export type LoginResult =
   | { user: Usuario }
   | {
-      nextStep: "MFA_SETUP" | "MFA_VERIFY";
-      notice?: string;
-    }
-  | {
       nextStep: "SMS_VERIFY";
       maskedPhone: string;
       retryAfterSeconds: number;
-      authenticatorAvailable: boolean;
     };
-export interface MfaSetupDetails {
-  qrCodeDataUrl: string;
-  manualKey: string;
-}
 
 interface DatabaseContextType {
   db: DatabaseState;
@@ -122,14 +113,7 @@ interface DatabaseContextType {
   refreshDatabase: () => Promise<void>;
   currentUser: Usuario | null;
   loginUser: (username: string, password: string) => Promise<LoginResult>;
-  startMfaSetup: () => Promise<MfaSetupDetails>;
-  confirmMfaSetup: (
-    code: string,
-  ) => Promise<{ user: Usuario; recoveryCodes: string[] }>;
-  verifyMfa: (
-    code: string,
-    method: "sms" | "totp" | "recovery",
-  ) => Promise<Usuario>;
+  verifySmsCode: (code: string) => Promise<Usuario>;
   resendSmsCode: () => Promise<{
     maskedPhone: string;
     retryAfterSeconds: number;
@@ -272,35 +256,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     return payload;
   };
 
-  const startMfaSetup = async (): Promise<MfaSetupDetails> => {
-    const payload = await apiRequest<{ setup: MfaSetupDetails }>(
-      "/api/auth/mfa/setup",
-      { method: "POST", body: JSON.stringify({ action: "start" }) },
-    );
-    return payload.setup;
-  };
-
-  const confirmMfaSetup = async (
-    code: string,
-  ): Promise<{ user: Usuario; recoveryCodes: string[] }> => {
-    const payload = await apiRequest<{
-      user: Usuario;
-      recoveryCodes: string[];
-    }>("/api/auth/mfa/setup", {
-      method: "POST",
-      body: JSON.stringify({ action: "confirm", code }),
-    });
-    await establishAuthenticatedUser(payload.user);
-    return payload;
-  };
-
-  const verifyMfa = async (
-    code: string,
-    method: "sms" | "totp" | "recovery",
-  ): Promise<Usuario> => {
+  const verifySmsCode = async (code: string): Promise<Usuario> => {
     const payload = await apiRequest<{ user: Usuario }>(
       "/api/auth/mfa/verify",
-      { method: "POST", body: JSON.stringify({ code, method }) },
+      { method: "POST", body: JSON.stringify({ code, method: "sms" }) },
     );
     return establishAuthenticatedUser(payload.user);
   };
@@ -762,9 +721,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
         refreshDatabase,
         currentUser,
         loginUser,
-        startMfaSetup,
-        confirmMfaSetup,
-        verifyMfa,
+        verifySmsCode,
         resendSmsCode,
         logoutUser,
       }}

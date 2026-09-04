@@ -44,23 +44,10 @@ export const loginSchema = z.object({
 });
 
 const totpCodeSchema = z.string().trim().regex(/^\d{6}$/);
-const recoveryCodeSchema = z
-  .string()
-  .trim()
-  .toUpperCase()
-  .transform((value) => value.replace(/-/g, ""))
-  .pipe(z.string().regex(/^[A-HJ-NP-Z2-9]{12}$/));
-
-export const mfaSetupSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("start") }),
-  z.object({ action: z.literal("confirm"), code: totpCodeSchema }),
-]);
-
-export const mfaVerificationSchema = z.discriminatedUnion("method", [
-  z.object({ method: z.literal("sms"), code: totpCodeSchema }),
-  z.object({ method: z.literal("totp"), code: totpCodeSchema }),
-  z.object({ method: z.literal("recovery"), code: recoveryCodeSchema }),
-]);
+export const mfaVerificationSchema = z.object({
+  method: z.literal("sms"),
+  code: totpCodeSchema,
+});
 
 export const mfaSmsResendSchema = z.object({
   action: z.literal("resend"),
@@ -147,6 +134,7 @@ export const adminUserCreateSchema = z
     phone: phoneSchema,
     email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
     role: userRoleSchema,
+    smsMfaEnabled: z.boolean().default(false),
     agencyIds: z.array(z.string().regex(/^A\d{2,10}$/)).min(1).max(20),
     driver: driverAccountSchema.optional(),
   })
@@ -175,6 +163,7 @@ export const adminUserUpdateSchema = z
     phone: phoneSchema.optional().or(z.literal("")),
     email: z.email().trim().toLowerCase().max(150).optional().or(z.literal("")),
     role: userRoleSchema.optional(),
+    smsMfaEnabled: z.boolean().optional(),
     state: z.enum(["ACTIVO", "INACTIVO", "BLOQUEADO"]).optional(),
     agencyIds: z.array(z.string().regex(/^A\d{2,10}$/)).min(1).max(20).optional(),
     driver: driverAccountSchema.optional(),

@@ -1,7 +1,6 @@
 import { getMfaChallenge } from "@/lib/auth/session";
 import { toClientSessionUser } from "@/lib/auth/types";
 import { mfaVerificationSchema } from "@/lib/validation/schemas";
-import { verifyMfaChallenge } from "@/server/auth/mfa";
 import { verifySmsChallenge } from "@/server/auth/sms-mfa";
 import { unauthorized } from "@/server/errors";
 import {
@@ -50,16 +49,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (input.method === "sms") {
-      await verifySmsChallenge(challenge, input.code, ipHash);
-    } else {
-      await verifyMfaChallenge(
-        challenge,
-        input.code,
-        ipHash,
-        input.method,
-      );
-    }
+    await verifySmsChallenge(challenge, input.code, ipHash);
     await clearRateLimit(rateLimitKey);
     await clearRateLimit(`login:${ipHash}`);
     return noStoreJson({ user: toClientSessionUser(challenge.user) });

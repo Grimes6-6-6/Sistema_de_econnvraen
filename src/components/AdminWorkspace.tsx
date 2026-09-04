@@ -178,6 +178,7 @@ export default function AdminWorkspace() {
         phone: formData.get("phone"),
         email: formData.get("email"),
         role,
+        smsMfaEnabled: formData.get("smsMfaEnabled") === "on",
         agencyIds: [formData.get("agencyId")],
         driver:
           role === "CONDUCTOR"
@@ -215,6 +216,7 @@ export default function AdminWorkspace() {
         phone: formData.get("phone"),
         email: formData.get("email"),
         role: formData.get("role"),
+        smsMfaEnabled: formData.get("smsMfaEnabled") === "on",
         agencyIds: [formData.get("agencyId")],
         driver:
           formData.get("role") === "CONDUCTOR"
@@ -284,11 +286,11 @@ export default function AdminWorkspace() {
     }
   };
 
-  const resetMfa = async (managedUser: ManagedUser) => {
+  const disableSmsVerification = async (managedUser: ManagedUser) => {
     const confirmation = await requestConfirmation({
-      title: "Restablecer segundo factor",
-      message: "Se cerrarán las sesiones y el usuario deberá vincular nuevamente su aplicación autenticadora.",
-      confirmLabel: "Restablecer 2FA",
+      title: "Desactivar verificación SMS",
+      message: "La cuenta volverá a ingresar solo con contraseña y se cerrarán sus sesiones actuales.",
+      confirmLabel: "Desactivar SMS",
       cancelLabel: "Volver",
       tone: "danger",
     });
@@ -296,10 +298,10 @@ export default function AdminWorkspace() {
     setBusy(true);
     try {
       await api<{ success: boolean }>(`/api/admin/users/${managedUser.id}/reset-mfa`, { method: "POST" });
-      notify({ type: "success", title: "Segundo factor restablecido", message: "El usuario deberá configurarlo en su próximo ingreso." });
+      notify({ type: "success", title: "Verificación SMS desactivada" });
       await load();
     } catch (reason) {
-      notify({ type: "error", title: "No se pudo restablecer 2FA", message: reason instanceof Error ? reason.message : undefined });
+      notify({ type: "error", title: "No se pudo desactivar el SMS", message: reason instanceof Error ? reason.message : undefined });
     } finally {
       setBusy(false);
     }
@@ -636,6 +638,10 @@ export default function AdminWorkspace() {
                 <option value="OPERADOR">Operador</option><option value="CONDUCTOR">Conductor</option>
                 {currentUser.rol === "SUPER_ADMIN" && <option value="SUPER_ADMIN">Superadministrador</option>}
               </select></label>
+              <label className="flex items-center gap-2 self-end rounded-xl border border-white/10 px-3 py-2.5 text-xs font-bold text-slate-300">
+                <input key={`new-sms-${newUserRole}`} name="smsMfaEnabled" type="checkbox" defaultChecked={["SUPER_ADMIN", "ADMINISTRADOR"].includes(newUserRole)} className="h-4 w-4" />
+                Pedir código SMS al ingresar
+              </label>
               <label className="text-xs font-bold text-slate-300">Agencia<select name="agencyId" required className={inputClass}>{activeAgencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select></label>
               {newUserRole === "CONDUCTOR" && <>
                 <label className="text-xs font-bold text-slate-300">Licencia<input name="licenseNumber" required className={inputClass} /></label>
@@ -668,8 +674,10 @@ export default function AdminWorkspace() {
                     <td className="p-2">{item.agencyNames.join(", ")}</td>
                     <td className="p-2">
                       <span className={item.state === "ACTIVO" ? "text-emerald-300" : "text-rose-300"}>{item.state}</span>
-                      <span className={`block text-[9px] ${item.phone ? "text-emerald-300" : "text-amber-300"}`}>{item.phone ? "SMS listo" : "Celular pendiente"}</span>
-                      {item.mfaEnabled && <span className="block text-[9px] text-blue-300">App autenticadora activa</span>}
+                      <span className={`block text-[9px] ${item.smsMfaEnabled ? "text-blue-300" : "text-slate-500"}`}>
+                        {item.smsMfaEnabled ? "Verificación SMS activa" : "Acceso con contraseña"}
+                      </span>
+                      {!item.phone && <span className="block text-[9px] text-amber-300">Celular pendiente</span>}
                       {item.mustChangePassword && <span className="block text-[9px] text-amber-300">Cambio de clave pendiente</span>}
                     </td>
                     <td className="p-2">
@@ -696,7 +704,7 @@ export default function AdminWorkspace() {
                       <div className="flex justify-end gap-1">
                         <button type="button" onClick={() => { setEditingUser(item); setEditingRole(item.role); }} className="rounded-lg border border-white/10 px-2 py-1">Editar</button>
                         <button type="button" aria-label={`Restablecer contraseña de ${item.username}`} onClick={() => void resetPassword(item)} className="rounded-lg border border-amber-500/30 px-2 py-1 text-amber-300"><KeyRound className="h-3.5 w-3.5" /></button>
-                        {item.mfaEnabled && <button type="button" aria-label={`Restablecer segundo factor de ${item.username}`} onClick={() => void resetMfa(item)} className="rounded-lg border border-blue-500/30 px-2 py-1 text-blue-300"><ShieldCheck className="h-3.5 w-3.5" /></button>}
+                        {item.smsMfaEnabled && <button type="button" aria-label={`Desactivar verificación SMS de ${item.username}`} onClick={() => void disableSmsVerification(item)} className="rounded-lg border border-blue-500/30 px-2 py-1 text-blue-300"><ShieldCheck className="h-3.5 w-3.5" /></button>}
                         <button type="button" onClick={() => void toggleUser(item)} className="rounded-lg border border-rose-500/30 px-2 py-1 text-rose-300">{item.state === "ACTIVO" ? "Bloquear" : "Activar"}</button>
                       </div>
                     </td>
@@ -714,6 +722,10 @@ export default function AdminWorkspace() {
               <label className="text-xs font-bold">Celular<input name="phone" defaultValue={editingUser.phone} className={inputClass} /></label>
               <label className="text-xs font-bold">Correo<input name="email" type="email" defaultValue={editingUser.email} className={inputClass} /></label>
               <label className="text-xs font-bold">Rol<select name="role" value={editingRole} onChange={(event) => setEditingRole(event.target.value as ManagedUser["role"])} className={inputClass}>{currentUser.rol === "SUPER_ADMIN" && <option value="ADMINISTRADOR">Administrador</option>}<option value="OPERADOR">Operador</option><option value="CONDUCTOR">Conductor</option>{currentUser.rol === "SUPER_ADMIN" && <option value="SUPER_ADMIN">Superadministrador</option>}</select></label>
+              <label className="flex items-center gap-2 self-end rounded-xl border border-white/10 px-3 py-2.5 text-xs font-bold">
+                <input key={`edit-sms-${editingUser.id}`} name="smsMfaEnabled" type="checkbox" defaultChecked={editingUser.smsMfaEnabled} className="h-4 w-4" />
+                Pedir código SMS al ingresar
+              </label>
               <label className="text-xs font-bold">Agencia<select name="agencyId" defaultValue={editingUser.agencyIds[0]} className={inputClass}>{activeAgencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select></label>
               {editingRole === "CONDUCTOR" && <><label className="text-xs font-bold">Licencia<input name="licenseNumber" defaultValue={editingUser.driver?.licenseNumber} required className={inputClass} /></label><label className="text-xs font-bold">Categoría<input name="licenseCategory" defaultValue={editingUser.driver?.licenseCategory} required className={inputClass} /></label><label className="text-xs font-bold">Vencimiento<input name="licenseExpiresAt" type="date" defaultValue={editingUser.driver?.licenseExpiresAt} required className={inputClass} /></label></>}
               <div className="flex items-end gap-2"><button disabled={busy} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white">Guardar</button><button type="button" onClick={() => setEditingUser(null)} className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold">Cancelar</button></div>

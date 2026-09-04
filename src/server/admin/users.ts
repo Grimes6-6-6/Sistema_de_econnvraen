@@ -32,7 +32,7 @@ interface ManagedUserRow extends QueryResultRow {
   agency_ids: number[] | null;
   agency_names: string[] | null;
   must_change_password: boolean;
-  mfa_enabled: boolean;
+  sms_mfa_enabled: boolean;
   last_login_at: string | null;
   id_conductor: number | null;
   nro_licencia: string | null;
@@ -48,6 +48,7 @@ interface TargetUserRow extends QueryResultRow {
   id_usuario: number;
   id_persona: number;
   role: UserRole;
+  phone: string;
   agency_ids: number[];
 }
 
@@ -77,7 +78,7 @@ function mapUser(row: ManagedUserRow): ManagedUser {
     agencyIds: (row.agency_ids || []).map((id) => formatEntityId("A", id)),
     agencyNames: row.agency_names || [],
     mustChangePassword: row.must_change_password,
-    mfaEnabled: row.mfa_enabled,
+    smsMfaEnabled: row.sms_mfa_enabled,
     lastLoginAt: row.last_login_at,
     driver:
       row.id_conductor && row.nro_licencia && row.categoria_licencia && row.fecha_vencimiento
@@ -117,7 +118,7 @@ const USER_SELECT = `
       ARRAY[]::varchar[]
     ) AS agency_names,
     u.must_change_password,
-    u.mfa_enabled,
+    u.sms_mfa_enabled,
     u.last_login_at::text,
     c.id_conductor,
     c.nro_licencia,
@@ -190,12 +191,14 @@ function assertAssignableRole(actor: SessionUser, role: UserRole): void {
 async function findTarget(userId: number): Promise<TargetUserRow> {
   const result = await query<TargetUserRow>(
     `SELECT u.id_usuario, u.id_persona, r.nombre AS role,
+            COALESCE(p.telefono, '') AS phone,
             COALESCE(ARRAY_AGG(ua.id_agencia) FILTER (WHERE ua.estado = 'ACTIVO'), ARRAY[]::integer[]) AS agency_ids
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
+     LEFT JOIN personas p ON p.id_persona = u.id_persona
      LEFT JOIN usuarios_agencias ua ON ua.id_usuario = u.id_usuario
      WHERE u.id_usuario = $1
-     GROUP BY u.id_usuario, r.nombre`,
+     GROUP BY u.id_usuario, r.nombre, p.id_persona`,
     [userId],
   );
   const target = result.rows[0];
@@ -358,14 +361,21 @@ export async function createManagedUser(
       account = await client.query<{ id_usuario: number }>(
         `INSERT INTO usuarios (
            username, password_hash, id_persona, id_rol, estado,
-           must_change_password, temporary_password_expires_at
+           must_change_password, temporary_password_expires_at, sms_mfa_enabled
          )
          SELECT $1, $2, $3, role.id_rol, 'ACTIVO', TRUE,
-                NOW() + ($5::integer * INTERVAL '1 hour')
+                NOW() + ($5::integer * INTERVAL '1 hour'), $6
          FROM roles role
          WHERE role.nombre = $4
          RETURNING id_usuario`,
-        [input.username, passwordHash, personId, input.role, TEMPORARY_PASSWORD_HOURS],
+        [
+          input.username,
+          passwordHash,
+          personId,
+          input.role,
+          TEMPORARY_PASSWORD_HOURS,
+          input.smsMfaEnabled,
+        ],
       );
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "23505") {
@@ -408,7 +418,11 @@ export async function createManagedUser(
         action: "USER_CREATED",
         entity: "usuario",
         entityId: formatEntityId("U", newUserId),
-        metadata: { role: input.role, agencyIds: input.agencyIds },
+        metadata: {
+          role: input.role,
+          agencyIds: input.agencyIds,
+          smsMfaEnabled: input.smsMfaEnabled,
+        },
       },
       client,
     );
@@ -435,6 +449,13 @@ export async function updateManagedUser(
     ? await resolveAgencyIds(actor, input.agencyIds)
     : null;
   const nextRole = input.role || target.role;
+  const nextPhone = input.phone === undefined ? target.phone : input.phone;
+  if (input.smsMfaEnabled && !/^9\d{8}$/.test(nextPhone)) {
+    throw conflict(
+      "SMS_PHONE_REQUIRED",
+      "Registra un celular peruano válido antes de activar la verificación por SMS.",
+    );
+  }
 
   await withTransaction(async (client) => {
     await client.query(
@@ -454,13 +475,25 @@ export async function updateManagedUser(
          SET username = COALESCE($1, account.username),
              id_rol = COALESCE((SELECT id_rol FROM roles WHERE nombre = $2), account.id_rol),
              estado = COALESCE($3, account.estado),
+             sms_mfa_enabled = CASE
+               WHEN $4::boolean IS NOT NULL THEN $4
+               WHEN $5::text = '' THEN FALSE
+               ELSE account.sms_mfa_enabled
+             END,
              password_changed_at = CASE
                WHEN $2::text IS NOT NULL OR $3::text IS NOT NULL THEN NOW()
                ELSE account.password_changed_at
              END,
              updated_at = NOW()
-         WHERE id_usuario = $4`,
-        [input.username ?? null, input.role ?? null, input.state ?? null, userId],
+         WHERE id_usuario = $6`,
+        [
+          input.username ?? null,
+          input.role ?? null,
+          input.state ?? null,
+          input.smsMfaEnabled ?? null,
+          input.phone ?? null,
+          userId,
+        ],
       );
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "23505") {
@@ -515,7 +548,13 @@ export async function updateManagedUser(
       );
     }
 
-    if (input.role || input.state || agencyIds || input.phone !== undefined) {
+    if (
+      input.role ||
+      input.state ||
+      agencyIds ||
+      input.phone !== undefined ||
+      input.smsMfaEnabled !== undefined
+    ) {
       await client.query(
         "UPDATE sesiones SET revoked_at = NOW() WHERE id_usuario = $1 AND revoked_at IS NULL",
         [userId],
@@ -599,6 +638,7 @@ export async function resetManagedUserMfa(
            mfa_secret_encrypted = NULL,
            mfa_enrolled_at = NULL,
            mfa_last_used_step = NULL,
+           sms_mfa_enabled = FALSE,
            updated_at = NOW()
        WHERE id_usuario = $1`,
       [userId],

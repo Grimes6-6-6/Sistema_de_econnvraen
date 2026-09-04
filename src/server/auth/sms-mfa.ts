@@ -178,7 +178,7 @@ export async function issueSmsChallenge(
     if (error instanceof AppError) throw error;
     throw new AppError(
       "SMS_DELIVERY_FAILED",
-      "No se pudo enviar el SMS. Usa el autenticador o intenta nuevamente.",
+      "No se pudo enviar el SMS. Intenta nuevamente o comunícate con el administrador.",
       503,
     );
   }

@@ -24,6 +24,7 @@ const CURRENT_COLUMNS = {
     "mfa_secret_encrypted",
     "mfa_enrolled_at",
     "mfa_last_used_step",
+    "sms_mfa_enabled",
   ],
   sesiones: [
     "mfa_verified_at",

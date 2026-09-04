@@ -1,5 +1,5 @@
 import { authenticateUser } from "@/lib/auth/users";
-import { createSession } from "@/lib/auth/session";
+import { createSession, deleteSession } from "@/lib/auth/session";
 import { toClientSessionUser } from "@/lib/auth/types";
 import { parseEntityId } from "@/lib/domain/ids";
 import { loginSchema } from "@/lib/validation/schemas";
@@ -23,6 +23,7 @@ import {
   clearRateLimit,
   consumeRateLimit,
 } from "@/server/security/rate-limit";
+import { AppError } from "@/server/errors";
 
 const LOGIN_ATTEMPT_LIMIT = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -81,69 +82,67 @@ export async function POST(request: Request) {
       );
     }
 
-    const { user, mfaEnabled, phone } = authenticated;
+    const { user, smsMfaEnabled, phone } = authenticated;
     const userId = parseEntityId(user.id, "U");
-    const session = await createSession(
+    if (!user.mustChangePassword && smsMfaEnabled) {
+      if (!normalizePeruMobile(phone)) {
+        throw new AppError(
+          "MFA_PHONE_REQUIRED",
+          "La verificación SMS está activa, pero la cuenta no tiene un celular válido. Solicita al administrador que lo corrija.",
+          409,
+        );
+      }
+      if (!isSmsProviderConfigured()) {
+        throw new AppError(
+          "SMS_PROVIDER_UNAVAILABLE",
+          "La verificación SMS no está disponible. Comunícate con el administrador.",
+          503,
+        );
+      }
+
+      const session = await createSession(
+        user,
+        {
+          ipHash,
+          userAgent: request.headers.get("user-agent"),
+        },
+        { mfaChallenge: true },
+      );
+      try {
+        const sms = await issueSmsChallenge(
+          { ...session, user, phone },
+          ipHash,
+        );
+        await writeAuditLog({
+          userId,
+          agencyId: user.agenciaId
+            ? parseEntityId(user.agenciaId, "A")
+            : null,
+          action: "AUTH_MFA_CHALLENGE_STARTED",
+          entity: "usuario",
+          entityId: user.id,
+          metadata: { mode: "SMS" },
+          ipHash,
+        });
+        return noStoreJson({
+          nextStep: "SMS_VERIFY" as const,
+          maskedPhone: sms.maskedPhone,
+          retryAfterSeconds: sms.retryAfterSeconds,
+        });
+      } catch (error) {
+        await deleteSession();
+        throw error;
+      }
+    }
+
+    await createSession(
       user,
       {
         ipHash,
         userAgent: request.headers.get("user-agent"),
       },
-      user.mustChangePassword ? undefined : { mfaChallenge: true },
+      user.mustChangePassword ? undefined : { mfaVerified: true },
     );
-    if (!user.mustChangePassword) {
-      if (isSmsProviderConfigured() && normalizePeruMobile(phone)) {
-        try {
-          const sms = await issueSmsChallenge(
-            { ...session, user, phone },
-            ipHash,
-          );
-          await writeAuditLog({
-            userId,
-            agencyId: user.agenciaId
-              ? parseEntityId(user.agenciaId, "A")
-              : null,
-            action: "AUTH_MFA_CHALLENGE_STARTED",
-            entity: "usuario",
-            entityId: user.id,
-            metadata: { mode: "SMS" },
-            ipHash,
-          });
-          return noStoreJson({
-            nextStep: "SMS_VERIFY" as const,
-            maskedPhone: sms.maskedPhone,
-            retryAfterSeconds: sms.retryAfterSeconds,
-            authenticatorAvailable: mfaEnabled,
-          });
-        } catch {
-          // Twilio trial accounts can only reach verified recipients. Keep the
-          // authenticator path available so an external provider cannot lock
-          // an employee out of an otherwise valid account.
-        }
-      }
-
-      const fallbackStep = mfaEnabled ? "MFA_VERIFY" : "MFA_SETUP";
-      await writeAuditLog({
-        userId,
-        agencyId: user.agenciaId
-          ? parseEntityId(user.agenciaId, "A")
-          : null,
-        action: "AUTH_MFA_CHALLENGE_STARTED",
-        entity: "usuario",
-        entityId: user.id,
-        metadata: {
-          mode: mfaEnabled ? "VERIFY" : "SETUP",
-          smsFallback: true,
-        },
-        ipHash,
-      });
-      return noStoreJson({
-        nextStep: fallbackStep,
-        notice: normalizePeruMobile(phone)
-          ? "No se pudo enviar el SMS; utiliza el autenticador para continuar."
-          : "Tu cuenta no tiene un celular válido; utiliza el autenticador y solicita al administrador que lo registre.",
-      });
-    }
 
     await clearRateLimit(rateLimitKey);
 
@@ -155,6 +154,7 @@ export async function POST(request: Request) {
       action: "AUTH_LOGIN_SUCCEEDED",
       entity: "usuario",
       entityId: user.id,
+      metadata: { secondFactor: "NONE" },
       ipHash,
     });
 
