@@ -7,13 +7,13 @@ import { parseEntityId } from "@/lib/domain/ids";
 import { query } from "@/server/db/pool";
 import { forbidden, unauthorized } from "@/server/errors";
 
-export const SESSION_COOKIE_NAME =
+const SESSION_COOKIE_NAME =
   process.env.NODE_ENV === "production"
     ? "__Host-econnvrae_session"
     : "econnvrae_session";
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
 const SESSION_IDLE_TIMEOUT_MINUTES = 30;
-const MFA_CHALLENGE_DURATION_SECONDS = 10 * 60;
+const SMS_CHALLENGE_DURATION_SECONDS = 10 * 60;
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 interface SessionRow {
@@ -29,30 +29,19 @@ interface SessionRow {
   must_change_password: boolean;
 }
 
-interface MfaChallengeRow extends SessionRow {
-  id_usuario: number;
+interface SmsChallengeRow extends SessionRow {
   telefono: string | null;
-  mfa_enabled: boolean;
-  mfa_secret_encrypted: string | null;
-  mfa_setup_secret_encrypted: string | null;
   sms_code_hash: string | null;
-  sms_sent_at: Date | null;
   sms_expires_at: Date | null;
-  sms_attempts: number;
 }
 
-export interface MfaChallenge {
+export interface SmsChallenge {
   tokenHash: string;
   userId: number;
   user: SessionUser;
-  mfaEnabled: boolean;
-  mfaSecretEncrypted: string | null;
-  mfaSetupSecretEncrypted: string | null;
   phone: string | null;
   smsCodeHash: string | null;
-  smsSentAt: Date | null;
   smsExpiresAt: Date | null;
-  smsAttempts: number;
 }
 
 function hashToken(token: string): string {
@@ -154,15 +143,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 export async function createSession(
   user: SessionUser,
   metadata?: { ipHash?: string | null; userAgent?: string | null },
-  options?: { mfaVerified?: boolean; mfaChallenge?: boolean },
+  options?: { secondFactorVerified?: boolean; smsChallenge?: boolean },
 ): Promise<{ tokenHash: string; userId: number }> {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const userId = numericUserId(user);
   const agencyId = numericAgencyId(user);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_SECONDS * 1000);
-  const mfaChallengeExpiresAt = options?.mfaChallenge
-    ? new Date(Date.now() + MFA_CHALLENGE_DURATION_SECONDS * 1000)
+  const smsChallengeExpiresAt = options?.smsChallenge
+    ? new Date(Date.now() + SMS_CHALLENGE_DURATION_SECONDS * 1000)
     : null;
 
   await query(
@@ -178,8 +167,8 @@ export async function createSession(
       expiresAt,
       metadata?.ipHash || null,
       metadata?.userAgent?.slice(0, 255) || null,
-      options?.mfaVerified ? new Date() : null,
-      mfaChallengeExpiresAt,
+      options?.secondFactorVerified ? new Date() : null,
+      smsChallengeExpiresAt,
     ],
   );
 
@@ -195,13 +184,13 @@ export async function createSession(
   return { tokenHash, userId };
 }
 
-export async function getMfaChallenge(): Promise<MfaChallenge | null> {
+export async function getSmsChallenge(): Promise<SmsChallenge | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token || !SESSION_TOKEN_PATTERN.test(token)) return null;
   const tokenHash = hashToken(token);
 
-  const result = await query<MfaChallengeRow>(
+  const result = await query<SmsChallengeRow>(
     `SELECT
        u.id_usuario,
        u.username,
@@ -214,13 +203,8 @@ export async function getMfaChallenge(): Promise<MfaChallenge | null> {
        agency.nombre AS agencia_nombre,
        u.must_change_password,
        p.telefono,
-       u.mfa_enabled,
-       u.mfa_secret_encrypted,
-       s.mfa_setup_secret_encrypted,
        s.sms_code_hash,
-       s.sms_sent_at,
-       s.sms_expires_at,
-       s.sms_attempts
+       s.sms_expires_at
      FROM sesiones s
      JOIN usuarios u ON u.id_usuario = s.id_usuario
      JOIN roles r ON r.id_rol = u.id_rol
@@ -258,58 +242,10 @@ export async function getMfaChallenge(): Promise<MfaChallenge | null> {
     tokenHash,
     userId: row.id_usuario,
     user: toSessionUser(row),
-    mfaEnabled: row.mfa_enabled,
-    mfaSecretEncrypted: row.mfa_secret_encrypted,
-    mfaSetupSecretEncrypted: row.mfa_setup_secret_encrypted,
     phone: row.telefono,
     smsCodeHash: row.sms_code_hash,
-    smsSentAt: row.sms_sent_at,
     smsExpiresAt: row.sms_expires_at,
-    smsAttempts: row.sms_attempts,
   };
-}
-
-export async function saveMfaSetupSecret(
-  challenge: MfaChallenge,
-  encryptedSecret: string,
-): Promise<void> {
-  const updated = await query(
-    `UPDATE sesiones
-     SET mfa_setup_secret_encrypted = $1
-     WHERE token_hash = $2
-       AND id_usuario = $3
-       AND revoked_at IS NULL
-       AND mfa_verified_at IS NULL
-       AND mfa_challenge_expires_at > NOW()`,
-    [encryptedSecret, challenge.tokenHash, challenge.userId],
-  );
-  if (!updated.rowCount) throw unauthorized("La verificación venció. Inicia sesión nuevamente.");
-}
-
-export async function completeMfaSession(
-  challenge: MfaChallenge,
-): Promise<void> {
-  const updated = await query(
-    `UPDATE sesiones
-     SET mfa_verified_at = NOW(),
-         mfa_setup_secret_encrypted = NULL,
-         mfa_challenge_expires_at = NULL,
-         sms_code_hash = NULL,
-         sms_expires_at = NULL,
-         sms_attempts = 0,
-         last_seen_at = NOW()
-     WHERE token_hash = $1
-       AND id_usuario = $2
-       AND revoked_at IS NULL
-       AND mfa_verified_at IS NULL
-       AND mfa_challenge_expires_at > NOW()`,
-    [challenge.tokenHash, challenge.userId],
-  );
-  if (!updated.rowCount) throw unauthorized("La verificación venció. Inicia sesión nuevamente.");
-  await query(
-    "UPDATE usuarios SET last_login_at = NOW(), updated_at = NOW() WHERE id_usuario = $1",
-    [challenge.userId],
-  );
 }
 
 export async function deleteSession(): Promise<void> {

@@ -142,7 +142,7 @@ export interface OfflineAction {
   evidence: DeliveryEvidence | null;
 }
 
-export interface PublicTrackingEvent {
+interface PublicTrackingEvent {
   estado: Encomienda["estado"];
   fecha: string;
   ubicacion: string;
@@ -170,12 +170,6 @@ export interface IncidenciaViaje {
   latitude: number | null;
   longitude: number | null;
   created_at: string;
-}
-
-export interface DriverContact {
-  telefono: string;
-  email: string;
-  direccion: string;
 }
 
 export const EMPTY_DATABASE_STATE: DatabaseState = {

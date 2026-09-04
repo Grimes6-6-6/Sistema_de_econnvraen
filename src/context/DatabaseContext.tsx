@@ -38,7 +38,7 @@ export type {
   Viaje,
 } from "@/lib/domain/types";
 export type Usuario = SessionUser;
-export type LoginResult =
+type LoginResult =
   | { user: Usuario }
   | {
       nextStep: "SMS_VERIFY";
@@ -258,16 +258,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const verifySmsCode = async (code: string): Promise<Usuario> => {
     const payload = await apiRequest<{ user: Usuario }>(
-      "/api/auth/mfa/verify",
-      { method: "POST", body: JSON.stringify({ code, method: "sms" }) },
+      "/api/auth/sms/verify",
+      { method: "POST", body: JSON.stringify({ code }) },
     );
     return establishAuthenticatedUser(payload.user);
   };
 
   const resendSmsCode = async () =>
     apiRequest<{ maskedPhone: string; retryAfterSeconds: number }>(
-      "/api/auth/mfa/sms/resend",
-      { method: "POST", body: JSON.stringify({ action: "resend" }) },
+      "/api/auth/sms/resend",
+      { method: "POST" },
     );
 
   const logoutUser = async () => {

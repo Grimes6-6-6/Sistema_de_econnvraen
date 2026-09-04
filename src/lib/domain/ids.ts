@@ -1,4 +1,4 @@
-export type EntityIdPrefix =
+type EntityIdPrefix =
   | "A"
   | "R"
   | "V"

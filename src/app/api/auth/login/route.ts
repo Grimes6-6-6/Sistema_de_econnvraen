@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     if (!user.mustChangePassword && smsMfaEnabled) {
       if (!normalizePeruMobile(phone)) {
         throw new AppError(
-          "MFA_PHONE_REQUIRED",
+          "SMS_PHONE_REQUIRED",
           "La verificación SMS está activa, pero la cuenta no tiene un celular válido. Solicita al administrador que lo corrija.",
           409,
         );
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
           ipHash,
           userAgent: request.headers.get("user-agent"),
         },
-        { mfaChallenge: true },
+        { smsChallenge: true },
       );
       try {
         const sms = await issueSmsChallenge(
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
         ipHash,
         userAgent: request.headers.get("user-agent"),
       },
-      user.mustChangePassword ? undefined : { mfaVerified: true },
+      user.mustChangePassword ? undefined : { secondFactorVerified: true },
     );
 
     await clearRateLimit(rateLimitKey);

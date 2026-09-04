@@ -286,27 +286,6 @@ export default function AdminWorkspace() {
     }
   };
 
-  const disableSmsVerification = async (managedUser: ManagedUser) => {
-    const confirmation = await requestConfirmation({
-      title: "Desactivar verificación SMS",
-      message: "La cuenta volverá a ingresar solo con contraseña y se cerrarán sus sesiones actuales.",
-      confirmLabel: "Desactivar SMS",
-      cancelLabel: "Volver",
-      tone: "danger",
-    });
-    if (!confirmation.confirmed) return;
-    setBusy(true);
-    try {
-      await api<{ success: boolean }>(`/api/admin/users/${managedUser.id}/reset-mfa`, { method: "POST" });
-      notify({ type: "success", title: "Verificación SMS desactivada" });
-      await load();
-    } catch (reason) {
-      notify({ type: "error", title: "No se pudo desactivar el SMS", message: reason instanceof Error ? reason.message : undefined });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const reviewDriverIdentity = async (
     managedUser: ManagedUser,
     decision: "VERIFICAR" | "OBSERVAR",
@@ -704,7 +683,6 @@ export default function AdminWorkspace() {
                       <div className="flex justify-end gap-1">
                         <button type="button" onClick={() => { setEditingUser(item); setEditingRole(item.role); }} className="rounded-lg border border-white/10 px-2 py-1">Editar</button>
                         <button type="button" aria-label={`Restablecer contraseña de ${item.username}`} onClick={() => void resetPassword(item)} className="rounded-lg border border-amber-500/30 px-2 py-1 text-amber-300"><KeyRound className="h-3.5 w-3.5" /></button>
-                        {item.smsMfaEnabled && <button type="button" aria-label={`Desactivar verificación SMS de ${item.username}`} onClick={() => void disableSmsVerification(item)} className="rounded-lg border border-blue-500/30 px-2 py-1 text-blue-300"><ShieldCheck className="h-3.5 w-3.5" /></button>}
                         <button type="button" onClick={() => void toggleUser(item)} className="rounded-lg border border-rose-500/30 px-2 py-1 text-rose-300">{item.state === "ACTIVO" ? "Bloquear" : "Activar"}</button>
                       </div>
                     </td>

@@ -35,7 +35,7 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 const ALL_PERMISSIONS = Object.values(PERMISSIONS);
 
-export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> = {
+const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   ADMINISTRADOR: [
     PERMISSIONS.DATA_VIEW,
@@ -91,11 +91,4 @@ export function roleHasPermission(
   permission: Permission,
 ): boolean {
   return ROLE_PERMISSIONS[role].includes(permission);
-}
-
-export function roleHasEveryPermission(
-  role: UserRole,
-  permissions: readonly Permission[],
-): boolean {
-  return permissions.every((permission) => roleHasPermission(role, permission));
 }

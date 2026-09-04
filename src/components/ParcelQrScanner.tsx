@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, ImageUp, LoaderCircle, X } from "lucide-react";
 import type QrScanner from "qr-scanner";
 import { extractParcelTrackingCode } from "@/lib/domain/parcel-receipt";

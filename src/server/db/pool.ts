@@ -31,11 +31,7 @@ function getDatabaseConfig() {
   };
 }
 
-export function isDatabaseConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL?.trim());
-}
-
-export function getPool(): Pool {
+function getPool(): Pool {
   if (!globalThis.__econnvraePool) {
     const config = getDatabaseConfig();
     const { poolMax, ...poolConfig } = config;

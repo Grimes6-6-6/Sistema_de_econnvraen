@@ -234,7 +234,7 @@ export async function listDriverOperationalDocuments(
   return result.rows.map(mapDocument);
 }
 
-export interface DriverDocumentFileInput {
+interface DriverDocumentFileInput {
   name: string;
   mimeType: AllowedDocumentMime;
   size: number;

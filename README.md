@@ -79,7 +79,7 @@ npm audit
 5. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
 6. Configurar `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET` y `TWILIO_FROM_NUMBER` antes de activar la verificación SMS para una cuenta. `TWILIO_SMS_TRIAL_TEMPLATE=true` se usa únicamente durante la prueba gratuita y debe cambiarse a `false` al actualizar la cuenta.
 7. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
-   Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las reversiones controladas 008, 009, 010, 011, 012 y 013 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada.
+   Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las migraciones aplicadas forman un historial inmutable: no se borran, renombran ni editan; cualquier cambio se agrega en un archivo nuevo. Las reversiones controladas 008 a 014 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada. La reversión 014 restaura la estructura antigua de TOTP, pero no puede recuperar secretos ni códigos eliminados.
 8. Compilar e iniciar:
 
    ```bash
@@ -115,6 +115,7 @@ npm audit
 - `src/server`: reglas de negocio, seguridad y acceso a datos.
 - `src/lib`: tipos, validaciones y utilidades compartidas.
 - `db/migrations`: historial canónico del esquema PostgreSQL.
+- `db/rollbacks`: reversiones controladas para migraciones sensibles.
 - `scripts`: migración, carga inicial y comprobación de base de datos.
 - `tests`: pruebas automatizadas de seguridad y reglas críticas.
 

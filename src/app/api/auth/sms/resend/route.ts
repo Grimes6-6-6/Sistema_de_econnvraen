@@ -1,12 +1,10 @@
-import { getMfaChallenge } from "@/lib/auth/session";
-import { mfaSmsResendSchema } from "@/lib/validation/schemas";
+import { getSmsChallenge } from "@/lib/auth/session";
 import { issueSmsChallenge } from "@/server/auth/sms-mfa";
 import { unauthorized } from "@/server/errors";
 import {
   assertTrustedMutation,
   handleRouteError,
   noStoreJson,
-  parseJsonBody,
 } from "@/server/http";
 import { getClientAddressHash } from "@/server/security/request";
 import { consumeRateLimit } from "@/server/security/rate-limit";
@@ -17,15 +15,14 @@ const SMS_RESEND_WINDOW_MS = 15 * 60 * 1000;
 export async function POST(request: Request) {
   try {
     assertTrustedMutation(request);
-    await parseJsonBody(request, mfaSmsResendSchema);
-    const challenge = await getMfaChallenge();
+    const challenge = await getSmsChallenge();
     if (!challenge) {
       throw unauthorized("La verificación venció. Inicia sesión nuevamente.");
     }
 
     const ipHash = getClientAddressHash(request);
     const rateLimit = await consumeRateLimit(
-      `mfa-sms-resend:${ipHash}:${challenge.userId}`,
+      `sms-resend:${ipHash}:${challenge.userId}`,
       SMS_RESEND_LIMIT,
       SMS_RESEND_WINDOW_MS,
     );

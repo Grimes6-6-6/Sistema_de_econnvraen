@@ -1,6 +1,6 @@
-import { getMfaChallenge } from "@/lib/auth/session";
+import { getSmsChallenge } from "@/lib/auth/session";
 import { toClientSessionUser } from "@/lib/auth/types";
-import { mfaVerificationSchema } from "@/lib/validation/schemas";
+import { smsVerificationSchema } from "@/lib/validation/schemas";
 import { verifySmsChallenge } from "@/server/auth/sms-mfa";
 import { unauthorized } from "@/server/errors";
 import {
@@ -15,24 +15,24 @@ import {
   consumeRateLimit,
 } from "@/server/security/rate-limit";
 
-const MFA_ATTEMPT_LIMIT = 5;
-const MFA_WINDOW_MS = 5 * 60 * 1000;
+const SMS_ATTEMPT_LIMIT = 5;
+const SMS_WINDOW_MS = 5 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
     assertTrustedMutation(request);
-    const input = await parseJsonBody(request, mfaVerificationSchema);
-    const challenge = await getMfaChallenge();
+    const input = await parseJsonBody(request, smsVerificationSchema);
+    const challenge = await getSmsChallenge();
     if (!challenge) {
       throw unauthorized("La verificación venció. Inicia sesión nuevamente.");
     }
 
     const ipHash = getClientAddressHash(request);
-    const rateLimitKey = `mfa:${ipHash}:${challenge.userId}`;
+    const rateLimitKey = `sms-verify:${ipHash}:${challenge.userId}`;
     const rateLimit = await consumeRateLimit(
       rateLimitKey,
-      MFA_ATTEMPT_LIMIT,
-      MFA_WINDOW_MS,
+      SMS_ATTEMPT_LIMIT,
+      SMS_WINDOW_MS,
     );
     if (!rateLimit.allowed) {
       return noStoreJson(

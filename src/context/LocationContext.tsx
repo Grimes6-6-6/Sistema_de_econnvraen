@@ -14,7 +14,7 @@ import { useDatabase } from "@/context/DatabaseContext";
 
 export type { VehicleLocation } from "@/lib/domain/types";
 
-export interface SimpleCoords {
+interface SimpleCoords {
   latitude: number;
   longitude: number;
   accuracy: number;

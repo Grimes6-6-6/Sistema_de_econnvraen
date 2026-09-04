@@ -16,7 +16,7 @@ import {
   operationalDocumentSchema,
   tripStatusSchema,
   vehicleLocationUpdateSchema,
-  mfaVerificationSchema,
+  smsVerificationSchema,
 } from "@/lib/validation/schemas";
 import { createTrackingCode } from "@/lib/domain/tracking";
 
@@ -235,21 +235,21 @@ describe("validaciones de entrada", () => {
 
   it("acepta únicamente códigos SMS de seis dígitos", () => {
     expect(
-      mfaVerificationSchema.safeParse({ method: "sms", code: "123456" })
+      smsVerificationSchema.safeParse({ code: "123456" })
         .success,
     ).toBe(true);
     expect(
-      mfaVerificationSchema.safeParse({ method: "totp", code: "123456" })
+      smsVerificationSchema.safeParse({ method: "totp", code: "123456" })
         .success,
     ).toBe(false);
     expect(
-      mfaVerificationSchema.safeParse({
+      smsVerificationSchema.safeParse({
         method: "recovery",
         code: "ABCD-EFGH-JKLM",
       }).success,
     ).toBe(false);
     expect(
-      mfaVerificationSchema.safeParse({ method: "sms", code: "12345" })
+      smsVerificationSchema.safeParse({ code: "12345" })
         .success,
     ).toBe(false);
   });

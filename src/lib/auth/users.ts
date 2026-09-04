@@ -105,51 +105,6 @@ export async function authenticateUser(
   };
 }
 
-export async function findUserById(userId: number): Promise<SessionUser | null> {
-  const result = await query<UserRow>(
-    `SELECT
-       u.id_usuario,
-       u.username,
-       u.password_hash,
-       r.nombre AS rol,
-       p.nombres,
-       p.apellidos,
-       p.nro_documento AS dni,
-       p.telefono,
-       driver.id_conductor,
-       membership.id_agencia,
-       agency.nombre AS agencia_nombre
-       , u.must_change_password
-     FROM usuarios u
-     JOIN roles r ON r.id_rol = u.id_rol
-     LEFT JOIN personas p ON p.id_persona = u.id_persona
-     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
-     LEFT JOIN LATERAL (
-       SELECT ua.id_agencia
-       FROM usuarios_agencias ua
-       JOIN agencias active_agency
-         ON active_agency.id_agencia = ua.id_agencia
-        AND active_agency.estado = 'ACTIVA'
-       WHERE ua.id_usuario = u.id_usuario
-         AND ua.estado = 'ACTIVO'
-       ORDER BY ua.es_principal DESC, ua.id_agencia
-       LIMIT 1
-     ) membership ON TRUE
-     LEFT JOIN agencias agency ON agency.id_agencia = membership.id_agencia
-     WHERE u.id_usuario = $1
-       AND u.estado = 'ACTIVO'
-       AND (
-         u.must_change_password = FALSE
-         OR u.temporary_password_expires_at > NOW()
-       )
-       AND (r.nombre = 'SUPER_ADMIN' OR membership.id_agencia IS NOT NULL)
-     LIMIT 1`,
-    [userId],
-  );
-
-  return result.rows[0] ? toSessionUser(result.rows[0]) : null;
-}
-
 export function roleCanAccess(
   role: UserRole,
   allowedRoles: readonly UserRole[],

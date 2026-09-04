@@ -622,48 +622,6 @@ export async function resetManagedUserPassword(
   return { temporaryPassword, expiresAt: expiresAt.toISOString() };
 }
 
-export async function resetManagedUserMfa(
-  actor: SessionUser,
-  userIdValue: string,
-): Promise<void> {
-  const userId = parseEntityId(userIdValue, "U");
-  if (!userId) throw notFound("El usuario no existe.");
-  const target = await findTarget(userId);
-  assertCanManageTarget(actor, target);
-
-  await withTransaction(async (client) => {
-    await client.query(
-      `UPDATE usuarios
-       SET mfa_enabled = FALSE,
-           mfa_secret_encrypted = NULL,
-           mfa_enrolled_at = NULL,
-           mfa_last_used_step = NULL,
-           sms_mfa_enabled = FALSE,
-           updated_at = NOW()
-       WHERE id_usuario = $1`,
-      [userId],
-    );
-    await client.query(
-      "DELETE FROM mfa_recovery_codes WHERE id_usuario = $1",
-      [userId],
-    );
-    await client.query(
-      "UPDATE sesiones SET revoked_at = NOW() WHERE id_usuario = $1 AND revoked_at IS NULL",
-      [userId],
-    );
-    await writeAuditLog(
-      {
-        userId: actorId(actor),
-        agencyId: target.agency_ids[0] || null,
-        action: "USER_MFA_RESET",
-        entity: "usuario",
-        entityId: userIdValue,
-      },
-      client,
-    );
-  });
-}
-
 export async function changeOwnPassword(
   user: SessionUser,
   input: ChangePasswordInput,

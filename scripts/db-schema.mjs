@@ -20,22 +20,16 @@ const CURRENT_COLUMNS = {
   usuarios: [
     "must_change_password",
     "temporary_password_expires_at",
-    "mfa_enabled",
-    "mfa_secret_encrypted",
-    "mfa_enrolled_at",
-    "mfa_last_used_step",
     "sms_mfa_enabled",
   ],
   sesiones: [
     "mfa_verified_at",
-    "mfa_setup_secret_encrypted",
     "mfa_challenge_expires_at",
     "sms_code_hash",
     "sms_sent_at",
     "sms_expires_at",
     "sms_attempts",
   ],
-  mfa_recovery_codes: ["id_recovery", "id_usuario", "code_hash", "used_at"],
   vehiculos: ["id_agencia_base"],
   conductores: [
     "id_agencia_base",

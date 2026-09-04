@@ -6,7 +6,7 @@ interface RateLimitRow {
   request_count: number;
 }
 
-export interface RateLimitResult {
+interface RateLimitResult {
   allowed: boolean;
   retryAfterSeconds: number;
 }

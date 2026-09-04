@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SessionUser } from "@/lib/auth/types";
-import type { MfaChallenge } from "@/lib/auth/session";
+import type { SmsChallenge } from "@/lib/auth/session";
 import { parseEntityId } from "@/lib/domain/ids";
 import { writeAuditLog } from "@/server/audit";
 import { query } from "@/server/db/pool";
@@ -19,7 +19,7 @@ const SMS_CODE_LIFETIME_MINUTES = 5;
 const SMS_RESEND_COOLDOWN_SECONDS = 60;
 const SMS_MAX_ATTEMPTS = 5;
 
-export interface SmsChallengeTarget {
+interface SmsChallengeTarget {
   tokenHash: string;
   userId: number;
   user: SessionUser;
@@ -79,7 +79,7 @@ export async function issueSmsChallenge(
   const phone = normalizePeruMobile(target.phone);
   if (!phone) {
     throw new AppError(
-      "MFA_PHONE_REQUIRED",
+      "SMS_PHONE_REQUIRED",
       "Tu cuenta no tiene un celular válido. Solicita al administrador que lo registre.",
       409,
     );
@@ -185,7 +185,7 @@ export async function issueSmsChallenge(
 }
 
 export async function verifySmsChallenge(
-  challenge: MfaChallenge,
+  challenge: SmsChallenge,
   code: string,
   ipHash: string,
 ): Promise<void> {
@@ -234,7 +234,6 @@ export async function verifySmsChallenge(
     `UPDATE sesiones
      SET mfa_verified_at = NOW(),
          mfa_challenge_expires_at = NULL,
-         mfa_setup_secret_encrypted = NULL,
          sms_code_hash = NULL,
          sms_expires_at = NULL,
          sms_attempts = 0,

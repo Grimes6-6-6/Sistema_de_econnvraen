@@ -12,7 +12,7 @@ function getHashPepper(): string {
   throw new Error("AUTH_HASH_PEPPER_NOT_CONFIGURED");
 }
 
-export function getClientAddress(request: Request): string {
+function getClientAddress(request: Request): string {
   if (process.env.TRUST_PROXY !== "true") {
     return "direct-client";
   }

@@ -81,15 +81,7 @@ export interface OperationalDocument {
   } | null;
 }
 
-export const PERSONAL_DOCUMENT_TYPES = [
-  "DNI",
-  "LICENCIA",
-  "ANTECEDENTES",
-  "SALUD",
-  "OTRO",
-] as const satisfies readonly OperationalDocument["documentType"][];
-
-export const VEHICLE_DOCUMENT_TYPES = [
+const VEHICLE_DOCUMENT_TYPES = [
   "SOAT",
   "CITV",
   "TUC",

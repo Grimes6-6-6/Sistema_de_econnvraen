@@ -20,12 +20,12 @@ const personName = safeText(2, 80).refine(
   "El nombre contiene caracteres no permitidos.",
 );
 
-export const requestIdSchema = z.string().uuid();
+const requestIdSchema = z.string().uuid();
 export const dniSchema = z.string().regex(/^\d{8}$/, "El DNI debe tener 8 dígitos.");
-export const phoneSchema = z
+const phoneSchema = z
   .string()
   .regex(PERU_MOBILE, "El celular debe tener 9 dígitos y comenzar con 9.");
-export const trackingCodeSchema = z
+const trackingCodeSchema = z
   .string()
   .trim()
   .toUpperCase()
@@ -43,17 +43,12 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
-const totpCodeSchema = z.string().trim().regex(/^\d{6}$/);
-export const mfaVerificationSchema = z.object({
-  method: z.literal("sms"),
-  code: totpCodeSchema,
-});
+const smsCodeSchema = z.string().trim().regex(/^\d{6}$/);
+export const smsVerificationSchema = z.object({
+  code: smsCodeSchema,
+}).strict();
 
-export const mfaSmsResendSchema = z.object({
-  action: z.literal("resend"),
-});
-
-export const strongPasswordSchema = z
+const strongPasswordSchema = z
   .string()
   .min(12, "La contraseña debe tener al menos 12 caracteres.")
   .max(128)
