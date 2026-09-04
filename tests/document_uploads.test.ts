@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   driverOperationalDocumentSchema,
+  driverIdentityReviewSchema,
   operationalDocumentReviewSchema,
+  operationalDocumentSchema,
 } from "@/lib/validation/schemas";
 import {
   detectDocumentMime,
@@ -46,6 +48,32 @@ describe("datos documentarios del conductor", () => {
     }).success).toBe(true);
   });
 
+  it("permite registrar el DNI únicamente como documento del conductor", () => {
+    expect(driverOperationalDocumentSchema.safeParse({
+      ...base,
+      documentType: "DNI",
+      number: "12345678",
+      vehicleId: "",
+    }).success).toBe(true);
+    expect(operationalDocumentSchema.safeParse({
+      ...base,
+      holderType: "VEHICULO",
+      holderId: "V01",
+      documentType: "DNI",
+      number: "12345678",
+      state: "VIGENTE",
+    }).success).toBe(false);
+  });
+
+  it("rechaza un número de DNI que no tenga exactamente 8 dígitos", () => {
+    expect(driverOperationalDocumentSchema.safeParse({
+      ...base,
+      documentType: "DNI",
+      number: "1234ABCD",
+      vehicleId: "",
+    }).success).toBe(false);
+  });
+
   it("exige un vehículo para SOAT, CITV, TUC y tarjeta de propiedad", () => {
     expect(driverOperationalDocumentSchema.safeParse({
       ...base,
@@ -75,6 +103,17 @@ describe("datos documentarios del conductor", () => {
     }).success).toBe(false);
     expect(operationalDocumentReviewSchema.safeParse({
       decision: "APROBAR",
+      reason: "",
+    }).success).toBe(true);
+  });
+
+  it("exige motivo cuando el superadministrador observa la identidad", () => {
+    expect(driverIdentityReviewSchema.safeParse({
+      decision: "OBSERVAR",
+      reason: "",
+    }).success).toBe(false);
+    expect(driverIdentityReviewSchema.safeParse({
+      decision: "VERIFICAR",
       reason: "",
     }).success).toBe(true);
   });

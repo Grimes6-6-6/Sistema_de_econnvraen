@@ -129,6 +129,9 @@ export async function createOperationalDocument(
   user: SessionUser,
   input: OperationalDocumentInput,
 ): Promise<OperationalDocument> {
+  if (user.rol !== "SUPER_ADMIN") {
+    throw forbidden("Solo el superadministrador puede registrar documentos verificados.");
+  }
   const activeAgencyId = user.agenciaId ? parseEntityId(user.agenciaId, "A") : null;
   if (!activeAgencyId) throw forbidden("Selecciona la agencia del documento.");
   const holderId = parseEntityId(
@@ -149,9 +152,9 @@ export async function createOperationalDocument(
       `INSERT INTO documentos_operativos (
          id_agencia, titular_tipo, id_conductor, id_vehiculo,
          tipo_documento, numero, fecha_emision, fecha_vencimiento,
-         estado, observacion, creado_por
+         estado, observacion, creado_por, revisado_por, revisado_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8, $9, NULLIF($10, ''), $11)
+       VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8, $9, NULLIF($10, ''), $11, $11, NOW())
        RETURNING id_documento`,
       [
         activeAgencyId,
@@ -168,6 +171,21 @@ export async function createOperationalDocument(
       ],
     );
     const id = Number(created.rows[0].id_documento);
+    if (
+      input.holderType === "CONDUCTOR" &&
+      ["DNI", "LICENCIA"].includes(input.documentType)
+    ) {
+      await client.query(
+        `UPDATE conductores
+         SET identidad_estado = 'PENDIENTE',
+             identidad_observacion = NULL,
+             identidad_verificada_por = NULL,
+             identidad_verificada_at = NULL,
+             updated_at = NOW()
+         WHERE id_conductor = $1`,
+        [holderId],
+      );
+    }
     await writeAuditLog(
       {
         userId: actorId(user),
@@ -311,6 +329,18 @@ export async function uploadDriverOperationalDocument(
       ],
     );
     const id = Number(created.rows[0].id_documento);
+    if (!vehicleId && ["DNI", "LICENCIA"].includes(input.documentType)) {
+      await client.query(
+        `UPDATE conductores
+         SET identidad_estado = 'PENDIENTE',
+             identidad_observacion = NULL,
+             identidad_verificada_por = NULL,
+             identidad_verificada_at = NULL,
+             updated_at = NOW()
+         WHERE id_conductor = $1`,
+        [driverId],
+      );
+    }
     await writeAuditLog(
       {
         userId: actorId(user),
@@ -342,6 +372,9 @@ export async function reviewOperationalDocument(
   documentValue: string,
   input: OperationalDocumentReviewInput,
 ): Promise<OperationalDocument> {
+  if (user.rol !== "SUPER_ADMIN") {
+    throw forbidden("Solo el superadministrador puede aprobar documentos de conductores.");
+  }
   const documentId = parseEntityId(documentValue, "DOC");
   if (!documentId) throw notFound("El documento no existe.");
   const agencyScope = scopeAgencyId(user);
@@ -400,6 +433,27 @@ export async function reviewOperationalDocument(
       );
     }
 
+    if (
+      current.id_conductor &&
+      ["DNI", "LICENCIA"].includes(current.tipo_documento)
+    ) {
+      await client.query(
+        `UPDATE conductores
+         SET identidad_estado = $1,
+             identidad_observacion = NULLIF($2, ''),
+             identidad_verificada_por = CASE WHEN $1 = 'OBSERVADA' THEN $3 ELSE NULL END,
+             identidad_verificada_at = CASE WHEN $1 = 'OBSERVADA' THEN NOW() ELSE NULL END,
+             updated_at = NOW()
+         WHERE id_conductor = $4`,
+        [
+          input.decision === "OBSERVAR" ? "OBSERVADA" : "PENDIENTE",
+          input.decision === "OBSERVAR" ? input.reason || "" : "",
+          actorId(user),
+          current.id_conductor,
+        ],
+      );
+    }
+
     await writeAuditLog(
       {
         userId: actorId(user),
@@ -420,6 +474,34 @@ export async function reviewOperationalDocument(
     [documentId],
   );
   return mapDocument(result.rows[0]);
+}
+
+export async function getDriverIdentityVerification(
+  user: SessionUser,
+): Promise<{
+  state: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
+  observation: string;
+}> {
+  const driverId = user.conductorId
+    ? parseEntityId(user.conductorId, "C")
+    : null;
+  const agencyId = user.agenciaId ? parseEntityId(user.agenciaId, "A") : null;
+  if (!driverId || !agencyId) throw forbidden("No se encontró tu perfil de conductor.");
+  const result = await query<{
+    identidad_estado: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
+    identidad_observacion: string | null;
+  }>(
+    `SELECT identidad_estado, identidad_observacion
+     FROM conductores
+     WHERE id_conductor = $1 AND id_agencia_base = $2`,
+    [driverId, agencyId],
+  );
+  const row = result.rows[0];
+  if (!row) throw notFound("No se encontró tu perfil de conductor.");
+  return {
+    state: row.identidad_estado,
+    observation: row.identidad_observacion || "",
+  };
 }
 
 export async function getOperationalDocumentFile(

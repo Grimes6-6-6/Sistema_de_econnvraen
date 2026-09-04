@@ -42,6 +42,7 @@ import {
   AlertOctagon,
   Download,
   FileCheck2,
+  ShieldCheck,
   Upload,
 } from "lucide-react";
 
@@ -68,6 +69,7 @@ function trapDialogFocus(event: React.KeyboardEvent<HTMLElement>) {
 }
 
 const DOCUMENT_LABELS: Record<OperationalDocument["documentType"], string> = {
+  DNI: "Documento Nacional de Identidad",
   LICENCIA: "Licencia de conducir",
   SOAT: "SOAT",
   CITV: "Revisión técnica (CITV)",
@@ -166,6 +168,10 @@ export default function ConductorPage() {
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [documentType, setDocumentType] = useState<OperationalDocument["documentType"]>("LICENCIA");
+  const [identityVerification, setIdentityVerification] = useState<{
+    state: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
+    observation: string;
+  }>({ state: "PENDIENTE", observation: "" });
   const documentFormRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
@@ -203,12 +209,19 @@ export default function ConductorPage() {
       .then(async (response) => {
         const payload = (await response.json()) as {
           documents?: OperationalDocument[];
+          identity?: {
+            state: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
+            observation: string;
+          };
           error?: { message?: string };
         };
-        if (!response.ok || !payload.documents) {
+        if (!response.ok || !payload.documents || !payload.identity) {
           throw new Error(payload.error?.message || "No se pudieron cargar los documentos.");
         }
-        if (!cancelled) setDriverDocuments(payload.documents);
+        if (!cancelled) {
+          setDriverDocuments(payload.documents);
+          setIdentityVerification(payload.identity);
+        }
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
@@ -441,6 +454,9 @@ export default function ConductorPage() {
       ]);
       documentFormRef.current?.reset();
       setDocumentType("LICENCIA");
+      if (["DNI", "LICENCIA"].includes(payload.document.documentType)) {
+        setIdentityVerification({ state: "PENDIENTE", observation: "" });
+      }
       notify({
         type: "success",
         title: "Documento enviado",
@@ -1251,8 +1267,8 @@ export default function ConductorPage() {
                   Conductor de Ruta · ECONNVRAE
                 </p>
                 <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
-                  <span className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase px-2.5 py-1 rounded-lg">
-                    Conductor Habilitado
+                  <span className={`border text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${identityVerification.state === "VERIFICADA" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : identityVerification.state === "OBSERVADA" ? "border-rose-500/20 bg-rose-500/10 text-rose-400" : "border-amber-500/20 bg-amber-500/10 text-amber-400"}`}>
+                    {identityVerification.state === "VERIFICADA" ? "Identidad verificada" : identityVerification.state === "OBSERVADA" ? "Identidad observada" : "Validación pendiente"}
                   </span>
                   <span className="bg-slate-800 text-slate-300 text-[9px] font-black uppercase px-2.5 py-1 rounded-lg">
                     DNI: {currentUser?.dni || "No disponible"}
@@ -1340,6 +1356,18 @@ export default function ConductorPage() {
                 </button>
               )}
             </div>
+
+            {identityVerification.state !== "VERIFICADA" && (
+              <div role="alert" className={`flex items-start gap-3 rounded-2xl border p-4 ${identityVerification.state === "OBSERVADA" ? "border-rose-300 bg-rose-50 text-rose-900" : "border-blue-300 bg-blue-50 text-blue-900"}`}>
+                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <b className="text-sm">{identityVerification.state === "OBSERVADA" ? "Tu identidad tiene una observación" : "Tu identidad está pendiente de validación"}</b>
+                  <p className="text-xs">
+                    {identityVerification.observation || "Sube tu DNI y licencia. Después de aprobarlos, el superadministrador verificará que los datos coincidan."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {driverDocuments.some((document) =>
               document.state === "VENCIDO" || document.state === "POR_VENCER",

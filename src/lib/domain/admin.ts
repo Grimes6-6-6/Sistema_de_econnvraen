@@ -21,6 +21,9 @@ export interface ManagedUser {
     licenseCategory: string;
     licenseExpiresAt: string;
     enabled: boolean;
+    identityState: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
+    identityObservation: string;
+    identityReviewedAt: string | null;
   } | null;
 }
 
@@ -55,6 +58,7 @@ export interface OperationalDocument {
   holderId: string;
   holderName: string;
   documentType:
+    | "DNI"
     | "LICENCIA"
     | "SOAT"
     | "CITV"
@@ -78,6 +82,7 @@ export interface OperationalDocument {
 }
 
 export const PERSONAL_DOCUMENT_TYPES = [
+  "DNI",
   "LICENCIA",
   "ANTECEDENTES",
   "SALUD",

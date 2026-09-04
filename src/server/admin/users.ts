@@ -9,6 +9,7 @@ import type {
   AdminUserCreateInput,
   AdminUserUpdateInput,
   ChangePasswordInput,
+  DriverIdentityReviewInput,
 } from "@/lib/validation/schemas";
 import { createTemporaryPassword } from "@/server/auth/passwords";
 import { writeAuditLog } from "@/server/audit";
@@ -38,6 +39,9 @@ interface ManagedUserRow extends QueryResultRow {
   categoria_licencia: string | null;
   fecha_vencimiento: string | null;
   conductor_habilitado: boolean | null;
+  identidad_estado: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
+  identidad_observacion: string | null;
+  identidad_verificada_at: string | null;
 }
 
 interface TargetUserRow extends QueryResultRow {
@@ -83,6 +87,9 @@ function mapUser(row: ManagedUserRow): ManagedUser {
             licenseCategory: row.categoria_licencia,
             licenseExpiresAt: row.fecha_vencimiento,
             enabled: Boolean(row.conductor_habilitado),
+            identityState: row.identidad_estado,
+            identityObservation: row.identidad_observacion || "",
+            identityReviewedAt: row.identidad_verificada_at,
           }
         : null,
   };
@@ -116,7 +123,10 @@ const USER_SELECT = `
     c.nro_licencia,
     c.categoria_licencia,
     c.fecha_vencimiento::text,
-    c.habilitado AS conductor_habilitado
+    c.habilitado AS conductor_habilitado,
+    c.identidad_estado,
+    c.identidad_observacion,
+    c.identidad_verificada_at::text
   FROM usuarios u
   JOIN roles r ON r.id_rol = u.id_rol
   LEFT JOIN personas p ON p.id_persona = u.id_persona
@@ -210,6 +220,91 @@ async function getManagedUserById(userId: number): Promise<ManagedUser> {
   );
   if (!result.rows[0]) throw notFound("El usuario no existe.");
   return mapUser(result.rows[0]);
+}
+
+export async function reviewDriverIdentity(
+  actor: SessionUser,
+  userIdValue: string,
+  input: DriverIdentityReviewInput,
+): Promise<ManagedUser> {
+  if (actor.rol !== "SUPER_ADMIN") {
+    throw forbidden("Solo el superadministrador puede validar la identidad de un conductor.");
+  }
+  const userId = parseEntityId(userIdValue, "U");
+  if (!userId) throw notFound("El conductor no existe.");
+
+  await withTransaction(async (client) => {
+    const result = await client.query<{
+      id_conductor: number;
+      id_agencia_base: number;
+      missing_documents: string[];
+    }>(
+      `SELECT driver.id_conductor, driver.id_agencia_base,
+              ARRAY(
+                SELECT required.type
+                FROM unnest(ARRAY['DNI', 'LICENCIA']::varchar[]) AS required(type)
+                WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM documentos_operativos document
+                  WHERE document.titular_tipo = 'CONDUCTOR'
+                    AND document.id_conductor = driver.id_conductor
+                    AND document.tipo_documento = required.type
+                    AND document.estado IN ('VIGENTE', 'POR_VENCER')
+                    AND document.fecha_vencimiento >= CURRENT_DATE
+                    AND document.revisado_por IS NOT NULL
+                    AND (required.type <> 'DNI' OR document.numero = person.nro_documento)
+                    AND (required.type <> 'LICENCIA' OR document.numero = driver.nro_licencia)
+                )
+              ) AS missing_documents
+       FROM usuarios account
+       JOIN roles role ON role.id_rol = account.id_rol
+       JOIN conductores driver ON driver.id_persona = account.id_persona
+       JOIN personas person ON person.id_persona = driver.id_persona
+       WHERE account.id_usuario = $1
+         AND role.nombre = 'CONDUCTOR'
+       FOR UPDATE OF driver`,
+      [userId],
+    );
+    const driver = result.rows[0];
+    if (!driver) throw notFound("El usuario no tiene un perfil de conductor.");
+    if (input.decision === "VERIFICAR" && driver.missing_documents.length > 0) {
+      throw conflict(
+        "IDENTITY_DOCUMENTS_REQUIRED",
+        `Antes de validar la identidad, aprueba: ${driver.missing_documents.join(", ")}.`,
+      );
+    }
+
+    await client.query(
+      `UPDATE conductores
+       SET identidad_estado = $1,
+           identidad_observacion = NULLIF($2, ''),
+           identidad_verificada_por = $3,
+           identidad_verificada_at = NOW(),
+           updated_at = NOW()
+       WHERE id_conductor = $4`,
+      [
+        input.decision === "VERIFICAR" ? "VERIFICADA" : "OBSERVADA",
+        input.reason || "",
+        actorId(actor),
+        driver.id_conductor,
+      ],
+    );
+    await writeAuditLog(
+      {
+        userId: actorId(actor),
+        agencyId: driver.id_agencia_base,
+        action: input.decision === "VERIFICAR"
+          ? "DRIVER_IDENTITY_VERIFIED"
+          : "DRIVER_IDENTITY_OBSERVED",
+        entity: "conductor",
+        entityId: formatEntityId("C", driver.id_conductor, 2),
+        metadata: { reason: input.reason || null, userId: userIdValue },
+      },
+      client,
+    );
+  });
+
+  return getManagedUserById(userId);
 }
 
 export async function createManagedUser(

@@ -1003,6 +1003,69 @@ export async function createTrip(
     if (!check?.route_active || !check.vehicle_active || !check.driver_active) {
       throw conflict("TRIP_RESOURCES_UNAVAILABLE", "La ruta, vehículo o conductor no está disponible.");
     }
+
+    const compliance = await client.query<{
+      identity_state: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
+      missing_driver_documents: string[];
+      missing_vehicle_documents: string[];
+    }>(
+      `SELECT driver.identidad_estado AS identity_state,
+              ARRAY(
+                SELECT required.type
+                FROM unnest(ARRAY['DNI', 'LICENCIA']::varchar[]) AS required(type)
+                WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM documentos_operativos document
+                  WHERE document.titular_tipo = 'CONDUCTOR'
+                    AND document.id_conductor = driver.id_conductor
+                    AND document.tipo_documento = required.type
+                    AND document.estado IN ('VIGENTE', 'POR_VENCER')
+                    AND document.fecha_vencimiento >= $3::date
+                    AND document.revisado_por IS NOT NULL
+                    AND (required.type <> 'DNI' OR document.numero = person.nro_documento)
+                    AND (required.type <> 'LICENCIA' OR document.numero = driver.nro_licencia)
+                )
+              ) AS missing_driver_documents,
+              ARRAY(
+                SELECT required.type
+                FROM unnest(ARRAY['SOAT', 'CITV', 'TUC']::varchar[]) AS required(type)
+                WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM documentos_operativos document
+                  WHERE document.titular_tipo = 'VEHICULO'
+                    AND document.id_vehiculo = $2
+                    AND document.tipo_documento = required.type
+                    AND document.estado IN ('VIGENTE', 'POR_VENCER')
+                    AND document.fecha_vencimiento >= $3::date
+                    AND document.revisado_por IS NOT NULL
+                )
+              ) AS missing_vehicle_documents
+       FROM conductores driver
+       JOIN personas person ON person.id_persona = driver.id_persona
+       WHERE driver.id_conductor = $1`,
+      [driverId, vehicleId, input.fecha],
+    );
+    const complianceRow = compliance.rows[0];
+    const complianceProblems: string[] = [];
+    if (complianceRow?.identity_state !== "VERIFICADA") {
+      complianceProblems.push("la identidad del conductor no está verificada");
+    }
+    if (complianceRow?.missing_driver_documents.length) {
+      complianceProblems.push(
+        `faltan documentos aprobados del conductor: ${complianceRow.missing_driver_documents.join(", ")}`,
+      );
+    }
+    if (complianceRow?.missing_vehicle_documents.length) {
+      complianceProblems.push(
+        `faltan documentos aprobados del vehículo: ${complianceRow.missing_vehicle_documents.join(", ")}`,
+      );
+    }
+    if (complianceProblems.length > 0) {
+      throw conflict(
+        "TRIP_DOCUMENT_COMPLIANCE_REQUIRED",
+        `No se puede programar el viaje porque ${complianceProblems.join("; ")}.`,
+      );
+    }
     if (!check.license_valid) {
       throw conflict("DRIVER_LICENSE_EXPIRED", "La licencia del conductor no está vigente.");
     }

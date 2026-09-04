@@ -191,6 +191,7 @@ export const operationalDocumentSchema = z
     holderType: z.enum(["CONDUCTOR", "VEHICULO"]),
     holderId: z.string().regex(/^[CV]\d{2,10}$/),
     documentType: z.enum([
+      "DNI",
       "LICENCIA",
       "SOAT",
       "CITV",
@@ -208,11 +209,34 @@ export const operationalDocumentSchema = z
   })
   .superRefine((value, context) => {
     const expectedPrefix = value.holderType === "CONDUCTOR" ? "C" : "V";
+    const vehicleDocumentTypes = new Set([
+      "SOAT",
+      "CITV",
+      "TUC",
+      "TARJETA_PROPIEDAD",
+    ]);
     if (!value.holderId.startsWith(expectedPrefix)) {
       context.addIssue({
         code: "custom",
         path: ["holderId"],
         message: "El titular no corresponde al tipo seleccionado.",
+      });
+    }
+    if (
+      (value.holderType === "VEHICULO") !==
+      vehicleDocumentTypes.has(value.documentType)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["documentType"],
+        message: "El documento no corresponde al tipo de titular seleccionado.",
+      });
+    }
+    if (value.documentType === "DNI" && !/^\d{8}$/.test(value.number)) {
+      context.addIssue({
+        code: "custom",
+        path: ["number"],
+        message: "El DNI debe contener exactamente 8 dígitos.",
       });
     }
     if (value.issuedAt && value.expiresAt < value.issuedAt) {
@@ -227,6 +251,7 @@ export const operationalDocumentSchema = z
 export const driverOperationalDocumentSchema = z
   .object({
     documentType: z.enum([
+      "DNI",
       "LICENCIA",
       "SOAT",
       "CITV",
@@ -256,6 +281,13 @@ export const driverOperationalDocumentSchema = z
         message: "Selecciona el vehículo al que pertenece el documento.",
       });
     }
+    if (value.documentType === "DNI" && !/^\d{8}$/.test(value.number)) {
+      context.addIssue({
+        code: "custom",
+        path: ["number"],
+        message: "El DNI debe contener exactamente 8 dígitos.",
+      });
+    }
     if (value.issuedAt && value.expiresAt < value.issuedAt) {
       context.addIssue({
         code: "custom",
@@ -274,6 +306,19 @@ export const operationalDocumentReviewSchema = z.object({
       code: "custom",
       path: ["reason"],
       message: "Indica por qué se observa el documento.",
+    });
+  }
+});
+
+export const driverIdentityReviewSchema = z.object({
+  decision: z.enum(["VERIFICAR", "OBSERVAR"]),
+  reason: safeText(3, 300).optional().or(z.literal("")),
+}).superRefine((value, context) => {
+  if (value.decision === "OBSERVAR" && !value.reason) {
+    context.addIssue({
+      code: "custom",
+      path: ["reason"],
+      message: "Indica por qué no se pudo validar la identidad.",
     });
   }
 });
@@ -564,6 +609,7 @@ export type CancellationResolutionInput = z.infer<typeof cancellationResolutionS
 export type OperationalDocumentInput = z.infer<typeof operationalDocumentSchema>;
 export type DriverOperationalDocumentInput = z.infer<typeof driverOperationalDocumentSchema>;
 export type OperationalDocumentReviewInput = z.infer<typeof operationalDocumentReviewSchema>;
+export type DriverIdentityReviewInput = z.infer<typeof driverIdentityReviewSchema>;
 export type ManagedRouteInput = z.infer<typeof managedRouteSchema>;
 export type ManagedRouteUpdateInput = z.infer<typeof managedRouteUpdateSchema>;
 export type ManagedVehicleInput = z.infer<typeof managedVehicleSchema>;

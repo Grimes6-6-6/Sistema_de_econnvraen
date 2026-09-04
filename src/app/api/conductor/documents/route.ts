@@ -8,6 +8,7 @@ import {
   sanitizeDocumentFilename,
 } from "@/lib/security/document-files";
 import {
+  getDriverIdentityVerification,
   listDriverOperationalDocuments,
   uploadDriverOperationalDocument,
 } from "@/server/admin/documents";
@@ -24,7 +25,11 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const user = await requireApiPermission(PERMISSIONS.DRIVER_SELF_MANAGE);
-    return noStoreJson({ documents: await listDriverOperationalDocuments(user) });
+    const [documents, identity] = await Promise.all([
+      listDriverOperationalDocuments(user),
+      getDriverIdentityVerification(user),
+    ]);
+    return noStoreJson({ documents, identity });
   } catch (error) {
     return handleRouteError(error);
   }

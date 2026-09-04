@@ -36,7 +36,13 @@ const CURRENT_COLUMNS = {
   ],
   mfa_recovery_codes: ["id_recovery", "id_usuario", "code_hash", "used_at"],
   vehiculos: ["id_agencia_base"],
-  conductores: ["id_agencia_base"],
+  conductores: [
+    "id_agencia_base",
+    "identidad_estado",
+    "identidad_observacion",
+    "identidad_verificada_por",
+    "identidad_verificada_at",
+  ],
   viajes: ["id_agencia", "motivo_cancelacion"],
   boletos: [
     "id_agencia_venta",

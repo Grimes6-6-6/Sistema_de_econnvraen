@@ -305,6 +305,60 @@ export default function AdminWorkspace() {
     }
   };
 
+  const reviewDriverIdentity = async (
+    managedUser: ManagedUser,
+    decision: "VERIFICAR" | "OBSERVAR",
+  ) => {
+    const confirmation = await requestConfirmation({
+      title: decision === "VERIFICAR" ? "Validar identidad" : "Observar identidad",
+      message:
+        decision === "VERIFICAR"
+          ? `Confirma que comparaste el DNI, nombres y licencia de ${managedUser.names} ${managedUser.surnames}.`
+          : "Indica la diferencia encontrada para que el conductor pueda corregirla.",
+      confirmLabel: decision === "VERIFICAR" ? "Marcar verificada" : "Enviar observación",
+      cancelLabel: "Cancelar",
+      ...(decision === "OBSERVAR"
+        ? {
+            input: {
+              label: "Motivo de la observación",
+              placeholder: "Ej.: el nombre no coincide con el DNI presentado",
+              minLength: 3,
+            },
+          }
+        : {}),
+    });
+    if (!confirmation.confirmed) return;
+
+    setBusy(true);
+    try {
+      const result = await api<{ user: ManagedUser }>(
+        `/api/admin/users/${managedUser.id}/verify-identity`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            decision,
+            reason: confirmation.value || "",
+          }),
+        },
+      );
+      setUsers((current) =>
+        current.map((item) => item.id === result.user.id ? result.user : item),
+      );
+      notify({
+        type: "success",
+        title: decision === "VERIFICAR" ? "Identidad verificada" : "Identidad observada",
+      });
+    } catch (reason) {
+      notify({
+        type: "error",
+        title: "No se pudo revisar la identidad",
+        message: reason instanceof Error ? reason.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const resolveCancellation = async (request: TicketCancellationRequest, decision: "APROBADA" | "RECHAZADA") => {
     const confirmation = await requestConfirmation({
       title: decision === "APROBADA" ? "Aprobar anulación" : "Rechazar anulación",
@@ -472,6 +526,7 @@ export default function AdminWorkspace() {
       );
       window.dispatchEvent(new Event("operational-documents-updated"));
       await refreshDatabase();
+      await load();
       notify({
         type: "success",
         title: decision === "APROBAR" ? "Documento aprobado" : "Observación enviada",
@@ -592,8 +647,62 @@ export default function AdminWorkspace() {
           </details>
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-xs">
-              <thead><tr className="border-b border-white/10 text-left text-[10px] uppercase text-slate-500"><th className="p-2">Usuario</th><th className="p-2">Rol</th><th className="p-2">Agencia</th><th className="p-2">Estado</th><th className="p-2 text-right">Acciones</th></tr></thead>
-              <tbody>{users.map((item) => <tr key={item.id} className="border-b border-white/5 text-slate-300"><td className="p-2"><b className="text-white">{item.username}</b><span className="block text-[10px] text-slate-500">{item.names} {item.surnames}</span></td><td className="p-2">{item.role}</td><td className="p-2">{item.agencyNames.join(", ")}</td><td className="p-2"><span className={item.state === "ACTIVO" ? "text-emerald-300" : "text-rose-300"}>{item.state}</span><span className={`block text-[9px] ${item.phone ? "text-emerald-300" : "text-amber-300"}`}>{item.phone ? "SMS listo" : "Celular pendiente"}</span>{item.mfaEnabled && <span className="block text-[9px] text-blue-300">App autenticadora activa</span>}{item.mustChangePassword && <span className="block text-[9px] text-amber-300">Cambio de clave pendiente</span>}</td><td className="p-2"><div className="flex justify-end gap-1"><button type="button" onClick={() => { setEditingUser(item); setEditingRole(item.role); }} className="rounded-lg border border-white/10 px-2 py-1">Editar</button><button type="button" aria-label={`Restablecer contraseña de ${item.username}`} onClick={() => void resetPassword(item)} className="rounded-lg border border-amber-500/30 px-2 py-1 text-amber-300"><KeyRound className="h-3.5 w-3.5" /></button>{item.mfaEnabled && <button type="button" aria-label={`Restablecer segundo factor de ${item.username}`} onClick={() => void resetMfa(item)} className="rounded-lg border border-blue-500/30 px-2 py-1 text-blue-300"><ShieldCheck className="h-3.5 w-3.5" /></button>}<button type="button" onClick={() => void toggleUser(item)} className="rounded-lg border border-rose-500/30 px-2 py-1 text-rose-300">{item.state === "ACTIVO" ? "Bloquear" : "Activar"}</button></div></td></tr>)}</tbody>
+              <thead>
+                <tr className="border-b border-white/10 text-left text-[10px] uppercase text-slate-500">
+                  <th className="p-2">Usuario</th>
+                  <th className="p-2">Rol</th>
+                  <th className="p-2">Agencia</th>
+                  <th className="p-2">Estado</th>
+                  <th className="p-2">Identidad</th>
+                  <th className="p-2 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((item) => (
+                  <tr key={item.id} className="border-b border-white/5 text-slate-300">
+                    <td className="p-2">
+                      <b className="text-white">{item.username}</b>
+                      <span className="block text-[10px] text-slate-500">{item.names} {item.surnames}</span>
+                    </td>
+                    <td className="p-2">{item.role}</td>
+                    <td className="p-2">{item.agencyNames.join(", ")}</td>
+                    <td className="p-2">
+                      <span className={item.state === "ACTIVO" ? "text-emerald-300" : "text-rose-300"}>{item.state}</span>
+                      <span className={`block text-[9px] ${item.phone ? "text-emerald-300" : "text-amber-300"}`}>{item.phone ? "SMS listo" : "Celular pendiente"}</span>
+                      {item.mfaEnabled && <span className="block text-[9px] text-blue-300">App autenticadora activa</span>}
+                      {item.mustChangePassword && <span className="block text-[9px] text-amber-300">Cambio de clave pendiente</span>}
+                    </td>
+                    <td className="p-2">
+                      {item.driver ? (
+                        <div className="min-w-36">
+                          <span className={item.driver.identityState === "VERIFICADA" ? "font-bold text-emerald-300" : item.driver.identityState === "OBSERVADA" ? "font-bold text-rose-300" : "font-bold text-amber-300"}>
+                            {item.driver.identityState}
+                          </span>
+                          {item.driver.identityObservation && (
+                            <small className="block max-w-48 text-rose-300">{item.driver.identityObservation}</small>
+                          )}
+                          {currentUser.rol === "SUPER_ADMIN" && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {item.driver.identityState !== "VERIFICADA" && (
+                                <button type="button" disabled={busy} onClick={() => void reviewDriverIdentity(item, "VERIFICAR")} className="rounded-md bg-emerald-700 px-2 py-1 text-[9px] font-bold text-white disabled:opacity-50">Validar</button>
+                              )}
+                              <button type="button" disabled={busy} onClick={() => void reviewDriverIdentity(item, "OBSERVAR")} className="rounded-md border border-rose-500/40 px-2 py-1 text-[9px] font-bold text-rose-300 disabled:opacity-50">Observar</button>
+                            </div>
+                          )}
+                        </div>
+                      ) : "—"}
+                    </td>
+                    <td className="p-2">
+                      <div className="flex justify-end gap-1">
+                        <button type="button" onClick={() => { setEditingUser(item); setEditingRole(item.role); }} className="rounded-lg border border-white/10 px-2 py-1">Editar</button>
+                        <button type="button" aria-label={`Restablecer contraseña de ${item.username}`} onClick={() => void resetPassword(item)} className="rounded-lg border border-amber-500/30 px-2 py-1 text-amber-300"><KeyRound className="h-3.5 w-3.5" /></button>
+                        {item.mfaEnabled && <button type="button" aria-label={`Restablecer segundo factor de ${item.username}`} onClick={() => void resetMfa(item)} className="rounded-lg border border-blue-500/30 px-2 py-1 text-blue-300"><ShieldCheck className="h-3.5 w-3.5" /></button>}
+                        <button type="button" onClick={() => void toggleUser(item)} className="rounded-lg border border-rose-500/30 px-2 py-1 text-rose-300">{item.state === "ACTIVO" ? "Bloquear" : "Activar"}</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
           {editingUser && (
@@ -627,7 +736,47 @@ export default function AdminWorkspace() {
           <div className="mt-4 grid gap-4 xl:grid-cols-3">
             <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"><summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Registrar vehículo</summary><form action={(data) => void createVehicle(data)} className="mt-3 space-y-2"><select name="agencyId" className={inputClass}>{activeAgencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select><input name="plate" required placeholder="Placa" className={inputClass} /><input name="type" required placeholder="Tipo" className={inputClass} /><input name="brand" required placeholder="Marca" className={inputClass} /><input name="model" required placeholder="Modelo" className={inputClass} /><div className="grid grid-cols-2 gap-2"><input name="capacity" type="number" min={1} max={80} required placeholder="Capacidad" className={inputClass} /><input name="year" type="number" min={1990} max={2100} placeholder="Año" className={inputClass} /></div><button disabled={busy} className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white">Guardar vehículo</button></form></details>
             <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"><summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Crear ruta</summary><form action={(data) => void createRoute(data)} className="mt-3 space-y-2"><label className="text-[10px] text-slate-400">Origen<select name="originAgencyId" defaultValue={currentUser.agenciaId || ""} className={inputClass}>{destinations.map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select></label><label className="text-[10px] text-slate-400">Destino<select name="destinationAgencyId" className={inputClass}>{destinations.filter((agency) => agency.id !== currentUser.agenciaId).map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select></label><div className="grid grid-cols-2 gap-2"><input name="distanceKm" type="number" step="0.1" required placeholder="Km" className={inputClass} /><input name="durationHours" type="number" step="0.1" required placeholder="Horas" className={inputClass} /></div><input name="price" type="number" step="0.1" required placeholder="Precio base" className={inputClass} /><button disabled={busy} className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white">Guardar ruta</button></form></details>
-            <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"><summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Registrar documento</summary><form action={(data) => void createDocument(data)} className="mt-3 space-y-2"><select name="holderType" value={documentHolderType} onChange={(event) => setDocumentHolderType(event.target.value as "VEHICULO" | "CONDUCTOR")} className={inputClass}><option value="VEHICULO">Vehículo</option><option value="CONDUCTOR">Conductor</option></select><select name="holderId" className={inputClass}>{documentHolderType === "VEHICULO" ? db.vehiculos.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.placa}</option>) : db.conductores.map((driver) => <option key={driver.id} value={driver.id}>{driver.nombres}</option>)}</select><select name="documentType" className={inputClass}><option value="SOAT">SOAT</option><option value="CITV">Revisión técnica (CITV)</option><option value="TUC">TUC</option><option value="TARJETA_PROPIEDAD">Tarjeta de propiedad</option><option value="LICENCIA">Licencia</option><option value="ANTECEDENTES">Antecedentes</option><option value="SALUD">Aptitud médica</option><option value="OTRO">Otro</option></select><input name="number" required placeholder="Número" className={inputClass} /><div className="grid grid-cols-2 gap-2"><label className="text-[10px] text-slate-400">Emisión<input name="issuedAt" type="date" className={inputClass} /></label><label className="text-[10px] text-slate-400">Vencimiento<input name="expiresAt" type="date" required className={inputClass} /></label></div><input name="notes" placeholder="Observación" className={inputClass} /><button disabled={busy} className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white">Guardar documento</button></form></details>
+            {currentUser.rol === "SUPER_ADMIN" && (
+            <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Registrar documento</summary>
+              <form action={(data) => void createDocument(data)} className="mt-3 space-y-2">
+                <select name="holderType" value={documentHolderType} onChange={(event) => setDocumentHolderType(event.target.value as "VEHICULO" | "CONDUCTOR")} className={inputClass}>
+                  <option value="VEHICULO">Vehículo</option>
+                  <option value="CONDUCTOR">Conductor</option>
+                </select>
+                <select name="holderId" className={inputClass}>
+                  {documentHolderType === "VEHICULO"
+                    ? db.vehiculos.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.placa}</option>)
+                    : db.conductores.map((driver) => <option key={driver.id} value={driver.id}>{driver.nombres}</option>)}
+                </select>
+                <select name="documentType" className={inputClass}>
+                  {documentHolderType === "VEHICULO" ? (
+                    <>
+                      <option value="SOAT">SOAT</option>
+                      <option value="CITV">Revisión técnica (CITV)</option>
+                      <option value="TUC">TUC</option>
+                      <option value="TARJETA_PROPIEDAD">Tarjeta de propiedad</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="DNI">DNI</option>
+                      <option value="LICENCIA">Licencia</option>
+                      <option value="ANTECEDENTES">Antecedentes</option>
+                      <option value="SALUD">Aptitud médica</option>
+                      <option value="OTRO">Otro</option>
+                    </>
+                  )}
+                </select>
+                <input name="number" required placeholder="Número" className={inputClass} />
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-[10px] text-slate-400">Emisión<input name="issuedAt" type="date" className={inputClass} /></label>
+                  <label className="text-[10px] text-slate-400">Vencimiento<input name="expiresAt" type="date" required className={inputClass} /></label>
+                </div>
+                <input name="notes" placeholder="Observación" className={inputClass} />
+                <button disabled={busy} className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white">Guardar documento</button>
+              </form>
+            </details>
+            )}
           </div>
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <div><h4 className="text-xs font-black uppercase text-slate-300"><Route className="mr-1 inline h-4 w-4" /> Rutas y precios</h4><div className="mt-2 space-y-2">{routes.map((route) => <div key={route.id} className="flex items-center justify-between rounded-xl border border-white/10 p-3 text-xs"><span><b className="text-white">{route.origin} → {route.destination}</b><small className="block text-slate-500">{route.distanceKm} km · {route.durationHours} h</small></span><button onClick={() => void updateRoutePrice(route)} className="rounded-lg border border-emerald-500/30 px-2 py-1 text-emerald-300">S/ {route.price.toFixed(2)}</button></div>)}</div></div>
@@ -658,7 +807,7 @@ export default function AdminWorkspace() {
                             <Download className="h-3.5 w-3.5" /> Descargar
                           </a>
                         )}
-                        {document.state === "PENDIENTE" && (
+                        {document.state === "PENDIENTE" && currentUser.rol === "SUPER_ADMIN" && (
                           <>
                             <button type="button" disabled={busy} onClick={() => void reviewDocument(document, "APROBAR")} className="rounded-lg bg-emerald-700 px-2 py-1 font-bold text-white disabled:opacity-50">Aprobar</button>
                             <button type="button" disabled={busy} onClick={() => void reviewDocument(document, "OBSERVAR")} className="rounded-lg border border-rose-500/40 px-2 py-1 font-bold text-rose-300 disabled:opacity-50">Observar</button>
