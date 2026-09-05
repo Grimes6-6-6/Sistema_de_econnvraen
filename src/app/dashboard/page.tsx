@@ -34,6 +34,8 @@ import {
   X,
   Settings,
   BellRing,
+  Menu,
+  UserRound,
 } from "lucide-react";
 
 // Map loaded client-side only (Leaflet needs window)
@@ -120,6 +122,7 @@ export default function DashboardPage() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [documentAlerts, setDocumentAlerts] = useState<OperationalDocument[]>([]);
   const [documentAlertsError, setDocumentAlertsError] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
     | "dashboard"
     | "venta"
@@ -895,25 +898,38 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="corporate-app flex min-h-screen flex-col text-slate-800 lg:flex-row">
+    <div className="corporate-app flex min-h-screen flex-col bg-[#f4f6f8] text-slate-800 lg:flex-row">
       {/* ── SIDEBAR NAVIGATION ── */}
-      <aside className="corporate-sidebar no-print relative z-20 flex w-full shrink-0 flex-col border-b border-slate-800 bg-[#182235] lg:min-h-screen lg:w-64 lg:border-r lg:border-b-0">
+      <aside className="corporate-sidebar no-print relative z-30 flex w-full shrink-0 flex-col border-b border-slate-800 bg-[#172033] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r lg:border-b-0">
         {/* Brand */}
-        <div className="flex h-16 items-center border-b border-white/10 px-4">
-          <div className="flex h-12 w-full items-center rounded-lg bg-white px-2 shadow-sm">
+        <div className="flex h-[72px] items-center justify-between border-b-4 border-[#f4c430] bg-white px-4">
+          <div className="flex min-w-0 items-center">
             <Image
               src="/econnvrae-logo.png"
               alt="ECONNVRAE"
               width={2086}
               height={754}
               priority
-              className="h-11 w-auto max-w-full object-contain"
+              className="h-12 w-auto max-w-[185px] object-contain object-left"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileNavOpen((open) => !open)}
+            aria-expanded={isMobileNavOpen}
+            aria-controls="dashboard-navigation"
+            aria-label={isMobileNavOpen ? "Cerrar menú" : "Abrir menú"}
+            className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-700 lg:hidden"
+          >
+            {isMobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
 
         {/* Nav list */}
-        <nav className="flex flex-row overflow-x-auto p-3 space-x-1 lg:flex-col lg:space-x-0 lg:space-y-1 lg:p-4 lg:grow">
+        <nav
+          id="dashboard-navigation"
+          className={`${isMobileNavOpen ? "flex" : "hidden"} flex-col gap-1 overflow-y-auto p-3 lg:flex lg:grow lg:p-4`}
+        >
           {(
             [
               {
@@ -973,17 +989,20 @@ export default function DashboardPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setIsMobileNavOpen(false);
+                }}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap lg:w-full ${
+                className={`flex w-full items-center gap-3 rounded-md border-l-4 px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
                   isActive
-                    ? "bg-linear-to-r from-sky-600 to-blue-700 text-white shadow-lg shadow-slate-950/40"
-                    : "text-slate-400 hover:bg-slate-800/80 hover:text-white"
+                    ? "border-[#f4c430] bg-white text-slate-950"
+                    : "border-transparent text-slate-300 hover:bg-white/8 hover:text-white"
                 }`}
               >
                 <Icon
                   className={`h-4 w-4 shrink-0 ${
-                    isActive ? "text-white" : "text-sky-400"
+                    isActive ? "text-[#9a6d00]" : "text-slate-400"
                   }`}
                 />
                 <span>{tab.label}</span>
@@ -1001,46 +1020,48 @@ export default function DashboardPage() {
             })}
         </nav>
 
-        <details className="mx-3 mb-3 rounded-2xl border border-white/10 bg-slate-950/60 lg:hidden">
-          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-bold text-white">
-            <span className="truncate">
-              {currentUser?.agenciaNombre || "Agencia activa"}
-            </span>
-            <span className="text-[10px] uppercase tracking-wider text-sky-300">
-              Cuenta
-            </span>
-          </summary>
-          <div className="border-t border-white/10 p-3">
-            <p className="mb-3 truncate text-xs font-bold text-slate-300">
-              {currentUser
-                ? `${currentUser.nombres} ${currentUser.apellidos}`
-                : "Usuario"}
-            </p>
+        <div className={`${isMobileNavOpen ? "block" : "hidden"} border-t border-white/10 px-3 pb-3 pt-3 lg:hidden`}>
+          <div className="mb-3 flex items-center gap-3 rounded-md bg-white/6 px-3 py-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f4c430] text-sm font-bold text-slate-950">
+              {currentUser?.nombres?.[0] || "U"}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">
+                {currentUser
+                  ? `${currentUser.nombres} ${currentUser.apellidos}`
+                  : "Usuario"}
+              </p>
+              <p className="truncate text-xs text-slate-400">
+                {currentUser?.agenciaNombre || "Agencia activa"}
+              </p>
+            </div>
+          </div>
+          <div>
             <AgencySwitcher />
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 py-2.5 text-xs font-bold uppercase tracking-wider text-rose-200"
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-white/15 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:border-rose-400 hover:bg-rose-500/15 hover:text-white"
             >
               <LogOut className="h-4 w-4" /> Cerrar sesión
             </button>
           </div>
-        </details>
+        </div>
 
         {/* User profile / Agency panel in Sidebar footer */}
-        <div className="hidden border-t border-white/10 bg-slate-950/60 p-4 lg:block space-y-3">
+        <div className="hidden space-y-3 border-t border-white/10 bg-[#111a2b] p-4 lg:block">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 border border-white/10 text-sky-300 font-black text-sm">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f4c430] text-sm font-bold text-slate-950">
               {currentUser ? currentUser.nombres[0] : "U"}
             </div>
             <div className="min-w-0 grow">
-              <h4 className="text-xs font-black text-white truncate">
+              <h4 className="truncate text-sm font-semibold text-white">
                 {currentUser
                   ? `${currentUser.nombres} ${currentUser.apellidos}`
                   : "Usuario"}
               </h4>
-              <span className="text-[10px] text-sky-300 font-bold uppercase tracking-wider block">
-                {currentUser ? currentUser.rol : "Operador"}
+              <span className="block text-xs text-slate-400">
+                {currentUser ? currentUser.rol.replaceAll("_", " ") : "Operador"}
               </span>
             </div>
           </div>
@@ -1050,311 +1071,323 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 hover:bg-rose-600 hover:border-rose-600 text-slate-300 hover:text-white text-xs font-bold uppercase tracking-wider py-2 transition-all cursor-pointer"
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-white/15 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-rose-500 hover:bg-rose-600 hover:text-white"
           >
-            <LogOut className="h-3.5 w-3.5" /> Cerrar Sesión
+            <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
           </button>
         </div>
       </aside>
 
       {/* ── WORKSPACE CONTENT AREA ── */}
-      <main className="relative z-10 mx-auto w-full max-w-7xl grow overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="no-print sticky top-0 z-20 flex min-h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900">Centro de operaciones</p>
+            <p className="truncate text-xs text-slate-500">
+              {currentUser?.agenciaNombre || "Agencia activa"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {currentUser?.rol === "SUPER_ADMIN" && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("administracion")}
+                aria-label={`${documentAlerts.length} alertas documentarias`}
+                className="relative flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+              >
+                <BellRing className="h-4.5 w-4.5" />
+                {documentAlerts.length > 0 && (
+                  <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold leading-5 text-white">
+                    {documentAlerts.length > 99 ? "99+" : documentAlerts.length}
+                  </span>
+                )}
+              </button>
+            )}
+            <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                <UserRound className="h-4.5 w-4.5" />
+              </div>
+              <div className="hidden min-w-0 sm:block">
+                <p className="max-w-44 truncate text-sm font-semibold text-slate-900">
+                  {currentUser ? `${currentUser.nombres} ${currentUser.apellidos}` : "Usuario"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {currentUser ? currentUser.rol.replaceAll("_", " ") : "Operador"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="relative z-10 mx-auto w-full max-w-[1440px] grow p-4 sm:p-6 lg:p-8">
         {/* ================================================================== */}
         {/* TAB 1: OVERVIEW DASHBOARD */}
         {/* ================================================================== */}
         {activeTab === "dashboard" && (
-          <div className="space-y-6 animate-fade-in no-print">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-white/10">
+          <div className="no-print space-y-5 animate-fade-in">
+            <section className="flex flex-col gap-4 border-b border-slate-200 pb-5 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <h2 className="text-2xl sm:text-3xl font-black text-white">
-                  Dashboard de Operaciones
-                </h2>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">
-                  Métricas operativas del día en la agencia actual.
+                <p className="mb-1 text-sm font-medium text-slate-500">
+                  {new Date().toLocaleDateString("es-PE", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+                <h1 className="text-2xl font-bold text-slate-950 sm:text-3xl">
+                  Resumen de hoy
+                </h1>
+                <p className="mt-1 text-sm text-slate-600">
+                  Viajes, ventas y entregas de {currentUser?.agenciaNombre || "la agencia activa"}.
                 </p>
               </div>
-              <span className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">
-                Hoy:{" "}
-                {new Date().toLocaleDateString("es-ES", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </span>
-            </div>
+
+              <div className="flex flex-wrap gap-2">
+                {can(PERMISSIONS.TRIP_VIEW) && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("viajes")}
+                    className="inline-flex items-center gap-2 rounded-md bg-[#f4c430] px-3.5 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-[#e5b719]"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    {can(PERMISSIONS.TRIP_MANAGE) ? "Programar viaje" : "Ver itinerario"}
+                  </button>
+                )}
+                {can(PERMISSIONS.TICKET_SELL) && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("venta")}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <Ticket className="h-4 w-4" /> Venta de pasaje
+                  </button>
+                )}
+                {can(PERMISSIONS.PARCEL_CREATE) && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("encomiendas")}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <Package className="h-4 w-4" /> Nueva encomienda
+                  </button>
+                )}
+              </div>
+            </section>
 
             {currentUser?.rol === "SUPER_ADMIN" && documentAlerts.length > 0 && (
-              <section role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-slate-800 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                      <BellRing className="h-5 w-5" />
-                    </span>
+              <section role="alert" className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-slate-800">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
                     <div>
-                      <h3 className="font-bold">{documentAlerts.length} alerta{documentAlerts.length === 1 ? "" : "s"} documentaria{documentAlerts.length === 1 ? "" : "s"}</h3>
-                      <p className="text-xs text-slate-600">Incluye documentos pendientes de revisión, próximos a vencer o vencidos en todas las agencias.</p>
+                      <h2 className="text-sm font-semibold">
+                        {documentAlerts.length} documento{documentAlerts.length === 1 ? " requiere" : "s requieren"} atención
+                      </h2>
+                      <p className="mt-0.5 text-xs text-slate-600">
+                        Hay documentos pendientes de revisión, próximos a vencer o vencidos.
+                      </p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => setActiveTab("administracion")} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700">
-                    Revisar documentos
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("administracion")}
+                    className="inline-flex items-center gap-1.5 self-start rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 sm:self-auto"
+                  >
+                    Revisar documentos <ArrowRight className="h-3.5 w-3.5" />
                   </button>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {documentAlerts.slice(0, 3).map((document) => (
-                    <div key={document.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs">
-                      <b>{document.documentType} · {document.holderName}</b>
-                      <span className={`mt-0.5 block font-bold ${document.state === "VENCIDO" ? "text-rose-700" : document.state === "PENDIENTE" ? "text-blue-700" : "text-amber-700"}`}>
-                        {document.state.replace("_", " ")} · vence {new Date(`${document.expiresAt}T12:00:00`).toLocaleDateString("es-PE")}
-                      </span>
-                    </div>
-                  ))}
                 </div>
               </section>
             )}
 
             {currentUser?.rol === "SUPER_ADMIN" && documentAlertsError && (
-              <section role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
+              <section role="alert" className="border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
                 No se pudieron comprobar las vigencias documentarias. Revisa la conexión antes de programar viajes.
               </section>
             )}
 
-            {/* KPI grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 shadow-premium backdrop-blur-md flex items-center gap-4 hover:border-emerald-500/30 transition-all">
-                <span className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                  <Calendar className="h-6 w-6" />
-                </span>
-                <div>
-                  <h3 className="text-3xl font-black text-white font-mono">
-                    {kpis.viajes}
-                  </h3>
-                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">
-                    Viajes de Hoy
-                  </span>
-                </div>
-              </div>
+            <section aria-label="Indicadores del día" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Viajes de hoy", value: String(kpis.viajes), icon: Calendar, tone: "bg-amber-50 text-amber-800" },
+                { label: "Pasajes vendidos", value: String(kpis.pasajes), icon: Ticket, tone: "bg-blue-50 text-blue-700" },
+                { label: "Encomiendas pendientes", value: String(kpis.encomiendas), icon: Package, tone: "bg-violet-50 text-violet-700" },
+                { label: "Ingresos del día", value: `S/ ${kpis.ingresos.toFixed(2)}`, icon: TrendingUp, tone: "bg-slate-100 text-slate-700" },
+              ].map((metric) => {
+                const Icon = metric.icon;
+                return (
+                  <article key={metric.label} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-4">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${metric.tone}`}>
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xl font-bold text-slate-950">{metric.value}</p>
+                      <p className="truncate text-xs font-medium text-slate-500">{metric.label}</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
 
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 shadow-premium backdrop-blur-md flex items-center gap-4 hover:border-amber-500/30 transition-all">
-                <span className="h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                  <Ticket className="h-6 w-6" />
-                </span>
-                <div>
-                  <h3 className="text-3xl font-black text-white font-mono">
-                    {kpis.pasajes}
-                  </h3>
-                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">
-                    Boletos Vendidos
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 shadow-premium backdrop-blur-md flex items-center gap-4 hover:border-blue-500/30 transition-all">
-                <span className="h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                  <Package className="h-6 w-6" />
-                </span>
-                <div>
-                  <h3 className="text-3xl font-black text-white font-mono">
-                    {kpis.encomiendas}
-                  </h3>
-                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">
-                    Encomiendas Pendientes
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-500/20 bg-linear-to-br from-emerald-950/40 to-slate-900/60 p-5 shadow-premium backdrop-blur-md flex items-center gap-4 hover:border-emerald-500/40 transition-all">
-                <span className="h-12 w-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 flex items-center justify-center shrink-0">
-                  <TrendingUp className="h-6 w-6" />
-                </span>
-                <div>
-                  <h3 className="text-3xl font-black text-emerald-400 font-mono">
-                    S/ {kpis.ingresos.toFixed(2)}
-                  </h3>
-                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">
-                    Ingresos del Día
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Split Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Active Trips today */}
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 shadow-premium backdrop-blur-md space-y-4">
-                <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                  <h4 className="font-extrabold text-sm text-white">
-                    Viajes del Día
-                  </h4>
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.65fr)]">
+              <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3.5 sm:px-5">
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-950">Próximas salidas</h2>
+                    <p className="text-xs text-slate-500">Itinerario programado para hoy</p>
+                  </div>
                   <button
+                    type="button"
                     onClick={() => setActiveTab("viajes")}
-                    className="text-emerald-400 text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-[#1f4f78] hover:underline"
                   >
-                    <span>Ver Itinerario</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    Ver itinerario <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead>
-                      <tr className="border-b border-white/10 bg-slate-950/40">
-                        <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Hora
-                        </th>
-                        <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Ruta
-                        </th>
-                        <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Conductor
-                        </th>
-                        <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Ocupación
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {db.viajes.filter((v) => v.fecha === todayStr).length ===
-                      0 ? (
-                        <tr>
-                          <td
-                            colSpan={4}
-                            className="text-center py-6 text-xs text-slate-500"
-                          >
-                            No hay viajes programados para hoy.
-                          </td>
+                {db.viajes.filter((trip) => trip.fecha === todayStr).length === 0 ? (
+                  <div className="flex min-h-52 flex-col items-center justify-center px-6 py-10 text-center">
+                    <CalendarDays className="mb-3 h-8 w-8 text-slate-300" />
+                    <p className="text-sm font-semibold text-slate-800">Todavía no hay salidas programadas</p>
+                    <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                      Crea el itinerario del día para habilitar la venta de pasajes y asignar conductores.
+                    </p>
+                    {can(PERMISSIONS.TRIP_MANAGE) && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("viajes")}
+                        className="mt-4 rounded-md bg-[#f4c430] px-3.5 py-2 text-sm font-semibold text-slate-950 hover:bg-[#e5b719]"
+                      >
+                        Programar primer viaje
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                      <thead className="bg-slate-50">
+                        <tr className="border-b border-slate-200">
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 sm:px-5">Hora</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Ruta</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Conductor</th>
+                          <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Ocupación</th>
                         </tr>
-                      ) : (
-                        db.viajes
-                          .filter((v) => v.fecha === todayStr)
+                      </thead>
+                      <tbody>
+                        {db.viajes
+                          .filter((trip) => trip.fecha === todayStr)
+                          .sort((left, right) => left.hora.localeCompare(right.hora))
                           .map((trip) => {
-                            const route = db.rutas.find(
-                              (r) => r.id === trip.id_ruta,
-                            );
-                            const cond = db.conductores.find(
-                              (c) => c.id === trip.id_conductor,
-                            );
+                            const route = db.rutas.find((item) => item.id === trip.id_ruta);
+                            const driver = db.conductores.find((item) => item.id === trip.id_conductor);
                             const booked = getBookedSeats(trip.id).length;
                             return (
-                              <tr
-                                key={trip.id}
-                                className="border-b border-white/5 last:border-0 hover:bg-white/5 text-xs text-slate-300 transition-colors"
-                              >
-                                <td className="py-3 px-3 font-bold text-white font-mono">
-                                  {trip.hora}
+                              <tr key={trip.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
+                                <td className="px-4 py-3 text-sm font-semibold text-slate-950 sm:px-5">{trip.hora}</td>
+                                <td className="px-4 py-3 text-sm text-slate-700">
+                                  {route ? `${route.origen} — ${route.destino}` : "Ruta sin asignar"}
                                 </td>
-                                <td className="py-3 px-3 font-semibold text-slate-200">
-                                  {route?.destino}
-                                </td>
-                                <td className="py-3 px-3 text-slate-400">
-                                  {cond?.nombres.split(" ")[0]}
-                                </td>
-                                <td className="py-3 px-3 text-center font-bold">
-                                  <span
-                                    className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider ${
-                                      booked === 4
-                                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                    }`}
-                                  >
-                                    {booked} / 4
+                                <td className="px-4 py-3 text-sm text-slate-600">{driver?.nombres || "Por asignar"}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${booked >= 4 ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                                    {booked} de 4
                                   </span>
                                 </td>
                               </tr>
                             );
-                          })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
 
-              {/* Recent Parcels */}
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 shadow-premium backdrop-blur-md space-y-4">
-                <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                  <h4 className="font-extrabold text-sm text-white">
-                    Encomiendas Recientes
-                  </h4>
-                  <button
-                    onClick={() => setActiveTab("encomiendas")}
-                    className="text-emerald-400 text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    <span>Ver Todas</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
+              <aside className="rounded-lg border border-slate-200 bg-white">
+                <div className="border-b border-slate-200 px-4 py-3.5">
+                  <h2 className="text-base font-semibold text-slate-950">Atención operativa</h2>
+                  <p className="text-xs text-slate-500">Pendientes que requieren seguimiento</p>
                 </div>
+                <div className="divide-y divide-slate-100">
+                  <button type="button" onClick={() => setActiveTab("encomiendas")} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-md bg-violet-50 text-violet-700"><Package className="h-4.5 w-4.5" /></span>
+                    <span className="min-w-0 grow"><b className="block text-sm text-slate-900">{kpis.encomiendas} encomiendas</b><span className="text-xs text-slate-500">Pendientes de entrega</span></span>
+                    <ArrowRight className="h-4 w-4 text-slate-400" />
+                  </button>
+                  {currentUser?.rol === "SUPER_ADMIN" && (
+                    <button type="button" onClick={() => setActiveTab("administracion")} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-amber-50 text-amber-700"><BellRing className="h-4.5 w-4.5" /></span>
+                      <span className="min-w-0 grow"><b className="block text-sm text-slate-900">{documentAlerts.length} documentos</b><span className="text-xs text-slate-500">Por revisar o vencer</span></span>
+                      <ArrowRight className="h-4 w-4 text-slate-400" />
+                    </button>
+                  )}
+                  {can(PERMISSIONS.FLEET_VIEW) && (
+                    <button type="button" onClick={() => setActiveTab("flota")} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-50 text-blue-700"><Navigation className="h-4.5 w-4.5" /></span>
+                      <span className="min-w-0 grow"><b className="block text-sm text-slate-900">{locations.filter((location) => location.isActive).length} unidades</b><span className="text-xs text-slate-500">Reportando ubicación</span></span>
+                      <ArrowRight className="h-4 w-4 text-slate-400" />
+                    </button>
+                  )}
+                </div>
+              </aside>
+            </div>
+
+            <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3.5 sm:px-5">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-950">Encomiendas recientes</h2>
+                  <p className="text-xs text-slate-500">Últimos registros de la agencia</p>
+                </div>
+                <button type="button" onClick={() => setActiveTab("encomiendas")} className="inline-flex items-center gap-1 text-sm font-semibold text-[#1f4f78] hover:underline">
+                  Ver todas <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {db.encomiendas.length === 0 ? (
+                <div className="flex min-h-40 flex-col items-center justify-center px-6 py-8 text-center">
+                  <Package className="mb-3 h-7 w-7 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-800">No hay encomiendas registradas</p>
+                  <p className="mt-1 text-xs text-slate-500">Los envíos nuevos aparecerán aquí para su seguimiento.</p>
+                  {can(PERMISSIONS.PARCEL_CREATE) && (
+                    <button type="button" onClick={() => setActiveTab("encomiendas")} className="mt-3 text-sm font-semibold text-[#1f4f78] hover:underline">
+                      Registrar una encomienda
+                    </button>
+                  )}
+                </div>
+              ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full">
-                    <thead>
-                      <tr className="border-b border-white/10 bg-slate-950/40">
-                        <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Tracking
-                        </th>
-                        <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Destinatario
-                        </th>
-                        <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Estado
-                        </th>
+                    <thead className="bg-slate-50">
+                      <tr className="border-b border-slate-200">
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 sm:px-5">Código</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Destinatario</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Descripción</th>
+                        <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Estado</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {db.encomiendas.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={3}
-                            className="text-center py-6 text-xs text-slate-500"
-                          >
-                            No hay encomiendas registradas.
-                          </td>
-                        </tr>
-                      ) : (
-                        [...db.encomiendas]
-                          .reverse()
-                          .slice(0, 5)
-                          .map((parcel) => {
-                            const stateColors: Record<string, string> = {
-                              registrado:
-                                "bg-blue-500/20 text-blue-300 border-blue-500/30",
-                              recojo_domicilio:
-                                "bg-purple-500/20 text-purple-300 border-purple-500/30",
-                              en_transito:
-                                "bg-amber-500/20 text-amber-300 border-amber-500/30",
-                              en_destino:
-                                "bg-blue-500/20 text-blue-300 border-blue-500/30",
-                              entregado:
-                                "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-                            };
-                            return (
-                              <tr
-                                key={parcel.id}
-                                className="border-b border-white/5 last:border-0 hover:bg-white/5 text-xs text-slate-300 transition-colors"
-                              >
-                                <td className="py-3 px-3 font-mono font-black text-emerald-400">
-                                  {parcel.codigo_tracking}
-                                </td>
-                                <td className="py-3 px-3 font-semibold text-slate-200">
-                                  {parcel.destinatarioNombre}
-                                </td>
-                                <td className="py-3 px-3 text-center">
-                                  <span
-                                    className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${
-                                      stateColors[parcel.estado] ||
-                                      "bg-slate-800"
-                                    }`}
-                                  >
-                                    {parcel.estado === "recojo_domicilio"
-                                      ? "Recojo"
-                                      : parcel.estado.replaceAll("_", " ")}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })
-                      )}
+                      {[...db.encomiendas].reverse().slice(0, 5).map((parcel) => {
+                        const stateColors: Record<string, string> = {
+                          registrado: "bg-blue-50 text-blue-700",
+                          recojo_domicilio: "bg-violet-50 text-violet-700",
+                          en_transito: "bg-amber-50 text-amber-700",
+                          en_destino: "bg-sky-50 text-sky-700",
+                          entregado: "bg-emerald-50 text-emerald-700",
+                        };
+                        return (
+                          <tr key={parcel.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
+                            <td className="px-4 py-3 text-sm font-semibold text-[#1f4f78] sm:px-5">{parcel.codigo_tracking}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-slate-800">{parcel.destinatarioNombre}</td>
+                            <td className="max-w-xs truncate px-4 py-3 text-sm text-slate-600">{parcel.descripcion}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${stateColors[parcel.estado] || "bg-slate-100 text-slate-700"}`}>
+                                {parcel.estado === "recojo_domicilio" ? "Recojo" : parcel.estado.replaceAll("_", " ")}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </div>
+              )}
+            </section>
           </div>
         )}
 
@@ -3385,6 +3418,7 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "administracion" && <AdminWorkspace />}
+        </div>
       </main>
     </div>
   );

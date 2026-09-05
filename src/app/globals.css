@@ -10,13 +10,13 @@
 }
 
 :root {
-  --background: #f3f5f4;
+  --background: #f4f6f8;
   --foreground: #1f2937;
   --card: #ffffff;
   --card-foreground: #1f2937;
-  --border: #dce3df;
-  --brand: #176b49;
-  --brand-dark: #173d32;
+  --border: #d8dee7;
+  --brand: #f4c430;
+  --brand-dark: #172033;
 }
 
 @layer base {
@@ -179,16 +179,16 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #eef2f0;
+  background: #eef1f5;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #b7c2bc;
+  background: #b8c0cc;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8d9b94;
+  background: #929cab;
 }
 
 /* Animations */
@@ -247,7 +247,7 @@
 .corporate-login,
 .corporate-public,
 .corporate-app {
-  background: #f3f5f4 !important;
+  background: #f4f6f8 !important;
 }
 
 .corporate-login {
@@ -305,7 +305,7 @@
 }
 
 .corporate-sidebar nav button[aria-current="page"] svg {
-  color: #2563a8 !important;
+  color: #9a6d00 !important;
 }
 
 .corporate-sidebar nav button:not([aria-current="page"]) {
@@ -328,7 +328,7 @@
 
 .corporate-app > main,
 .driver-portal > main {
-  background: #f3f5f4;
+  background: #f4f6f8;
   color: #24312c;
 }
 
@@ -395,7 +395,7 @@
 
 :where(.corporate-app > main, .driver-portal > main, .corporate-public, .login-form-panel, .change-password-card)
   :is(.border-white\/10, .border-white\/5, .border-slate-800, .border-slate-700) {
-  border-color: #dce3df !important;
+  border-color: #d8dee7 !important;
 }
 
 :where(.corporate-app > main, .driver-portal > main, .corporate-public, .login-form-panel, .change-password-card)
@@ -468,7 +468,7 @@
     [class*="bg-linear-to-"][class*="from-emerald-700"],
     [class*="bg-linear-to-"][class*="from-emerald-800"]
   ) {
-  background-color: #176b49 !important;
+  background-color: #1f4f78 !important;
   color: #ffffff !important;
 }
 
