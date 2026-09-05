@@ -1080,7 +1080,7 @@ export default function DashboardPage() {
 
       {/* ── WORKSPACE CONTENT AREA ── */}
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print sticky top-0 z-20 flex min-h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
+        <header className="no-print sticky top-0 z-20 flex min-h-[72px] items-center justify-between gap-4 border-b-4 border-[#c7a45a] bg-white px-4 sm:px-6 lg:px-8">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900">Centro de operaciones</p>
             <p className="truncate text-xs text-slate-500">
