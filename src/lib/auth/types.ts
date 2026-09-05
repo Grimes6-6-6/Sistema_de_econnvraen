@@ -20,6 +20,6 @@ export interface SessionUser {
 export function toClientSessionUser(user: SessionUser): SessionUser {
   return {
     ...user,
-    dni: user.dni ? `****${user.dni.slice(-4)}` : "",
+    dni: user.dni ? `DNI terminado en ${user.dni.slice(-4)}` : "",
   };
 }

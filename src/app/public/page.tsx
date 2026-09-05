@@ -229,7 +229,7 @@ export default function PublicClientPage() {
 
                 <div className="space-y-1.5">
                   <label htmlFor="tracking-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Código de Tracking *
+                    Código de Tracking
                   </label>
                   <div className="relative">
                     <Package className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -257,7 +257,7 @@ export default function PublicClientPage() {
 
                 <div className="space-y-1.5">
                   <label htmlFor="tracking-security-code" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Últimos 4 dígitos del DNI destinatario *
+                    Últimos 4 dígitos del DNI destinatario
                   </label>
                   <input
                     id="tracking-security-code"

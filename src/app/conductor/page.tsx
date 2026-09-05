@@ -1193,7 +1193,7 @@ export default function ConductorPage() {
                 {/* Signature */}
                 <div className="space-y-2">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                    Firma del Destinatario *
+                    Firma del Destinatario
                   </span>
                   <div className="border-2 border-dashed border-slate-700 rounded-2xl overflow-hidden bg-slate-900/60 flex items-center justify-center p-3">
                     <canvas
@@ -1796,7 +1796,7 @@ export default function ConductorPage() {
             >
               <div className="space-y-1">
                 <label htmlFor="incident-type" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                  Tipo de Incidencia *
+                  Tipo de Incidencia
                 </label>
                 <select
                   id="incident-type"
@@ -1817,7 +1817,7 @@ export default function ConductorPage() {
 
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                  Nivel de Gravedad *
+                  Nivel de Gravedad
                 </span>
                 <div className="grid grid-cols-3 gap-2">
                   {(["LEVE", "MODERADA", "GRAVE"] as const).map((sev) => (
@@ -1844,7 +1844,7 @@ export default function ConductorPage() {
 
               <div className="space-y-1">
                 <label htmlFor="incident-description" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                  Descripción Detallada *
+                  Descripción Detallada
                 </label>
                 <textarea
                   id="incident-description"

@@ -132,17 +132,17 @@ export default function AgencySwitcher() {
   };
 
   return (
-    <div className="mb-3 rounded-xl border border-[#50483f] bg-[#27231f] p-3">
+    <div className="mb-3 rounded-xl border border-[#d6c7b2] bg-[#fffaf2] p-3">
       <div className="mb-2 flex items-center gap-2">
-        <Building2 className="h-4 w-4 text-[#e2c792]" />
+        <Building2 className="h-4 w-4 text-[#8b641d]" />
         <div className="min-w-0 grow">
-          <p className="text-[9px] font-black uppercase tracking-wider text-stone-400">
+          <p className="text-[9px] font-black uppercase tracking-wider text-slate-600">
             {currentUser.rol === "SUPER_ADMIN"
               ? "Agencia operativa"
               : "Agencia activa"}
           </p>
           {currentUser.rol === "SUPER_ADMIN" && (
-            <p className="text-[9px] font-bold text-[#e2c792]">
+            <p className="text-[9px] font-bold text-[#8b641d]">
               Vista global habilitada
             </p>
           )}
@@ -151,7 +151,7 @@ export default function AgencySwitcher() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="rounded-lg border border-[#d8bc82] p-1 text-[#e2c792] transition hover:bg-[#d8bc82] hover:text-stone-950"
+            className="rounded-lg border border-[#c7a45a] p-1 text-[#8b641d] transition hover:bg-[#ead8ae] hover:text-stone-950"
             aria-label="Crear agencia"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -162,7 +162,7 @@ export default function AgencySwitcher() {
         value={currentUser.agenciaId || ""}
         onChange={(event) => void switchAgency(event.target.value)}
         disabled={busy || agencies.length === 0}
-        className="w-full rounded-lg border border-[#5c5248] bg-[#39332d] px-2 py-2 text-[11px] font-bold text-white outline-none focus:border-[#d8bc82] disabled:opacity-60"
+        className="w-full rounded-lg border border-[#d6c7b2] bg-white px-2 py-2 text-[11px] font-bold text-slate-800 outline-none focus:border-[#c7a45a] disabled:opacity-60"
         aria-label="Agencia activa"
       >
         {agencies.length === 0 && (

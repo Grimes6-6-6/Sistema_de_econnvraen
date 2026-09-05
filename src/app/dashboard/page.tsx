@@ -900,7 +900,7 @@ export default function DashboardPage() {
   return (
     <div className="corporate-app flex min-h-screen flex-col bg-[#f3eee4] text-slate-800 lg:flex-row">
       {/* ── SIDEBAR NAVIGATION ── */}
-      <aside className="corporate-sidebar no-print relative z-30 flex w-full shrink-0 flex-col border-b border-[#4a433b] bg-[#312d28] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r lg:border-b-0">
+      <aside className="corporate-sidebar no-print relative z-30 flex w-full shrink-0 flex-col border-b border-[#ddd2c2] bg-[#fffaf2] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r lg:border-b-0">
         {/* Brand */}
         <div className="flex h-[72px] items-center justify-between border-b-4 border-[#c7a45a] bg-white px-4">
           <div className="flex min-w-0 items-center">
@@ -997,12 +997,12 @@ export default function DashboardPage() {
                 className={`flex w-full items-center gap-3 rounded-md border-l-4 px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
                   isActive
                     ? "border-[#c7a45a] bg-white text-slate-950"
-                    : "border-transparent text-slate-300 hover:bg-white/8 hover:text-white"
+                    : "border-transparent text-slate-600 hover:bg-[#f3eadb] hover:text-slate-950"
                 }`}
               >
                 <Icon
                   className={`h-4 w-4 shrink-0 ${
-                    isActive ? "text-[#9a6d00]" : "text-slate-400"
+                    isActive ? "text-[#8b641d]" : "text-slate-500"
                   }`}
                 />
                 <span>{tab.label}</span>
@@ -1020,18 +1020,18 @@ export default function DashboardPage() {
             })}
         </nav>
 
-        <div className={`${isMobileNavOpen ? "block" : "hidden"} border-t border-white/10 px-3 pb-3 pt-3 lg:hidden`}>
-          <div className="mb-3 flex items-center gap-3 rounded-md bg-white/6 px-3 py-2.5">
+        <div className={`${isMobileNavOpen ? "block" : "hidden"} border-t border-[#ddd2c2] px-3 pb-3 pt-3 lg:hidden`}>
+          <div className="mb-3 flex items-center gap-3 rounded-md bg-[#f3eadb] px-3 py-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d8bc82] text-sm font-bold text-slate-950">
               {currentUser?.nombres?.[0] || "U"}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">
+              <p className="truncate text-sm font-semibold text-slate-900">
                 {currentUser
                   ? `${currentUser.nombres} ${currentUser.apellidos}`
                   : "Usuario"}
               </p>
-              <p className="truncate text-xs text-slate-400">
+              <p className="truncate text-xs text-slate-600">
                 {currentUser?.agenciaNombre || "Agencia activa"}
               </p>
             </div>
@@ -1041,7 +1041,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-white/15 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:border-rose-400 hover:bg-rose-500/15 hover:text-white"
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
             >
               <LogOut className="h-4 w-4" /> Cerrar sesión
             </button>
@@ -1049,18 +1049,18 @@ export default function DashboardPage() {
         </div>
 
         {/* User profile / Agency panel in Sidebar footer */}
-        <div className="hidden space-y-3 border-t border-white/10 bg-[#27231f] p-4 lg:block">
+        <div className="hidden space-y-3 border-t border-[#ddd2c2] bg-[#f3eadb] p-4 lg:block">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d8bc82] text-sm font-bold text-slate-950">
               {currentUser ? currentUser.nombres[0] : "U"}
             </div>
             <div className="min-w-0 grow">
-              <h4 className="truncate text-sm font-semibold text-white">
+              <h4 className="truncate text-sm font-semibold text-slate-900">
                 {currentUser
                   ? `${currentUser.nombres} ${currentUser.apellidos}`
                   : "Usuario"}
               </h4>
-              <span className="block text-xs text-slate-400">
+              <span className="block text-xs text-slate-600">
                 {currentUser ? currentUser.rol.replaceAll("_", " ") : "Operador"}
               </span>
             </div>
@@ -1071,7 +1071,7 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full items-center justify-center gap-2 rounded-md border border-white/15 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-rose-500 hover:bg-rose-600 hover:text-white"
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
           >
             <LogOut className="h-3.5 w-3.5" /> Cerrar sesión
           </button>
@@ -1455,7 +1455,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label htmlFor="booking-route" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                      Ruta Disponible *
+                      Ruta Disponible
                     </label>
                     <select
                       id="booking-route"
@@ -1473,7 +1473,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="booking-date" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                      Fecha de Salida *
+                      Fecha de Salida
                     </label>
                     <input
                       id="booking-date"
@@ -1685,7 +1685,7 @@ export default function DashboardPage() {
                   <form onSubmit={handleBookingSubmit} className="space-y-4">
                     <div className="space-y-1.5">
                       <label htmlFor="passenger-dni" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                        Documento DNI *
+                        Documento DNI
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -1714,7 +1714,7 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label htmlFor="passenger-first-name" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                          Nombres *
+                          Nombres
                         </label>
                         <input
                           id="passenger-first-name"
@@ -1727,7 +1727,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="space-y-1.5">
                         <label htmlFor="passenger-last-name" className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                          Apellidos *
+                          Apellidos
                         </label>
                         <input
                           id="passenger-last-name"
@@ -2161,7 +2161,7 @@ export default function DashboardPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label htmlFor="parcel-sender-dni" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            DNI Remitente *
+                            DNI Remitente
                           </label>
                           <div className="flex gap-1.5">
                             <input
@@ -2186,7 +2186,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="sm:col-span-2">
                           <label htmlFor="parcel-sender-name" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Nombre Completo *
+                            Nombre Completo
                           </label>
                           <input
                             id="parcel-sender-name"
@@ -2199,7 +2199,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="sm:col-span-3">
                           <label htmlFor="parcel-sender-phone" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Celular del remitente *
+                            Celular del remitente
                           </label>
                           <input
                             id="parcel-sender-phone"
@@ -2226,7 +2226,7 @@ export default function DashboardPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label htmlFor="parcel-recipient-dni" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            DNI Destinatario *
+                            DNI Destinatario
                           </label>
                           <div className="flex gap-1.5">
                             <input
@@ -2251,7 +2251,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="sm:col-span-2">
                           <label htmlFor="parcel-recipient-name" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Nombre Completo *
+                            Nombre Completo
                           </label>
                           <input
                             id="parcel-recipient-name"
@@ -2266,7 +2266,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="sm:col-span-3">
                           <label htmlFor="parcel-recipient-phone" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Celular del destinatario *
+                            Celular del destinatario
                           </label>
                           <input
                             id="parcel-recipient-phone"
@@ -2293,7 +2293,7 @@ export default function DashboardPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-3">
                           <label htmlFor="parcel-trip" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Viaje Asignado *
+                            Viaje Asignado
                           </label>
                           <select
                             id="parcel-trip"
@@ -2319,7 +2319,7 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <label htmlFor="parcel-weight" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Peso (kg) *
+                            Peso (kg)
                           </label>
                           <input
                             id="parcel-weight"
@@ -2333,7 +2333,7 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <label htmlFor="parcel-dimensions" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Dimensiones (cm) *
+                            Dimensiones (cm)
                           </label>
                           <input
                             id="parcel-dimensions"
@@ -2349,7 +2349,7 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <label htmlFor="parcel-cost" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Costo de Flete (S/) *
+                            Costo de Flete (S/)
                           </label>
                           <input
                             id="parcel-cost"
@@ -2363,7 +2363,7 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <label htmlFor="parcel-value" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Valor declarado (S/) *
+                            Valor declarado (S/)
                           </label>
                           <input
                             id="parcel-value"
@@ -2378,7 +2378,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="sm:col-span-3">
                           <label htmlFor="parcel-description" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Descripción del Contenido *
+                            Descripción del Contenido
                           </label>
                           <input
                             id="parcel-description"
@@ -2688,7 +2688,7 @@ export default function DashboardPage() {
                   <form onSubmit={handleTripSubmit} className="space-y-3">
                     <div className="space-y-1">
                       <label htmlFor="trip-route" className="text-xs font-bold text-slate-300 uppercase block">
-                        Ruta *
+                        Ruta
                       </label>
                       <select
                         id="trip-route"
@@ -2709,7 +2709,7 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label htmlFor="trip-vehicle" className="text-xs font-bold text-slate-300 uppercase block">
-                          Vehículo *
+                          Vehículo
                         </label>
                         <select
                           id="trip-vehicle"
@@ -2729,7 +2729,7 @@ export default function DashboardPage() {
 
                       <div className="space-y-1">
                         <label htmlFor="trip-driver" className="text-xs font-bold text-slate-300 uppercase block">
-                          Conductor *
+                          Conductor
                         </label>
                         <select
                           id="trip-driver"
@@ -2751,7 +2751,7 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
                         <label htmlFor="trip-date" className="text-xs font-bold text-slate-300 uppercase block">
-                          Fecha *
+                          Fecha
                         </label>
                         <input
                           id="trip-date"
@@ -2764,7 +2764,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="space-y-1">
                         <label htmlFor="trip-time" className="text-xs font-bold text-slate-300 uppercase block">
-                          Hora *
+                          Hora
                         </label>
                         <input
                           id="trip-time"
@@ -2777,7 +2777,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="space-y-1">
                         <label htmlFor="trip-price" className="text-xs font-bold text-slate-300 uppercase block">
-                          Precio (S/) *
+                          Precio (S/)
                         </label>
                         <input
                           id="trip-price"
@@ -2998,7 +2998,7 @@ export default function DashboardPage() {
                   <form onSubmit={submitNewPickup} className="mt-4 space-y-3">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <label className="text-xs font-bold text-slate-300">
-                        DNI *
+                        DNI
                         <input
                           required
                           pattern="\d{8}"
@@ -3011,7 +3011,7 @@ export default function DashboardPage() {
                         />
                       </label>
                       <label className="text-xs font-bold text-slate-300">
-                        Celular *
+                        Celular
                         <input
                           required
                           pattern="9\d{8}"
@@ -3025,7 +3025,7 @@ export default function DashboardPage() {
                       </label>
                     </div>
                     <label className="block text-xs font-bold text-slate-300">
-                      Nombre completo *
+                      Nombre completo
                       <input
                         required
                         value={pickupName}
@@ -3034,7 +3034,7 @@ export default function DashboardPage() {
                       />
                     </label>
                     <label className="block text-xs font-bold text-slate-300">
-                      Fecha de recojo *
+                      Fecha de recojo
                       <input
                         type="date"
                         required
@@ -3045,7 +3045,7 @@ export default function DashboardPage() {
                       />
                     </label>
                     <label className="block text-xs font-bold text-slate-300">
-                      Dirección *
+                      Dirección
                       <input
                         required
                         minLength={8}
@@ -3055,7 +3055,7 @@ export default function DashboardPage() {
                       />
                     </label>
                     <label className="block text-xs font-bold text-slate-300">
-                      Descripción del envío *
+                      Descripción del envío
                       <textarea
                         required
                         minLength={3}
@@ -3117,7 +3117,7 @@ export default function DashboardPage() {
                   <form onSubmit={submitAssignDriver} className="space-y-4">
                     <div className="space-y-1">
                       <label htmlFor="pickup-driver" className="text-xs font-bold text-slate-300 uppercase block">
-                        Conductor Responsable *
+                        Conductor Responsable
                       </label>
                       <select
                         id="pickup-driver"
