@@ -14,13 +14,18 @@ let lockAcquired = false;
 try {
   await pool.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
   lockAcquired = true;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      filename VARCHAR(255) PRIMARY KEY,
-      checksum CHAR(64) NOT NULL,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  const migrationsTable = await pool.query(
+    "SELECT to_regclass('public.schema_migrations') AS name",
+  );
+  if (!migrationsTable.rows[0]?.name) {
+    await pool.query(`
+      CREATE TABLE schema_migrations (
+        filename VARCHAR(255) PRIMARY KEY,
+        checksum CHAR(64) NOT NULL,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  }
 
   const filenames = (await readdir(migrationsDirectory))
     .filter((filename) => filename.endsWith(".sql"))
