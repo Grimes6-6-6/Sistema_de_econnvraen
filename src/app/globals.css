@@ -10,13 +10,13 @@
 }
 
 :root {
-  --background: #f4f6f8;
+  --background: #f3eee4;
   --foreground: #1f2937;
-  --card: #ffffff;
+  --card: #fffdf8;
   --card-foreground: #1f2937;
-  --border: #d8dee7;
-  --brand: #f4c430;
-  --brand-dark: #20211f;
+  --border: #ddd2c2;
+  --brand: #c7a45a;
+  --brand-dark: #312d28;
 }
 
 @layer base {
@@ -247,11 +247,11 @@
 .corporate-login,
 .corporate-public,
 .corporate-app {
-  background: #f4f6f8 !important;
+  background: #f3eee4 !important;
 }
 
 .corporate-login {
-  background-color: #eef2f0 !important;
+  background-color: #efe8dc !important;
 }
 
 .login-card {
@@ -285,7 +285,7 @@
 }
 
 .corporate-sidebar {
-  background-color: #20211f !important;
+  background-color: #312d28 !important;
   background-image: none !important;
   box-shadow: none !important;
 }
@@ -299,13 +299,13 @@
 }
 
 .corporate-sidebar nav button[aria-current="page"] {
-  background: #f4c430 !important;
-  color: #171815 !important;
+  background: #d8bc82 !important;
+  color: #2b2419 !important;
   box-shadow: none !important;
 }
 
 .corporate-sidebar nav button[aria-current="page"] svg {
-  color: #171815 !important;
+  color: #2b2419 !important;
 }
 
 .corporate-sidebar nav button:not([aria-current="page"]) {
@@ -313,7 +313,7 @@
 }
 
 .corporate-sidebar nav button:not([aria-current="page"]):hover {
-  background: rgba(244, 196, 48, 0.12) !important;
+  background: rgba(216, 188, 130, 0.14) !important;
   color: #ffffff !important;
 }
 
@@ -328,7 +328,7 @@
 
 .corporate-app > main,
 .driver-portal > main {
-  background: #f4f6f8;
+  background: #f3eee4;
   color: #24312c;
 }
 
@@ -370,7 +370,7 @@
     [class~="bg-slate-900/80"],
     [class~="bg-slate-900/90"]
   ) {
-  background-color: #ffffff !important;
+  background-color: #fffdf8 !important;
   background-image: none !important;
 }
 
@@ -395,7 +395,7 @@
 
 :where(.corporate-app > main, .driver-portal > main, .corporate-public, .login-form-panel, .change-password-card)
   :is(.border-white\/10, .border-white\/5, .border-slate-800, .border-slate-700) {
-  border-color: #d8dee7 !important;
+  border-color: #ddd2c2 !important;
 }
 
 :where(.corporate-app > main, .driver-portal > main, .corporate-public, .login-form-panel, .change-password-card)
@@ -468,7 +468,7 @@
     [class*="bg-linear-to-"][class*="from-emerald-700"],
     [class*="bg-linear-to-"][class*="from-emerald-800"]
   ) {
-  background-color: #2c2d2a !important;
+  background-color: #3b352f !important;
   color: #ffffff !important;
 }
 
@@ -531,8 +531,8 @@
 }
 
 .corporate-dialog {
-  background: #ffffff !important;
-  border-color: #dce3df !important;
+  background: #fffdf8 !important;
+  border-color: #ddd2c2 !important;
   color: #24312c !important;
 }
 

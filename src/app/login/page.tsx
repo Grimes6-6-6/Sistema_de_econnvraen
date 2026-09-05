@@ -224,7 +224,7 @@ export default function LoginPage() {
                     type="submit"
                     disabled={isSubmitting}
                     aria-busy={isSubmitting}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#252622] py-3.5 text-sm font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#3b352f] py-3.5 text-sm font-bold text-white transition hover:bg-[#27231f] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSubmitting ? "Comprobando acceso…" : "Ingresar"}
                     {!isSubmitting && <ArrowRight className="h-4 w-4" />}
@@ -299,7 +299,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting || smsCode.length !== 6}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#252622] py-3.5 text-sm font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#3b352f] py-3.5 text-sm font-bold text-white transition hover:bg-[#27231f] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <ShieldCheck className="h-4 w-4" />
                     {isSubmitting ? "Verificando…" : "Verificar e ingresar"}
@@ -321,7 +321,7 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <aside className="relative hidden flex-col justify-between bg-[#20211f] p-10 lg:col-span-5 lg:flex">
+        <aside className="relative hidden flex-col justify-between bg-[#312d28] p-10 lg:col-span-5 lg:flex">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-200">
             <ShieldCheck className="h-4 w-4" />
             Plataforma de uso interno

@@ -898,11 +898,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="corporate-app flex min-h-screen flex-col bg-[#f4f6f8] text-slate-800 lg:flex-row">
+    <div className="corporate-app flex min-h-screen flex-col bg-[#f3eee4] text-slate-800 lg:flex-row">
       {/* ── SIDEBAR NAVIGATION ── */}
-      <aside className="corporate-sidebar no-print relative z-30 flex w-full shrink-0 flex-col border-b border-[#30312d] bg-[#20211f] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r lg:border-b-0">
+      <aside className="corporate-sidebar no-print relative z-30 flex w-full shrink-0 flex-col border-b border-[#4a433b] bg-[#312d28] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r lg:border-b-0">
         {/* Brand */}
-        <div className="flex h-[72px] items-center justify-between border-b-4 border-[#f4c430] bg-white px-4">
+        <div className="flex h-[72px] items-center justify-between border-b-4 border-[#c7a45a] bg-white px-4">
           <div className="flex min-w-0 items-center">
             <Image
               src="/econnvrae-logo.png"
@@ -996,7 +996,7 @@ export default function DashboardPage() {
                 aria-current={isActive ? "page" : undefined}
                 className={`flex w-full items-center gap-3 rounded-md border-l-4 px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
                   isActive
-                    ? "border-[#f4c430] bg-white text-slate-950"
+                    ? "border-[#c7a45a] bg-white text-slate-950"
                     : "border-transparent text-slate-300 hover:bg-white/8 hover:text-white"
                 }`}
               >
@@ -1022,7 +1022,7 @@ export default function DashboardPage() {
 
         <div className={`${isMobileNavOpen ? "block" : "hidden"} border-t border-white/10 px-3 pb-3 pt-3 lg:hidden`}>
           <div className="mb-3 flex items-center gap-3 rounded-md bg-white/6 px-3 py-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f4c430] text-sm font-bold text-slate-950">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d8bc82] text-sm font-bold text-slate-950">
               {currentUser?.nombres?.[0] || "U"}
             </div>
             <div className="min-w-0">
@@ -1049,9 +1049,9 @@ export default function DashboardPage() {
         </div>
 
         {/* User profile / Agency panel in Sidebar footer */}
-        <div className="hidden space-y-3 border-t border-white/10 bg-[#171815] p-4 lg:block">
+        <div className="hidden space-y-3 border-t border-white/10 bg-[#27231f] p-4 lg:block">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f4c430] text-sm font-bold text-slate-950">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d8bc82] text-sm font-bold text-slate-950">
               {currentUser ? currentUser.nombres[0] : "U"}
             </div>
             <div className="min-w-0 grow">
@@ -1148,7 +1148,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={() => setActiveTab("viajes")}
-                    className="inline-flex items-center gap-2 rounded-md bg-[#f4c430] px-3.5 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-[#e5b719]"
+                    className="inline-flex items-center gap-2 rounded-md bg-[#d8bc82] px-3.5 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-[#c9a968]"
                   >
                     <CalendarDays className="h-4 w-4" />
                     {can(PERMISSIONS.TRIP_MANAGE) ? "Programar viaje" : "Ver itinerario"}
@@ -1211,7 +1211,7 @@ export default function DashboardPage() {
                 { label: "Viajes de hoy", value: String(kpis.viajes), icon: Calendar, tone: "bg-amber-50 text-amber-800" },
                 { label: "Pasajes vendidos", value: String(kpis.pasajes), icon: Ticket, tone: "bg-stone-100 text-stone-700" },
                 { label: "Encomiendas pendientes", value: String(kpis.encomiendas), icon: Package, tone: "bg-yellow-50 text-yellow-800" },
-                { label: "Ingresos del día", value: `S/ ${kpis.ingresos.toFixed(2)}`, icon: TrendingUp, tone: "bg-[#f4c430] text-slate-950" },
+                { label: "Ingresos del día", value: `S/ ${kpis.ingresos.toFixed(2)}`, icon: TrendingUp, tone: "bg-[#d8bc82] text-slate-950" },
               ].map((metric) => {
                 const Icon = metric.icon;
                 return (
@@ -1238,7 +1238,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={() => setActiveTab("viajes")}
-                    className="inline-flex items-center gap-1 text-sm font-semibold text-[#725500] hover:underline"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-[#7b5e27] hover:underline"
                   >
                     Ver itinerario <ArrowRight className="h-3.5 w-3.5" />
                   </button>
@@ -1254,7 +1254,7 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => setActiveTab("viajes")}
-                        className="mt-4 rounded-md bg-[#f4c430] px-3.5 py-2 text-sm font-semibold text-slate-950 hover:bg-[#e5b719]"
+                        className="mt-4 rounded-md bg-[#d8bc82] px-3.5 py-2 text-sm font-semibold text-slate-950 hover:bg-[#c9a968]"
                       >
                         Programar primer viaje
                       </button>
@@ -1335,7 +1335,7 @@ export default function DashboardPage() {
                   <h2 className="text-base font-semibold text-slate-950">Encomiendas recientes</h2>
                   <p className="text-xs text-slate-500">Últimos registros de la agencia</p>
                 </div>
-                <button type="button" onClick={() => setActiveTab("encomiendas")} className="inline-flex items-center gap-1 text-sm font-semibold text-[#725500] hover:underline">
+                <button type="button" onClick={() => setActiveTab("encomiendas")} className="inline-flex items-center gap-1 text-sm font-semibold text-[#7b5e27] hover:underline">
                   Ver todas <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -1345,7 +1345,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-slate-800">No hay encomiendas registradas</p>
                   <p className="mt-1 text-xs text-slate-500">Los envíos nuevos aparecerán aquí para su seguimiento.</p>
                   {can(PERMISSIONS.PARCEL_CREATE) && (
-                    <button type="button" onClick={() => setActiveTab("encomiendas")} className="mt-3 text-sm font-semibold text-[#725500] hover:underline">
+                    <button type="button" onClick={() => setActiveTab("encomiendas")} className="mt-3 text-sm font-semibold text-[#7b5e27] hover:underline">
                       Registrar una encomienda
                     </button>
                   )}
@@ -1372,7 +1372,7 @@ export default function DashboardPage() {
                         };
                         return (
                           <tr key={parcel.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
-                            <td className="px-4 py-3 text-sm font-semibold text-[#725500] sm:px-5">{parcel.codigo_tracking}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-[#7b5e27] sm:px-5">{parcel.codigo_tracking}</td>
                             <td className="px-4 py-3 text-sm font-medium text-slate-800">{parcel.destinatarioNombre}</td>
                             <td className="max-w-xs truncate px-4 py-3 text-sm text-slate-600">{parcel.descripcion}</td>
                             <td className="px-4 py-3 text-center">
