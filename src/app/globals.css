@@ -16,7 +16,7 @@
   --card-foreground: #1f2937;
   --border: #d8dee7;
   --brand: #f4c430;
-  --brand-dark: #172033;
+  --brand-dark: #20211f;
 }
 
 @layer base {
@@ -285,7 +285,7 @@
 }
 
 .corporate-sidebar {
-  background-color: #182235 !important;
+  background-color: #20211f !important;
   background-image: none !important;
   box-shadow: none !important;
 }
@@ -299,21 +299,21 @@
 }
 
 .corporate-sidebar nav button[aria-current="page"] {
-  background: #ffffff !important;
-  color: #1e293b !important;
+  background: #f4c430 !important;
+  color: #171815 !important;
   box-shadow: none !important;
 }
 
 .corporate-sidebar nav button[aria-current="page"] svg {
-  color: #9a6d00 !important;
+  color: #171815 !important;
 }
 
 .corporate-sidebar nav button:not([aria-current="page"]) {
-  color: #cbd5e1 !important;
+  color: #e7e5e4 !important;
 }
 
 .corporate-sidebar nav button:not([aria-current="page"]):hover {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(244, 196, 48, 0.12) !important;
   color: #ffffff !important;
 }
 
@@ -468,7 +468,7 @@
     [class*="bg-linear-to-"][class*="from-emerald-700"],
     [class*="bg-linear-to-"][class*="from-emerald-800"]
   ) {
-  background-color: #1f4f78 !important;
+  background-color: #2c2d2a !important;
   color: #ffffff !important;
 }
 

@@ -224,7 +224,7 @@ export default function LoginPage() {
                     type="submit"
                     disabled={isSubmitting}
                     aria-busy={isSubmitting}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#252622] py-3.5 text-sm font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSubmitting ? "Comprobando acceso…" : "Ingresar"}
                     {!isSubmitting && <ArrowRight className="h-4 w-4" />}
@@ -261,7 +261,7 @@ export default function LoginPage() {
                 </button>
 
                 <div>
-                  <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+                  <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-800">
                     <Smartphone className="h-5 w-5" />
                   </span>
                   <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -293,13 +293,13 @@ export default function LoginPage() {
                       value={smsCode}
                       onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                       placeholder="000000"
-                      className="mt-1.5 w-full border border-slate-300 bg-white px-4 py-3 text-center font-mono text-xl font-bold tracking-[0.35em] text-slate-900 outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-100"
+                      className="mt-1.5 w-full border border-slate-300 bg-white px-4 py-3 text-center font-mono text-xl font-bold tracking-[0.35em] text-slate-900 outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-100"
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={isSubmitting || smsCode.length !== 6}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#252622] py-3.5 text-sm font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <ShieldCheck className="h-4 w-4" />
                     {isSubmitting ? "Verificando…" : "Verificar e ingresar"}
@@ -310,7 +310,7 @@ export default function LoginPage() {
                   type="button"
                   disabled={isSubmitting || resendSeconds > 0}
                   onClick={() => void handleSmsResend()}
-                  className="w-full text-sm font-semibold text-blue-700 hover:text-blue-900 disabled:text-slate-400"
+                  className="w-full text-sm font-semibold text-amber-800 hover:text-amber-950 disabled:text-slate-400"
                 >
                   {resendSeconds > 0
                     ? `Podrás reenviar en ${resendSeconds} s`
@@ -321,8 +321,8 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <aside className="relative hidden flex-col justify-between bg-[#17243d] p-10 lg:col-span-5 lg:flex">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-200">
+        <aside className="relative hidden flex-col justify-between bg-[#20211f] p-10 lg:col-span-5 lg:flex">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-200">
             <ShieldCheck className="h-4 w-4" />
             Plataforma de uso interno
           </div>

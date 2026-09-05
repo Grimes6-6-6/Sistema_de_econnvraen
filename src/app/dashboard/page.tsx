@@ -900,7 +900,7 @@ export default function DashboardPage() {
   return (
     <div className="corporate-app flex min-h-screen flex-col bg-[#f4f6f8] text-slate-800 lg:flex-row">
       {/* ── SIDEBAR NAVIGATION ── */}
-      <aside className="corporate-sidebar no-print relative z-30 flex w-full shrink-0 flex-col border-b border-slate-800 bg-[#172033] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r lg:border-b-0">
+      <aside className="corporate-sidebar no-print relative z-30 flex w-full shrink-0 flex-col border-b border-[#30312d] bg-[#20211f] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r lg:border-b-0">
         {/* Brand */}
         <div className="flex h-[72px] items-center justify-between border-b-4 border-[#f4c430] bg-white px-4">
           <div className="flex min-w-0 items-center">
@@ -1049,7 +1049,7 @@ export default function DashboardPage() {
         </div>
 
         {/* User profile / Agency panel in Sidebar footer */}
-        <div className="hidden space-y-3 border-t border-white/10 bg-[#111a2b] p-4 lg:block">
+        <div className="hidden space-y-3 border-t border-white/10 bg-[#171815] p-4 lg:block">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f4c430] text-sm font-bold text-slate-950">
               {currentUser ? currentUser.nombres[0] : "U"}
@@ -1209,9 +1209,9 @@ export default function DashboardPage() {
             <section aria-label="Indicadores del día" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 { label: "Viajes de hoy", value: String(kpis.viajes), icon: Calendar, tone: "bg-amber-50 text-amber-800" },
-                { label: "Pasajes vendidos", value: String(kpis.pasajes), icon: Ticket, tone: "bg-blue-50 text-blue-700" },
-                { label: "Encomiendas pendientes", value: String(kpis.encomiendas), icon: Package, tone: "bg-violet-50 text-violet-700" },
-                { label: "Ingresos del día", value: `S/ ${kpis.ingresos.toFixed(2)}`, icon: TrendingUp, tone: "bg-slate-100 text-slate-700" },
+                { label: "Pasajes vendidos", value: String(kpis.pasajes), icon: Ticket, tone: "bg-stone-100 text-stone-700" },
+                { label: "Encomiendas pendientes", value: String(kpis.encomiendas), icon: Package, tone: "bg-yellow-50 text-yellow-800" },
+                { label: "Ingresos del día", value: `S/ ${kpis.ingresos.toFixed(2)}`, icon: TrendingUp, tone: "bg-[#f4c430] text-slate-950" },
               ].map((metric) => {
                 const Icon = metric.icon;
                 return (
@@ -1238,7 +1238,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={() => setActiveTab("viajes")}
-                    className="inline-flex items-center gap-1 text-sm font-semibold text-[#1f4f78] hover:underline"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-[#725500] hover:underline"
                   >
                     Ver itinerario <ArrowRight className="h-3.5 w-3.5" />
                   </button>
@@ -1307,7 +1307,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="divide-y divide-slate-100">
                   <button type="button" onClick={() => setActiveTab("encomiendas")} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-md bg-violet-50 text-violet-700"><Package className="h-4.5 w-4.5" /></span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded-md bg-yellow-50 text-yellow-800"><Package className="h-4.5 w-4.5" /></span>
                     <span className="min-w-0 grow"><b className="block text-sm text-slate-900">{kpis.encomiendas} encomiendas</b><span className="text-xs text-slate-500">Pendientes de entrega</span></span>
                     <ArrowRight className="h-4 w-4 text-slate-400" />
                   </button>
@@ -1320,7 +1320,7 @@ export default function DashboardPage() {
                   )}
                   {can(PERMISSIONS.FLEET_VIEW) && (
                     <button type="button" onClick={() => setActiveTab("flota")} className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-slate-50">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-50 text-blue-700"><Navigation className="h-4.5 w-4.5" /></span>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-stone-100 text-stone-700"><Navigation className="h-4.5 w-4.5" /></span>
                       <span className="min-w-0 grow"><b className="block text-sm text-slate-900">{locations.filter((location) => location.isActive).length} unidades</b><span className="text-xs text-slate-500">Reportando ubicación</span></span>
                       <ArrowRight className="h-4 w-4 text-slate-400" />
                     </button>
@@ -1335,7 +1335,7 @@ export default function DashboardPage() {
                   <h2 className="text-base font-semibold text-slate-950">Encomiendas recientes</h2>
                   <p className="text-xs text-slate-500">Últimos registros de la agencia</p>
                 </div>
-                <button type="button" onClick={() => setActiveTab("encomiendas")} className="inline-flex items-center gap-1 text-sm font-semibold text-[#1f4f78] hover:underline">
+                <button type="button" onClick={() => setActiveTab("encomiendas")} className="inline-flex items-center gap-1 text-sm font-semibold text-[#725500] hover:underline">
                   Ver todas <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -1345,7 +1345,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-slate-800">No hay encomiendas registradas</p>
                   <p className="mt-1 text-xs text-slate-500">Los envíos nuevos aparecerán aquí para su seguimiento.</p>
                   {can(PERMISSIONS.PARCEL_CREATE) && (
-                    <button type="button" onClick={() => setActiveTab("encomiendas")} className="mt-3 text-sm font-semibold text-[#1f4f78] hover:underline">
+                    <button type="button" onClick={() => setActiveTab("encomiendas")} className="mt-3 text-sm font-semibold text-[#725500] hover:underline">
                       Registrar una encomienda
                     </button>
                   )}
@@ -1372,7 +1372,7 @@ export default function DashboardPage() {
                         };
                         return (
                           <tr key={parcel.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
-                            <td className="px-4 py-3 text-sm font-semibold text-[#1f4f78] sm:px-5">{parcel.codigo_tracking}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-[#725500] sm:px-5">{parcel.codigo_tracking}</td>
                             <td className="px-4 py-3 text-sm font-medium text-slate-800">{parcel.destinatarioNombre}</td>
                             <td className="max-w-xs truncate px-4 py-3 text-sm text-slate-600">{parcel.descripcion}</td>
                             <td className="px-4 py-3 text-center">
