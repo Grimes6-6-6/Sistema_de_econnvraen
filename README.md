@@ -10,6 +10,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 - Operación multiagencia con separación de datos y selección de agencia activa.
 - Administración de usuarios por ámbito, bloqueo, cambio de rol/agencia y restablecimiento mediante contraseña temporal de un solo uso obligatorio.
 - Venta de pasajes con precio controlado por el servidor y aforo máximo de cuatro asientos.
+- Registro de pagos en efectivo, Yape, Plin, transferencia o tarjeta; los medios electrónicos exigen una referencia de operación y aparecen en recibos y reportes.
 - Programación y cancelación auditada de viajes, con prevención de cruces de conductor o vehículo.
 - Registro de encomiendas, código de seguimiento verificable e historial público completo.
 - Solicitudes de recojo, asignación de conductor y seguimiento de estados.

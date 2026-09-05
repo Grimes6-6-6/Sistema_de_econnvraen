@@ -43,8 +43,15 @@ const CURRENT_COLUMNS = {
     "id_agencia_venta",
     "motivo_anulacion",
     "nota_credito_estado",
+    "metodo_pago",
+    "referencia_pago",
   ],
-  encomiendas: ["id_agencia_registro", "dimensiones"],
+  encomiendas: [
+    "id_agencia_registro",
+    "dimensiones",
+    "metodo_pago",
+    "referencia_pago",
+  ],
   solicitudes_recojo: ["id_agencia", "id_usuario_asignado"],
   ubicaciones_vehiculos: [
     "id_conductor",

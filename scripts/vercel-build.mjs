@@ -12,8 +12,8 @@ function runNodeScript(script, args = []) {
 }
 
 if (process.env.VERCEL_ENV === "production") {
-  console.log("Validando el esquema de producción antes de compilar...");
-  runNodeScript(path.resolve("scripts/db-check.mjs"));
+  console.log("Aplicando y validando migraciones de producción antes de compilar...");
+  runNodeScript(path.resolve("scripts/db-migrate.mjs"));
 }
 
 runNodeScript(path.resolve("node_modules/next/dist/bin/next"), ["build"]);

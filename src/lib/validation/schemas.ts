@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  PAYMENT_METHODS,
+  paymentMethodRequiresReference,
+} from "@/lib/domain/payments";
 import { hasValidTrackingChecksum } from "@/lib/domain/tracking";
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
@@ -362,8 +366,19 @@ export const ticketInputSchema = z
     pasajeroNombres: personName,
     pasajeroApellidos: personName,
     pasajeroTelefono: phoneSchema,
+    metodoPago: z.enum(PAYMENT_METHODS),
+    referenciaPago: safeText(3, 80).optional().or(z.literal("")),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (paymentMethodRequiresReference(value.metodoPago) && !value.referenciaPago) {
+      context.addIssue({
+        code: "custom",
+        path: ["referenciaPago"],
+        message: "Ingresa el código o referencia de la operación.",
+      });
+    }
+  });
 
 export const parcelInputSchema = z
   .object({
@@ -379,11 +394,25 @@ export const parcelInputSchema = z
     dimensiones: safeText(3, 60),
     valor: z.number().finite().min(0).max(10_000_000),
     costo: z.number().finite().min(0).max(100_000),
+    metodoPago: z.enum(PAYMENT_METHODS),
+    referenciaPago: safeText(3, 80).optional().or(z.literal("")),
     descripcion: safeText(3, 240),
   })
-  .refine((value) => value.remitenteDni !== value.destinatarioDni, {
-    path: ["destinatarioDni"],
-    message: "El remitente y el destinatario deben ser personas diferentes.",
+  .superRefine((value, context) => {
+    if (value.remitenteDni === value.destinatarioDni) {
+      context.addIssue({
+        code: "custom",
+        path: ["destinatarioDni"],
+        message: "El remitente y el destinatario deben ser personas diferentes.",
+      });
+    }
+    if (paymentMethodRequiresReference(value.metodoPago) && !value.referenciaPago) {
+      context.addIssue({
+        code: "custom",
+        path: ["referenciaPago"],
+        message: "Ingresa el código o referencia de la operación.",
+      });
+    }
   });
 
 export const tripInputSchema = z.object({

@@ -86,8 +86,11 @@ describe("validaciones de entrada", () => {
       destinatarioNombre: "Alexis Melgar Vila",
       destinatarioTelefono: "998877665",
       peso: 2,
+      dimensiones: "20 x 20 x 20",
       valor: 100,
       costo: 20,
+      metodoPago: "EFECTIVO",
+      referenciaPago: "",
       descripcion: "Caja pequeña",
     });
     expect(result.success).toBe(false);
@@ -101,11 +104,47 @@ describe("validaciones de entrada", () => {
       pasajeroNombres: "Alexis",
       pasajeroApellidos: "Melgar Vila",
       pasajeroTelefono: "998877665",
+      metodoPago: "EFECTIVO" as const,
+      referenciaPago: "",
     };
     expect(ticketInputSchema.safeParse({ ...base, asiento: 1 }).success).toBe(true);
     expect(ticketInputSchema.safeParse({ ...base, asiento: 0 }).success).toBe(false);
     expect(ticketInputSchema.safeParse({ ...base, asiento: 5 }).success).toBe(false);
     expect(ticketInputSchema.safeParse({ ...base, asiento: 1, precio: 1 }).success).toBe(false);
+  });
+
+  it("exige una referencia para pagos electrónicos", () => {
+    const base = {
+      requestId: "550e8400-e29b-41d4-a716-446655440000",
+      id_viaje: "T101",
+      asiento: 1,
+      pasajeroDni: "76729940",
+      pasajeroNombres: "Alexis",
+      pasajeroApellidos: "Melgar Vila",
+      pasajeroTelefono: "998877665",
+    };
+
+    expect(
+      ticketInputSchema.safeParse({
+        ...base,
+        metodoPago: "YAPE",
+        referenciaPago: "845217",
+      }).success,
+    ).toBe(true);
+    expect(
+      ticketInputSchema.safeParse({
+        ...base,
+        metodoPago: "YAPE",
+        referenciaPago: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      ticketInputSchema.safeParse({
+        ...base,
+        metodoPago: "EFECTIVO",
+        referenciaPago: "",
+      }).success,
+    ).toBe(true);
   });
 
   it("valida coordenadas y límites físicos del GPS", () => {

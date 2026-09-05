@@ -24,6 +24,7 @@ import {
 } from "@/lib/domain/types";
 import { formatEntityId, parseEntityId } from "@/lib/domain/ids";
 import { canAdvanceParcelStatus } from "@/lib/domain/rules";
+import type { PaymentMethod } from "@/lib/domain/payments";
 import { createTrackingCode } from "@/lib/domain/tracking";
 import type {
   CancellationInput,
@@ -99,6 +100,8 @@ interface TicketRow extends QueryResultRow {
   pasajero_apellidos: string;
   pasajero_telefono: string;
   precio: string;
+  metodo_pago: PaymentMethod;
+  referencia_pago: string;
   fecha_emision: string;
   estado: string;
   sunat_estado: string;
@@ -120,6 +123,8 @@ interface ParcelRow extends QueryResultRow {
   dimensiones: string;
   valor_declarado: string;
   costo: string;
+  metodo_pago: PaymentMethod;
+  referencia_pago: string;
   descripcion: string;
   estado: string;
   fecha_registro: string;
@@ -267,6 +272,8 @@ function mapTicket(row: TicketRow): Boleto {
     pasajeroApellidos: row.pasajero_apellidos,
     pasajeroTelefono: row.pasajero_telefono,
     precio: asNumber(row.precio),
+    metodoPago: row.metodo_pago,
+    referenciaPago: row.referencia_pago,
     fechaEmision: row.fecha_emision,
     estado: row.estado === "ANULADO" ? "anulado" : "activo",
     sunat_estado: row.sunat_estado.toLowerCase(),
@@ -292,6 +299,8 @@ function mapParcel(
     dimensiones: row.dimensiones,
     valor: asNumber(row.valor_declarado),
     costo: asNumber(row.costo),
+    metodoPago: row.metodo_pago,
+    referenciaPago: row.referencia_pago,
     descripcion: row.descripcion,
     estado: STATUS_FROM_DB[row.estado] || "registrado",
     fechaRegistro: row.fecha_registro,
@@ -401,7 +410,8 @@ async function readSnapshot(
                 p.nombres AS pasajero_nombres,
                 p.apellidos AS pasajero_apellidos,
                 COALESCE(p.telefono, '') AS pasajero_telefono,
-                b.precio::text,
+                b.precio::text, b.metodo_pago,
+                COALESCE(b.referencia_pago, '') AS referencia_pago,
                 TO_CHAR(b.fecha_emision AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_emision,
                 b.estado, b.sunat_estado
          FROM boletos b
@@ -430,7 +440,8 @@ async function readSnapshot(
                 sd.apellidos AS destinatario_apellidos,
                 COALESCE(sd.telefono, '') AS destinatario_telefono,
                 e.peso_kg::text, COALESCE(e.dimensiones, '') AS dimensiones,
-                e.valor_declarado::text, e.costo::text,
+                e.valor_declarado::text, e.costo::text, e.metodo_pago,
+                COALESCE(e.referencia_pago, '') AS referencia_pago,
                 e.descripcion, e.estado,
                 TO_CHAR(e.fecha_registro AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha_registro
          FROM encomiendas e
@@ -576,7 +587,8 @@ async function getTicketById(
             p.nombres AS pasajero_nombres,
             p.apellidos AS pasajero_apellidos,
             COALESCE(p.telefono, '') AS pasajero_telefono,
-            b.precio::text,
+            b.precio::text, b.metodo_pago,
+            COALESCE(b.referencia_pago, '') AS referencia_pago,
             TO_CHAR(b.fecha_emision AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_emision,
             b.estado, b.sunat_estado
      FROM boletos b
@@ -657,9 +669,13 @@ export async function createTicket(
       await client.query(
          `INSERT INTO boletos (
            id_boleto, codigo, id_viaje, id_persona_pasajero, asiento,
-           precio, estado, sunat_estado, request_id, id_agencia_venta
+           precio, metodo_pago, referencia_pago, estado, sunat_estado,
+           request_id, id_agencia_venta
          )
-         VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVO', 'PENDIENTE', $7, $8)`,
+         VALUES (
+           $1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''),
+           'ACTIVO', 'PENDIENTE', $9, $10
+         )`,
         [
           ticketId,
           code,
@@ -667,6 +683,8 @@ export async function createTicket(
           personId,
           input.asiento,
           asNumber(tripRow.precio_final),
+          input.metodoPago,
+          input.referenciaPago || "",
           input.requestId,
           tripRow.id_agencia,
         ],
@@ -686,7 +704,11 @@ export async function createTicket(
       action: "TICKET_CREATED",
       entity: "boleto",
       entityId: created.id,
-      metadata: { tripId: input.id_viaje, seat: input.asiento },
+      metadata: {
+        tripId: input.id_viaje,
+        seat: input.asiento,
+        paymentMethod: input.metodoPago,
+      },
     }, client);
     return created;
   });
@@ -769,7 +791,8 @@ async function getParcelById(
               sd.apellidos AS destinatario_apellidos,
               COALESCE(sd.telefono, '') AS destinatario_telefono,
               e.peso_kg::text, COALESCE(e.dimensiones, '') AS dimensiones,
-              e.valor_declarado::text, e.costo::text,
+              e.valor_declarado::text, e.costo::text, e.metodo_pago,
+              COALESCE(e.referencia_pago, '') AS referencia_pago,
               e.descripcion, e.estado,
               TO_CHAR(e.fecha_registro AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha_registro
        FROM encomiendas e
@@ -877,10 +900,13 @@ export async function createParcel(
        `INSERT INTO encomiendas (
           id_encomienda, codigo_tracking, id_viaje,
           id_persona_remitente, id_persona_destinatario,
-          peso_kg, dimensiones, valor_declarado, costo, descripcion, request_id,
-          id_agencia_registro
+          peso_kg, dimensiones, valor_declarado, costo, metodo_pago,
+          referencia_pago, descripcion, request_id, id_agencia_registro
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11, ''),
+          $12, $13, $14
+        )`,
       [
         parcelId,
         trackingCode,
@@ -891,6 +917,8 @@ export async function createParcel(
         input.dimensiones,
         input.valor,
         input.costo,
+        input.metodoPago,
+        input.referenciaPago || "",
         input.descripcion,
         input.requestId,
         trip.rows[0].id_agencia,
@@ -917,7 +945,11 @@ export async function createParcel(
       action: "PARCEL_CREATED",
       entity: "encomienda",
       entityId: created.id,
-      metadata: { tripId: input.id_viaje, trackingCode },
+      metadata: {
+        tripId: input.id_viaje,
+        trackingCode,
+        paymentMethod: input.metodoPago,
+      },
     }, client);
     return created;
   });

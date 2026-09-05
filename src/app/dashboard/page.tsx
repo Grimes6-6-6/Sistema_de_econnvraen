@@ -13,6 +13,13 @@ import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import { buildParcelTrackingUrl, maskDni } from "@/lib/domain/parcel-receipt";
+import {
+  formatPaymentMethod,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+  paymentMethodRequiresReference,
+  type PaymentMethod,
+} from "@/lib/domain/payments";
 import type { OperationalDocument } from "@/lib/domain/admin";
 import {
   LayoutDashboard,
@@ -260,6 +267,9 @@ export default function DashboardPage() {
   const [passengerApellidos, setPassengerApellidos] = useState("");
   const [passengerTelefono, setPassengerTelefono] = useState("");
   const [passengerPrecio, setPassengerPrecio] = useState(50);
+  const [ticketPaymentMethod, setTicketPaymentMethod] =
+    useState<PaymentMethod>("EFECTIVO");
+  const [ticketPaymentReference, setTicketPaymentReference] = useState("");
   const [emittedBoleto, setEmittedBoleto] = useState<Boleto | null>(null);
   const [isQueryingReniec, setIsQueryingReniec] = useState(false);
   const [isQueryingReniecParcel, setIsQueryingReniecParcel] = useState<
@@ -277,6 +287,8 @@ export default function DashboardPage() {
     setPassengerApellidos("");
     setPassengerTelefono("");
     setPassengerPrecio(50);
+    setTicketPaymentMethod("EFECTIVO");
+    setTicketPaymentReference("");
     setEmittedBoleto(null);
   };
 
@@ -340,6 +352,8 @@ export default function DashboardPage() {
         pasajeroNombres: passengerNombres,
         pasajeroApellidos: passengerApellidos,
         pasajeroTelefono: passengerTelefono,
+        metodoPago: ticketPaymentMethod,
+        referenciaPago: ticketPaymentReference.trim(),
       });
       if (res) {
         setEmittedBoleto(res);
@@ -382,6 +396,9 @@ export default function DashboardPage() {
   const [parcelDimensiones, setParcelDimensiones] = useState("");
   const [parcelValor, setParcelValor] = useState("0");
   const [parcelCosto, setParcelCosto] = useState("20");
+  const [parcelPaymentMethod, setParcelPaymentMethod] =
+    useState<PaymentMethod>("EFECTIVO");
+  const [parcelPaymentReference, setParcelPaymentReference] = useState("");
   const [parcelDesc, setParcelDesc] = useState("");
 
   const filteredParcels = useMemo(
@@ -494,6 +511,8 @@ export default function DashboardPage() {
         dimensiones: parcelDimensiones,
         valor: parseFloat(parcelValor) || 0,
         costo: parseFloat(parcelCosto) || 20,
+        metodoPago: parcelPaymentMethod,
+        referenciaPago: parcelPaymentReference.trim(),
         descripcion: parcelDesc,
       });
 
@@ -517,6 +536,8 @@ export default function DashboardPage() {
         setParcelDimensiones("");
         setParcelValor("0");
         setParcelCosto("20");
+        setParcelPaymentMethod("EFECTIVO");
+        setParcelPaymentReference("");
         setParcelDesc("");
       }
     } catch (error) {
@@ -838,7 +859,17 @@ export default function DashboardPage() {
     const escapeCell = (value: string | number) =>
       `"${String(value).replaceAll('"', '""')}"`;
     const rows: Array<Array<string | number>> = [
-      ["Tipo", "Fecha", "Código", "Ruta", "Cliente", "Detalle", "Monto (S/)"],
+      [
+        "Tipo",
+        "Fecha",
+        "Código",
+        "Ruta",
+        "Cliente",
+        "Detalle",
+        "Método de pago",
+        "Referencia",
+        "Monto (S/)",
+      ],
       ...repData.boletos.map((ticket) => {
         const trip = db.viajes.find((item) => item.id === ticket.id_viaje);
         const route = db.rutas.find((item) => item.id === trip?.id_ruta);
@@ -849,6 +880,8 @@ export default function DashboardPage() {
           route ? `${route.origen} - ${route.destino}` : "Sin ruta",
           `${ticket.pasajeroNombres} ${ticket.pasajeroApellidos}`.trim(),
           `Asiento ${ticket.asiento}`,
+          formatPaymentMethod(ticket.metodoPago),
+          ticket.referenciaPago,
           ticket.precio.toFixed(2),
         ];
       }),
@@ -862,6 +895,8 @@ export default function DashboardPage() {
           route ? `${route.origen} - ${route.destino}` : "Sin ruta",
           parcel.destinatarioNombre,
           parcel.descripcion,
+          formatPaymentMethod(parcel.metodoPago),
+          parcel.referenciaPago,
           parcel.costo.toFixed(2),
         ];
       }),
@@ -1774,6 +1809,51 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label htmlFor="ticket-payment-method" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                          Método de pago
+                        </label>
+                        <select
+                          id="ticket-payment-method"
+                          required
+                          value={ticketPaymentMethod}
+                          onChange={(event) => {
+                            const method = event.target.value as PaymentMethod;
+                            setTicketPaymentMethod(method);
+                            if (!paymentMethodRequiresReference(method)) {
+                              setTicketPaymentReference("");
+                            }
+                          }}
+                          className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-emerald-500"
+                        >
+                          {PAYMENT_METHODS.map((method) => (
+                            <option key={method} value={method}>
+                              {PAYMENT_METHOD_LABELS[method]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {paymentMethodRequiresReference(ticketPaymentMethod) && (
+                        <div className="space-y-1.5">
+                          <label htmlFor="ticket-payment-reference" className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                            Código de operación
+                          </label>
+                          <input
+                            id="ticket-payment-reference"
+                            required
+                            minLength={3}
+                            maxLength={80}
+                            value={ticketPaymentReference}
+                            onChange={(event) => setTicketPaymentReference(event.target.value)}
+                            placeholder="Ej.: 845217"
+                            autoComplete="off"
+                            className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2.5 text-xs font-mono text-white outline-none focus:border-emerald-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-3 pt-4 border-t border-white/10">
                       <button
                         type="button"
@@ -1839,6 +1919,17 @@ export default function DashboardPage() {
                       A{emittedBoleto.asiento}
                     </span>
                   </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-slate-400">Método de pago:</span>
+                    <span className="text-right font-bold text-white">
+                      {formatPaymentMethod(emittedBoleto.metodoPago)}
+                      {emittedBoleto.referenciaPago && (
+                        <small className="block text-slate-400">
+                          Op. {emittedBoleto.referenciaPago}
+                        </small>
+                      )}
+                    </span>
+                  </div>
                   <div className="flex justify-between border-t border-white/10 pt-2 text-sm">
                     <span className="text-slate-300">Total Pagado:</span>
                     <span className="font-black text-emerald-400">
@@ -1888,6 +1979,9 @@ export default function DashboardPage() {
                       <th className="py-2.5 px-3 text-right text-[10px] font-black uppercase text-slate-400 tracking-wider">
                         Precio
                       </th>
+                      <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Pago
+                      </th>
                       <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
                         Estado
                       </th>
@@ -1900,7 +1994,7 @@ export default function DashboardPage() {
                     {db.boletos.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={7}
+                          colSpan={8}
                           className="text-center py-6 text-xs text-slate-500"
                         >
                           No hay boletos emitidos.
@@ -1929,6 +2023,14 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
                               S/ {b.precio.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-slate-700">
+                              {formatPaymentMethod(b.metodoPago)}
+                              {b.referenciaPago && (
+                                <small className="block font-mono text-[10px] text-slate-500">
+                                  Op. {b.referenciaPago}
+                                </small>
+                              )}
                             </td>
                             <td className="py-3 px-3 text-center">
                               <span
@@ -2041,6 +2143,9 @@ export default function DashboardPage() {
                       <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
                         Peso / Costo
                       </th>
+                      <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Pago
+                      </th>
                       <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
                         Estado
                       </th>
@@ -2052,7 +2157,7 @@ export default function DashboardPage() {
                   <tbody>
                     {filteredParcels.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
+                        <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
                           No hay encomiendas que coincidan con los filtros.
                         </td>
                       </tr>
@@ -2097,6 +2202,14 @@ export default function DashboardPage() {
                               <span className="text-emerald-400 font-black block">
                                 S/ {p.costo.toFixed(2)}
                               </span>
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-slate-700">
+                              {formatPaymentMethod(p.metodoPago)}
+                              {p.referenciaPago && (
+                                <small className="block font-mono text-[10px] text-slate-500">
+                                  Op. {p.referenciaPago}
+                                </small>
+                              )}
                             </td>
                             <td className="py-3 px-3 text-center">
                               <span
@@ -2376,6 +2489,48 @@ export default function DashboardPage() {
                             className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono"
                           />
                         </div>
+                        <div>
+                          <label htmlFor="parcel-payment-method" className="mb-1 block text-[10px] font-bold uppercase text-slate-400">
+                            Método de pago
+                          </label>
+                          <select
+                            id="parcel-payment-method"
+                            required
+                            value={parcelPaymentMethod}
+                            onChange={(event) => {
+                              const method = event.target.value as PaymentMethod;
+                              setParcelPaymentMethod(method);
+                              if (!paymentMethodRequiresReference(method)) {
+                                setParcelPaymentReference("");
+                              }
+                            }}
+                            className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white"
+                          >
+                            {PAYMENT_METHODS.map((method) => (
+                              <option key={method} value={method}>
+                                {PAYMENT_METHOD_LABELS[method]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {paymentMethodRequiresReference(parcelPaymentMethod) && (
+                          <div className="sm:col-span-3">
+                            <label htmlFor="parcel-payment-reference" className="mb-1 block text-[10px] font-bold uppercase text-slate-400">
+                              Código de operación
+                            </label>
+                            <input
+                              id="parcel-payment-reference"
+                              required
+                              minLength={3}
+                              maxLength={80}
+                              value={parcelPaymentReference}
+                              onChange={(event) => setParcelPaymentReference(event.target.value)}
+                              placeholder="Ej.: 845217"
+                              autoComplete="off"
+                              className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-mono text-white"
+                            />
+                          </div>
+                        )}
                         <div className="sm:col-span-3">
                           <label htmlFor="parcel-description" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Descripción del Contenido
@@ -2476,6 +2631,12 @@ export default function DashboardPage() {
                       </p>
                       <p className="mt-2 text-base font-black text-emerald-300">
                         Flete pagado: S/ {emittedParcel.costo.toFixed(2)}
+                      </p>
+                      <p className="mt-1 text-slate-400">
+                        Pago: {formatPaymentMethod(emittedParcel.metodoPago)}
+                        {emittedParcel.referenciaPago
+                          ? ` · Op. ${emittedParcel.referenciaPago}`
+                          : ""}
                       </p>
                     </div>
                   </div>
@@ -3302,13 +3463,14 @@ export default function DashboardPage() {
                         <tr className="border-b border-white/10 text-[10px] font-black uppercase text-slate-400">
                           <th className="py-2 text-left">Código</th>
                           <th className="py-2 text-left">Pasajero</th>
+                          <th className="py-2 text-left">Pago</th>
                           <th className="py-2 text-right">Monto</th>
                         </tr>
                       </thead>
                       <tbody>
                         {repData.boletos.length === 0 && (
                           <tr>
-                            <td colSpan={3} className="py-8 text-center text-slate-500">
+                            <td colSpan={4} className="py-8 text-center text-slate-500">
                               No hay ventas de pasajes en este período.
                             </td>
                           </tr>
@@ -3323,6 +3485,9 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-2">
                               {b.pasajeroNombres} {b.pasajeroApellidos}
+                            </td>
+                            <td className="py-2">
+                              {formatPaymentMethod(b.metodoPago)}
                             </td>
                             <td className="py-2 text-right font-mono text-white">
                               S/ {b.precio.toFixed(2)}
@@ -3344,13 +3509,14 @@ export default function DashboardPage() {
                         <tr className="border-b border-white/10 text-[10px] font-black uppercase text-slate-400">
                           <th className="py-2 text-left">Tracking</th>
                           <th className="py-2 text-left">Destinatario</th>
+                          <th className="py-2 text-left">Pago</th>
                           <th className="py-2 text-right">Flete</th>
                         </tr>
                       </thead>
                       <tbody>
                         {repData.encomiendas.length === 0 && (
                           <tr>
-                            <td colSpan={3} className="py-8 text-center text-slate-500">
+                            <td colSpan={4} className="py-8 text-center text-slate-500">
                               No hay encomiendas en este período.
                             </td>
                           </tr>
@@ -3364,6 +3530,9 @@ export default function DashboardPage() {
                               {e.codigo_tracking}
                             </td>
                             <td className="py-2">{e.destinatarioNombre}</td>
+                            <td className="py-2">
+                              {formatPaymentMethod(e.metodoPago)}
+                            </td>
                             <td className="py-2 text-right font-mono text-white">
                               S/ {e.costo.toFixed(2)}
                             </td>

@@ -1,3 +1,5 @@
+import type { PaymentMethod } from "@/lib/domain/payments";
+
 export interface Ruta {
   id: string;
   origen: string;
@@ -46,6 +48,8 @@ export interface Boleto {
   pasajeroApellidos: string;
   pasajeroTelefono: string;
   precio: number;
+  metodoPago: PaymentMethod;
+  referenciaPago: string;
   fechaEmision: string;
   estado?: "activo" | "anulado";
   sunat_estado: string;
@@ -78,6 +82,8 @@ export interface Encomienda {
   dimensiones: string;
   valor: number;
   costo: number;
+  metodoPago: PaymentMethod;
+  referenciaPago: string;
   descripcion: string;
   estado:
     | "registrado"
