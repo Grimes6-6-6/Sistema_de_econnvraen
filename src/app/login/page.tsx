@@ -6,10 +6,11 @@ import React, { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Building2,
   Eye,
   EyeOff,
   Lock,
-  PackageSearch,
+  Navigation,
   ShieldCheck,
   Smartphone,
   User,
@@ -17,10 +18,43 @@ import {
 import { useDatabase, type Usuario } from "@/context/DatabaseContext";
 
 type AuthStage = "credentials" | "sms_verify";
+type LoginPortal = "agency" | "driver";
+
+const PORTAL_CONTENT = {
+  agency: {
+    badge: "Portal de agencia",
+    eyebrow: "Personal administrativo",
+    title: "Acceso de agencia",
+    description:
+      "Ingreso para superadministradores, administradores y operadores.",
+    button: "Ingresar al panel de agencia",
+    usernamePlaceholder: "Usuario de agencia",
+    features: [
+      "Itinerarios y venta de pasajes",
+      "Encomiendas y recojos a domicilio",
+      "Flota, reportes y administración",
+    ],
+  },
+  driver: {
+    badge: "Portal de conductores",
+    eyebrow: "Personal en ruta",
+    title: "Acceso de conductor",
+    description:
+      "Ingreso exclusivo para conductores registrados por la empresa.",
+    button: "Ingresar al portal de conductor",
+    usernamePlaceholder: "Usuario o DNI del conductor",
+    features: [
+      "Perfil y documentos personales",
+      "Viajes y entregas asignadas",
+      "Ubicación GPS e incidencias en ruta",
+    ],
+  },
+} as const;
 
 export default function LoginPage() {
   const router = useRouter();
   const { loginUser, verifySmsCode, resendSmsCode, logoutUser } = useDatabase();
+  const [portal, setPortal] = useState<LoginPortal>("agency");
   const [authStage, setAuthStage] = useState<AuthStage>("credentials");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -30,6 +64,7 @@ export default function LoginPage() {
   const [resendSeconds, setResendSeconds] = useState(0);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const activePortal = PORTAL_CONTENT[portal];
 
   useEffect(() => {
     if (resendSeconds <= 0) return;
@@ -39,6 +74,15 @@ export default function LoginPage() {
     );
     return () => window.clearInterval(timer);
   }, [resendSeconds]);
+
+  const selectPortal = (nextPortal: LoginPortal) => {
+    if (nextPortal === portal) return;
+    setPortal(nextPortal);
+    setUsername("");
+    setPassword("");
+    setShowPassword(false);
+    setError("");
+  };
 
   const routeAuthenticatedUser = (user: Usuario) => {
     router.replace(
@@ -136,8 +180,8 @@ export default function LoginPage() {
 
   return (
     <main className="corporate-login relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6 lg:p-10">
-      <div className="login-card relative z-10 grid w-full max-w-4xl grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-premium lg:grid-cols-12">
-        <section className="login-form-panel flex min-h-[570px] flex-col justify-center p-6 sm:p-10 lg:col-span-7 lg:p-12">
+      <div className="login-card relative z-10 grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-premium lg:grid-cols-12">
+        <section className="login-form-panel flex min-h-[620px] flex-col justify-center p-6 sm:p-10 lg:col-span-7 lg:p-12">
           <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-5">
             <Image
               src="/econnvrae-logo.png"
@@ -147,32 +191,79 @@ export default function LoginPage() {
               priority
               className="h-16 w-auto max-w-[70%] object-contain object-left"
             />
-            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
-              Acceso interno
+            <span className="rounded-md border border-[#dfc88f] bg-[#fff9e9] px-2.5 py-1 text-[10px] font-bold text-[#6b4f16]">
+              {activePortal.badge}
             </span>
           </div>
 
-          <div className="mt-8">
+          <div className="mt-7">
             {authStage === "credentials" ? (
               <div className="space-y-6">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                    Ingresar al sistema
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#8a671d]">
+                    Selecciona tu acceso
+                  </p>
+                  <div
+                    className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1.5"
+                    aria-label="Tipo de acceso"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={portal === "agency"}
+                      onClick={() => selectPortal("agency")}
+                      className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2.5 text-sm font-semibold transition ${
+                        portal === "agency"
+                          ? "border-[#d6b767] bg-white text-slate-900 shadow-sm"
+                          : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800"
+                      }`}
+                    >
+                      <Building2 className="h-4 w-4" />
+                      <span>Agencia</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={portal === "driver"}
+                      onClick={() => selectPortal("driver")}
+                      className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2.5 text-sm font-semibold transition ${
+                        portal === "driver"
+                          ? "border-[#d6b767] bg-white text-slate-900 shadow-sm"
+                          : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800"
+                      }`}
+                    >
+                      <Navigation className="h-4 w-4" />
+                      <span>Conductores</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-[#8a671d]">
+                    {activePortal.eyebrow}
+                  </p>
+                  <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                    {activePortal.title}
                   </h1>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Usa la cuenta entregada por la empresa. Abriremos automáticamente el panel que corresponde a tu cargo.
+                    {activePortal.description}
                   </p>
                 </div>
 
                 {error && (
-                  <div role="alert" aria-live="polite" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  <div
+                    role="alert"
+                    aria-live="polite"
+                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+                  >
                     {error}
                   </div>
                 )}
 
                 <form onSubmit={handleLoginSubmit} className="space-y-4">
                   <div>
-                    <label htmlFor="login-username" className="block text-sm font-semibold text-slate-700">
+                    <label
+                      htmlFor="login-username"
+                      className="block text-sm font-semibold text-slate-700"
+                    >
                       Usuario
                     </label>
                     <div className="relative mt-1.5">
@@ -186,14 +277,17 @@ export default function LoginPage() {
                         autoComplete="username"
                         value={username}
                         onChange={(event) => setUsername(event.target.value)}
-                        placeholder="Escribe tu usuario"
-                        className="w-full border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                        placeholder={activePortal.usernamePlaceholder}
+                        className="w-full border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-[#b78b2f] focus:ring-2 focus:ring-[#f2e3b7]"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700">
+                    <label
+                      htmlFor="login-password"
+                      className="block text-sm font-semibold text-slate-700"
+                    >
                       Contraseña
                     </label>
                     <div className="relative mt-1.5">
@@ -206,16 +300,24 @@ export default function LoginPage() {
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder="Escribe tu contraseña"
-                        className="w-full border border-slate-300 bg-white py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                        className="w-full border border-slate-300 bg-white py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition focus:border-[#b78b2f] focus:ring-2 focus:ring-[#f2e3b7]"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((current) => !current)}
-                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                        aria-label={
+                          showPassword
+                            ? "Ocultar contraseña"
+                            : "Mostrar contraseña"
+                        }
                         aria-pressed={showPassword}
                         className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400"
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -224,29 +326,16 @@ export default function LoginPage() {
                     type="submit"
                     disabled={isSubmitting}
                     aria-busy={isSubmitting}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#3b352f] py-3.5 text-sm font-bold text-white transition hover:bg-[#27231f] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-md border border-[#b48729] bg-[#d8ad43] py-3.5 text-sm font-bold text-[#20180a] shadow-sm transition hover:bg-[#c99b32] focus:outline-none focus:ring-2 focus:ring-[#9f7622] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isSubmitting ? "Comprobando acceso…" : "Ingresar"}
+                    {isSubmitting ? "Comprobando acceso…" : activePortal.button}
                     {!isSubmitting && <ArrowRight className="h-4 w-4" />}
                   </button>
                 </form>
 
-                <div className="border-t border-slate-200 pt-5">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/public")}
-                    className="flex w-full items-center justify-between rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    <span className="flex items-center gap-2">
-                      <PackageSearch className="h-4 w-4 text-slate-500" />
-                      Rastrear una encomienda
-                    </span>
-                    <ArrowRight className="h-4 w-4 text-slate-400" />
-                  </button>
-                  <p className="mt-3 text-center text-xs text-slate-500">
-                    Si olvidaste tu acceso, solicítalo al administrador de tu agencia.
-                  </p>
-                </div>
+                <p className="border-t border-slate-200 pt-4 text-center text-xs text-slate-500">
+                  Si olvidaste tu acceso, solicítalo al administrador de tu agencia.
+                </p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -261,26 +350,37 @@ export default function LoginPage() {
                 </button>
 
                 <div>
-                  <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-800">
+                  <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-[#fff5d7] text-[#7a5916]">
                     <Smartphone className="h-5 w-5" />
                   </span>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  <p className="text-xs font-semibold text-[#8a671d]">
+                    {activePortal.badge}
+                  </p>
+                  <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
                     Verifica tu ingreso
                   </h1>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Enviamos un código de 6 dígitos al celular <b>{maskedPhone}</b>. Vence en 5 minutos.
+                    Enviamos un código de 6 dígitos al celular <b>{maskedPhone}</b>.
+                    Vence en 5 minutos.
                   </p>
                 </div>
 
                 {error && (
-                  <div role="alert" aria-live="polite" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  <div
+                    role="alert"
+                    aria-live="polite"
+                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+                  >
                     {error}
                   </div>
                 )}
 
                 <form onSubmit={handleSmsSubmit} className="space-y-4">
                   <div>
-                    <label htmlFor="sms-code" className="block text-sm font-semibold text-slate-700">
+                    <label
+                      htmlFor="sms-code"
+                      className="block text-sm font-semibold text-slate-700"
+                    >
                       Código de verificación
                     </label>
                     <input
@@ -291,15 +391,19 @@ export default function LoginPage() {
                       autoComplete="one-time-code"
                       inputMode="numeric"
                       value={smsCode}
-                      onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      onChange={(event) =>
+                        setSmsCode(
+                          event.target.value.replace(/\D/g, "").slice(0, 6),
+                        )
+                      }
                       placeholder="000000"
-                      className="mt-1.5 w-full border border-slate-300 bg-white px-4 py-3 text-center font-mono text-xl font-bold tracking-[0.35em] text-slate-900 outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-100"
+                      className="mt-1.5 w-full border border-slate-300 bg-white px-4 py-3 text-center font-mono text-xl font-bold tracking-[0.35em] text-slate-900 outline-none transition focus:border-[#b78b2f] focus:ring-2 focus:ring-[#f2e3b7]"
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={isSubmitting || smsCode.length !== 6}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-[#3b352f] py-3.5 text-sm font-bold text-white transition hover:bg-[#27231f] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-md border border-[#b48729] bg-[#d8ad43] py-3.5 text-sm font-bold text-[#20180a] shadow-sm transition hover:bg-[#c99b32] focus:outline-none focus:ring-2 focus:ring-[#9f7622] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <ShieldCheck className="h-4 w-4" />
                     {isSubmitting ? "Verificando…" : "Verificar e ingresar"}
@@ -310,7 +414,7 @@ export default function LoginPage() {
                   type="button"
                   disabled={isSubmitting || resendSeconds > 0}
                   onClick={() => void handleSmsResend()}
-                  className="w-full text-sm font-semibold text-amber-800 hover:text-amber-950 disabled:text-slate-400"
+                  className="w-full text-sm font-semibold text-[#765414] hover:text-[#4f370c] disabled:text-slate-400"
                 >
                   {resendSeconds > 0
                     ? `Podrás reenviar en ${resendSeconds} s`
@@ -321,28 +425,34 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <aside className="relative hidden flex-col justify-between bg-[#312d28] p-10 lg:col-span-5 lg:flex">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-200">
+        <aside className="relative hidden flex-col justify-between border-l border-[#e1d5c2] bg-[#f8f3ea] p-10 text-slate-800 lg:col-span-5 lg:flex">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#7a5916]">
             <ShieldCheck className="h-4 w-4" />
-            Plataforma de uso interno
+            Acceso exclusivo del personal
           </div>
 
           <div>
-            <div className="h-1 w-12 rounded-full bg-amber-400" />
-            <h2 className="mt-5 text-3xl font-bold leading-tight text-white">
-              Una cuenta, el acceso correcto.
-            </h2>
-            <p className="mt-4 text-sm leading-6 text-slate-300">
-              No necesitas elegir un módulo antes de ingresar. El sistema reconoce tu rol y muestra únicamente las funciones autorizadas.
+            <div className="h-1 w-12 rounded-full bg-[#d8ad43]" />
+            <p className="mt-6 text-xs font-bold uppercase tracking-[0.14em] text-[#8a671d]">
+              {activePortal.eyebrow}
             </p>
-            <div className="mt-7 space-y-3 text-sm text-slate-200">
-              <p className="flex items-start gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /> Acceso protegido y registrado.</p>
-              <p className="flex items-start gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /> Verificación SMS solo cuando corresponde.</p>
-              <p className="flex items-start gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /> Operadores y conductores llegan directo a su panel.</p>
-            </div>
+            <h2 className="mt-2 text-3xl font-bold leading-tight text-slate-900">
+              {activePortal.title}
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              Elige el portal correspondiente a tus funciones y utiliza las credenciales entregadas por la empresa.
+            </p>
+            <ul className="mt-7 space-y-3 border-t border-[#dfd2bd] pt-6 text-sm text-slate-700">
+              {activePortal.features.map((feature) => (
+                <li key={feature} className="flex items-start gap-3">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b8892e]" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div className="border-t border-white/10 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="border-t border-[#dfd2bd] pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             ECONNVRAE · Ayacucho — VRAEM
           </div>
         </aside>
