@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import {
   ArrowLeft,
   ClipboardList,
@@ -34,7 +34,6 @@ function getStepIndex(estado: string): number {
 }
 
 export default function PublicClientPage() {
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [securityCode, setSecurityCode] = useState("");
   const [result, setResult] = useState<PublicTrackingResult | null>(null);
@@ -141,14 +140,13 @@ export default function PublicClientPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push("/login")}
+          <Link
+            href="/"
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-bold text-slate-300 transition hover:border-emerald-500/40 hover:bg-slate-800 hover:text-white cursor-pointer backdrop-blur-md"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Acceso interno
-          </button>
+            Volver al inicio
+          </Link>
         </header>
 
         {/* Hero & Search Content */}

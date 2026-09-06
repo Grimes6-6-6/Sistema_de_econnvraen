@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import {
@@ -183,14 +184,20 @@ export default function LoginPage() {
       <div className="login-card relative z-10 grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-premium lg:grid-cols-12">
         <section className="login-form-panel flex min-h-[620px] flex-col justify-center p-6 sm:p-10 lg:col-span-7 lg:p-12">
           <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-5">
-            <Image
-              src="/econnvrae-logo.png"
-              alt="ECONNVRAE - Autos y camionetas al VRAEM"
-              width={2086}
-              height={754}
-              priority
-              className="h-16 w-auto max-w-[70%] object-contain object-left"
-            />
+            <Link
+              href="/"
+              aria-label="Volver a la página principal"
+              className="block max-w-[70%]"
+            >
+              <Image
+                src="/econnvrae-logo.png"
+                alt="ECONNVRAE - Autos y camionetas al VRAEM"
+                width={2086}
+                height={754}
+                priority
+                className="h-16 w-auto max-w-full object-contain object-left"
+              />
+            </Link>
             <span className="rounded-md border border-[#dfc88f] bg-[#fff9e9] px-2.5 py-1 text-[10px] font-bold text-[#6b4f16]">
               {activePortal.badge}
             </span>
