@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardCopy,
   Download,
+  Eye,
   FileClock,
   KeyRound,
   Plus,
@@ -793,9 +794,24 @@ export default function AdminWorkspace() {
                     {(document.file || document.state === "PENDIENTE") && (
                       <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
                         {document.file && (
-                          <a href={document.file.downloadUrl} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-2 py-1 font-bold text-slate-300 hover:bg-slate-800">
-                            <Download className="h-3.5 w-3.5" /> Descargar
-                          </a>
+                          <>
+                            <a
+                              href={`${document.file.downloadUrl}?preview=1`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Ver ${document.documentType} de ${document.holderName}`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-blue-500/40 px-2 py-1 font-bold text-blue-300 hover:bg-blue-500/10"
+                            >
+                              <Eye className="h-3.5 w-3.5" /> Ver
+                            </a>
+                            <a
+                              href={document.file.downloadUrl}
+                              aria-label={`Descargar ${document.documentType} de ${document.holderName}`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-2 py-1 font-bold text-slate-300 hover:bg-slate-800"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Descargar
+                            </a>
+                          </>
                         )}
                         {document.state === "PENDIENTE" && currentUser.rol === "SUPER_ADMIN" && (
                           <>
