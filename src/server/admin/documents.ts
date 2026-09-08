@@ -294,7 +294,13 @@ export async function uploadDriverOperationalDocument(
          'PENDIENTE', NULLIF($9, ''), $10, 'CONDUCTOR',
          $11, $12, $13, $14, $15
        )
-       ON CONFLICT DO UPDATE SET
+       ON CONFLICT (
+         titular_tipo,
+         (COALESCE(id_conductor, 0)),
+         (COALESCE(id_vehiculo, 0)),
+         tipo_documento,
+         numero
+       ) DO UPDATE SET
          fecha_emision = EXCLUDED.fecha_emision,
          fecha_vencimiento = EXCLUDED.fecha_vencimiento,
          estado = 'PENDIENTE',
