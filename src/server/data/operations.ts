@@ -1822,7 +1822,7 @@ export async function getVehicleLocations(
          AS timestamp_ms,
        GREATEST(
          0,
-         FLOOR(EXTRACT(EPOCH FROM (NOW() - location.updated_at)))
+         FLOOR(EXTRACT(EPOCH FROM (NOW() - location.captured_at)))
        )::integer AS age_seconds,
        location.is_active
      FROM ubicaciones_vehiculos location

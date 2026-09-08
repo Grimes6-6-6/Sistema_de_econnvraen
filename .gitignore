@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+*.dump
+*.dump.enc
+*.dump.enc.partial
+*.backup-key
 
 # debug
 npm-debug.log*

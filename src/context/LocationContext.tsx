@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { VehicleLocation } from "@/lib/domain/types";
+import { ageVehicleLocations, canRetryGps } from "@/lib/domain/gps";
 import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import { useDatabase } from "@/context/DatabaseContext";
 
@@ -25,6 +26,7 @@ interface SimpleCoords {
 
 interface LocationContextType {
   locations: VehicleLocation[];
+  fleetError: string | null;
   ownPosition: SimpleCoords | null;
   gpsStatus: "idle" | "requesting" | "active" | "error";
   gpsError: string | null;
@@ -131,6 +133,7 @@ async function sendLocation(
     body: JSON.stringify(body),
     cache: "no-store",
     keepalive: true,
+    signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
@@ -149,7 +152,10 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
   const [locationSnapshot, setLocationSnapshot] = useState<{
     userId: string | null;
     items: VehicleLocation[];
-  }>({ userId: null, items: [] });
+    receivedAt: number;
+  }>({ userId: null, items: [], receivedAt: 0 });
+  const [clock, setClock] = useState(0);
+  const [fleetError, setFleetError] = useState<string | null>(null);
   const [ownPosition, setOwnPosition] = useState<SimpleCoords | null>(null);
   const [gpsStatus, setGpsStatus] =
     useState<LocationContextType["gpsStatus"]>("idle");
@@ -165,6 +171,10 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
   const lastBroadcastPositionRef = useRef<SimpleCoords | null>(null);
   const pendingPayloadRef = useRef<ActiveLocationPayload | null>(null);
   const activeMetaRef = useRef<{ conductorId: string } | null>(null);
+  const sendingRef = useRef(false);
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const refreshPositionRef = useRef<(() => void) | null>(null);
+  const pollingRef = useRef(false);
   const canReadFleet = Boolean(
     currentUser && roleHasPermission(currentUser.rol, PERMISSIONS.FLEET_VIEW),
   );
@@ -173,16 +183,31 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
     userId: string,
     signal?: AbortSignal,
   ) => {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
     try {
       const next = await readLocations(signal);
-      setLocationSnapshot({ userId, items: next });
+      if (signal?.aborted) return;
+      setLocationSnapshot({ userId, items: next, receivedAt: performance.now() });
+      setFleetError(null);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      setFleetError("No se pudo actualizar la flota. Se muestran las últimas posiciones recibidas, no una señal en vivo.");
+    } finally {
+      pollingRef.current = false;
     }
   }, []);
 
   const transmitPayload = useCallback(
     async (payload: ActiveLocationPayload) => {
+      if (sendingRef.current || !activeMetaRef.current) return;
+      const trackingSession = activeMetaRef.current;
+      if (!canRetryGps(payload.capturedAt, Date.now())) {
+        if (pendingPayloadRef.current?.requestId === payload.requestId) pendingPayloadRef.current = null;
+        setTransmissionStatus("error");
+        setTransmissionError("La posición pendiente caducó. Esperando una lectura GPS nueva.");
+        return;
+      }
       if (!navigator.onLine) {
         pendingPayloadRef.current = payload;
         setTransmissionStatus("offline");
@@ -194,8 +219,12 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setTransmissionStatus("sending");
       setTransmissionError(null);
+      sendingRef.current = true;
       try {
-        await sendLocation(payload);
+        const request = sendLocation(payload);
+        inFlightRef.current = request;
+        await request;
+        if (activeMetaRef.current !== trackingSession) return;
         if (pendingPayloadRef.current?.requestId === payload.requestId) {
           pendingPayloadRef.current = null;
         }
@@ -203,7 +232,8 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
         setLastSyncedAt(Date.now());
         if (currentUser && canReadFleet) void syncLocations(currentUser.id);
       } catch (error) {
-        pendingPayloadRef.current = payload;
+        if (activeMetaRef.current !== trackingSession) return;
+        if (!pendingPayloadRef.current || Date.parse(pendingPayloadRef.current.capturedAt) <= Date.parse(payload.capturedAt)) pendingPayloadRef.current = payload;
         setTransmissionStatus(navigator.onLine ? "error" : "offline");
         setTransmissionError(
           navigator.onLine
@@ -212,6 +242,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
               : "El GPS está activo, pero la última posición no llegó al servidor. Se reintentará automáticamente."
             : "Sin Internet. Se enviará la posición más reciente al recuperar conexión.",
         );
+      } finally {
+        sendingRef.current = false;
+        inFlightRef.current = null;
       }
     },
     [canReadFleet, currentUser, syncLocations],
@@ -270,17 +303,19 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const meta = activeMetaRef.current;
     activeMetaRef.current = null;
+    refreshPositionRef.current = null;
     lastBroadcastRef.current = 0;
     lastBroadcastPositionRef.current = null;
     pendingPayloadRef.current = null;
     if (meta) {
-      void sendLocation({
-        conductorId: meta.conductorId,
-        isActive: false,
-      }).then(() => {
+      // Send the stop after an already-dispatched position so responses cannot
+      // leave the vehicle active again. A newly started session takes precedence.
+      void (inFlightRef.current || Promise.resolve()).catch(() => {}).then(async () => {
+        if (activeMetaRef.current?.conductorId === meta.conductorId) return;
+        await sendLocation({ conductorId: meta.conductorId, isActive: false });
         if (currentUser && canReadFleet) void syncLocations(currentUser.id);
       }).catch(() => {
-        // A stale active marker disappears automatically after five minutes.
+        // The central marks old coordinates as stale after 45 seconds.
       });
     }
 
@@ -302,15 +337,16 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
-      activeMetaRef.current = { conductorId };
+      const trackingSession = { conductorId };
+      activeMetaRef.current = trackingSession;
       setGpsStatus("requesting");
       setGpsError(null);
       setTransmissionStatus("idle");
       setTransmissionError(null);
       setLastSyncedAt(null);
 
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (position) => {
+      const onPosition = (position: GeolocationPosition) => {
+          if (activeMetaRef.current !== trackingSession) return;
           const coords: SimpleCoords = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -330,8 +366,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
           setGpsStatus("active");
           setGpsError(null);
           broadcastPosition(coords);
-        },
-        (error) => {
+        };
+      const onError = (error: GeolocationPositionError) => {
+          if (activeMetaRef.current !== trackingSession) return;
           setGpsStatus("error");
           switch (error.code) {
             case error.PERMISSION_DENIED:
@@ -348,9 +385,19 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
             default:
               setGpsError("No se pudo obtener la ubicación.");
           }
-        },
-        { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 },
-      );
+        };
+      const options = { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 };
+      watchIdRef.current = navigator.geolocation.watchPosition(onPosition, onError, options);
+      let locating = false;
+      refreshPositionRef.current = () => {
+        if (locating || activeMetaRef.current !== trackingSession) return;
+        locating = true;
+        navigator.geolocation.getCurrentPosition(
+          (position) => { locating = false; onPosition(position); },
+          (error) => { locating = false; onError(error); },
+          { ...options, maximumAge: 0 },
+        );
+      };
     },
     [broadcastPosition, stopTracking],
   );
@@ -378,10 +425,22 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const retryPendingPosition = () => {
       const pending = pendingPayloadRef.current;
-      if (pending && activeMetaRef.current) void transmitPayload(pending);
+      if (pending && activeMetaRef.current && document.visibilityState === "visible") void transmitPayload(pending);
     };
+    const retryTimer = window.setInterval(retryPendingPosition, 15_000);
+    const positionTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && Date.now() - lastBroadcastRef.current >= HEARTBEAT_INTERVAL_MS) refreshPositionRef.current?.();
+    }, HEARTBEAT_INTERVAL_MS);
+    const ageTimer = window.setInterval(() => setClock(performance.now()), 5_000);
     window.addEventListener("online", retryPendingPosition);
-    return () => window.removeEventListener("online", retryPendingPosition);
+    document.addEventListener("visibilitychange", retryPendingPosition);
+    return () => {
+      window.removeEventListener("online", retryPendingPosition);
+      document.removeEventListener("visibilitychange", retryPendingPosition);
+      window.clearInterval(retryTimer);
+      window.clearInterval(positionTimer);
+      window.clearInterval(ageTimer);
+    };
   }, [transmitPayload]);
 
   useEffect(() => {
@@ -398,7 +457,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
       const meta = activeMetaRef.current;
       activeMetaRef.current = null;
       if (meta) {
-        void sendLocation({ conductorId: meta.conductorId, isActive: false });
+        void (inFlightRef.current || Promise.resolve()).catch(() => {}).then(() =>
+          sendLocation({ conductorId: meta.conductorId, isActive: false }),
+        ).catch(() => {});
       }
     };
   }, []);
@@ -408,8 +469,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         locations:
           canReadFleet && currentUser && locationSnapshot.userId === currentUser.id
-            ? locationSnapshot.items
+            ? ageVehicleLocations(locationSnapshot.items, clock - locationSnapshot.receivedAt)
             : [],
+        fleetError,
         ownPosition,
         gpsStatus,
         gpsError,

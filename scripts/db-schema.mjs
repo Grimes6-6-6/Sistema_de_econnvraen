@@ -16,6 +16,7 @@ const BASELINE_COLUMNS = {
 };
 
 const CURRENT_COLUMNS = {
+  notificaciones_lecturas: ["id_usuario", "clave", "leida_at"],
   agencias: ["id_agencia", "codigo", "estado"],
   usuarios: [
     "must_change_password",

@@ -10,6 +10,8 @@ import {
   IncidenciaViaje,
 } from "@/context/DatabaseContext";
 import { useLocation } from "@/context/LocationContext";
+import NotificationInbox from "@/components/NotificationInbox";
+import { isDriverTripVisible } from "@/lib/domain/gps";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import {
@@ -272,7 +274,7 @@ export default function ConductorPage() {
     assignedVehicleIds.has(vehicle.id),
   );
   const myTrips = db.viajes.filter(
-    (v) => v.id_conductor === conductorId && v.fecha === todayStr,
+    (v) => isDriverTripVisible(v, conductorId, todayStr),
   );
   const activeGpsTrip = myTrips.find((trip) => trip.estado === "en_curso");
   const getBookedSeats = (tripId: string) =>
@@ -652,6 +654,7 @@ export default function ConductorPage() {
           </div>
 
           <div className="ml-2 flex shrink-0 items-center gap-2 sm:gap-3">
+            {currentUser && <NotificationInbox key={`${currentUser.id}:${currentUser.agenciaId}`} onNavigate={() => setMainTab("perfil")} />}
             {/* Offline toggle */}
             <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-slate-950/60 px-2 py-1.5 sm:px-3">
               <span className="hidden text-[9px] font-black uppercase tracking-wider text-slate-400 sm:inline">

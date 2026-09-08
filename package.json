@@ -17,6 +17,9 @@
     "db:check": "node scripts/db-check.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed.mjs",
+    "db:backup": "node scripts/db-backup.mjs",
+    "db:backup:verify": "node scripts/db-backup-verify.mjs",
+    "test:backups": "node --test tests/backups.test.mjs",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

@@ -9,6 +9,8 @@ import { useDatabase, Viaje, Boleto, Encomienda } from "@/context/DatabaseContex
 import { useLocation } from "@/context/LocationContext";
 import AgencySwitcher from "@/components/AgencySwitcher";
 import AdminWorkspace from "@/components/AdminWorkspace";
+import YapePayment from "@/components/YapePayment";
+import NotificationInbox from "@/components/NotificationInbox";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
@@ -140,7 +142,7 @@ export default function DashboardPage() {
     | "flota"
     | "administracion"
   >("dashboard");
-  const { locations } = useLocation();
+  const { locations, fleetError } = useLocation();
   const can = (permission: Parameters<typeof roleHasPermission>[1]) =>
     Boolean(currentUser && roleHasPermission(currentUser.rol, permission));
 
@@ -1123,21 +1125,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {currentUser?.rol === "SUPER_ADMIN" && (
-              <button
-                type="button"
-                onClick={() => setActiveTab("administracion")}
-                aria-label={`${documentAlerts.length} alertas documentarias`}
-                className="relative flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
-              >
-                <BellRing className="h-4.5 w-4.5" />
-                {documentAlerts.length > 0 && (
-                  <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold leading-5 text-white">
-                    {documentAlerts.length > 99 ? "99+" : documentAlerts.length}
-                  </span>
-                )}
-              </button>
-            )}
+            {currentUser && can(PERMISSIONS.FLEET_MANAGE) && <NotificationInbox key={`${currentUser.id}:${currentUser.agenciaId}`} onNavigate={() => setActiveTab("administracion")} />}
             <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600">
                 <UserRound className="h-4.5 w-4.5" />
@@ -1854,6 +1842,8 @@ export default function DashboardPage() {
                       )}
                     </div>
 
+                    {ticketPaymentMethod === "YAPE" && <YapePayment key={`${selectedSeat}:${passengerPrecio}`} amount={passengerPrecio} />}
+
                     <div className="flex gap-3 pt-4 border-t border-white/10">
                       <button
                         type="button"
@@ -2532,6 +2522,7 @@ export default function DashboardPage() {
                           </div>
                         )}
                         <div className="sm:col-span-3">
+                          {parcelPaymentMethod === "YAPE" && <div className="mb-4"><YapePayment key={parcelCosto} amount={parcelCosto} /></div>}
                           <label htmlFor="parcel-description" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Descripción del Contenido
                           </label>
@@ -3552,6 +3543,7 @@ export default function DashboardPage() {
         {/* ================================================================== */}
         {activeTab === "flota" && (
           <div className="space-y-6 animate-fade-in no-print">
+            {fleetError && <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{fleetError}</p>}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-white/10">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white">
