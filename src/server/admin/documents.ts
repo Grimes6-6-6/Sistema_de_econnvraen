@@ -445,10 +445,10 @@ export async function reviewOperationalDocument(
     ) {
       await client.query(
         `UPDATE conductores
-         SET identidad_estado = $1,
+         SET identidad_estado = $1::varchar(12),
              identidad_observacion = NULLIF($2, ''),
-             identidad_verificada_por = CASE WHEN $1 = 'OBSERVADA' THEN $3 ELSE NULL END,
-             identidad_verificada_at = CASE WHEN $1 = 'OBSERVADA' THEN NOW() ELSE NULL END,
+             identidad_verificada_por = CASE WHEN $1::text = 'OBSERVADA' THEN $3 ELSE NULL END,
+             identidad_verificada_at = CASE WHEN $1::text = 'OBSERVADA' THEN NOW() ELSE NULL END,
              updated_at = NOW()
          WHERE id_conductor = $4`,
         [
