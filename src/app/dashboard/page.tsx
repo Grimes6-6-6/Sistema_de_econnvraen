@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -2228,8 +2229,9 @@ export default function DashboardPage() {
             </div>
 
             {/* MODAL: REGISTRO DE ENCOMIENDA */}
-            {isParcelModalOpen && (
-              <div className="dialog-backdrop fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-2 sm:p-4">
+            {isParcelModalOpen &&
+              createPortal(
+                <div className="dialog-backdrop fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-2 sm:p-4">
                 <div
                   role="dialog"
                   aria-modal="true"
@@ -2567,8 +2569,9 @@ export default function DashboardPage() {
                     </div>
                   </form>
                 </div>
-              </div>
-            )}
+                </div>,
+                document.body,
+              )}
 
             {emittedParcel && (
               <section
