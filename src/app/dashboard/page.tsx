@@ -2266,7 +2266,7 @@ export default function DashboardPage() {
                   <form onSubmit={handleParcelSubmit} className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
                       {/* Remitente */}
-                      <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
+                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
                         1. Datos del Remitente
                       </span>
@@ -2331,7 +2331,7 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Destinatario */}
-                      <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
+                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
                         2. Datos del Destinatario
                       </span>
@@ -2398,7 +2398,7 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Viaje y Flete */}
-                      <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
+                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
                         3. Detalle del Paquete y Asignación
                       </span>
