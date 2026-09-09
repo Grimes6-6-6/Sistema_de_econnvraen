@@ -1,11 +1,21 @@
 # Respaldo y recuperación
 
-Estado: se incorporaron herramientas para exportación manual cifrada. Esto no significa que exista ya una copia de producción ni una programación automática. Configurar destino externo, responsable, retención y prueba de recuperación antes de la entrega.
+Estado: existen dos mecanismos manuales cifrados. El superadministrador puede descargar desde el panel una copia pequeña de los datos de la aplicación; para recuperación completa y bases grandes se conserva la exportación con `pg_dump`. Esto no significa que exista una programación automática. Configurar destino externo, responsable, retención y prueba de recuperación antes de la entrega.
 
 ## Dos capas
 
 - Revisar en Neon → Backup & Restore la ventana de recuperación del plan contratado. Una rama en el mismo proyecto no sustituye una copia externa; no eliminar ramas ni modificar producción durante una prueba.
 - Exportar periódicamente con `pg_dump` en formato custom, cifrado AES-256-GCM y manifiesto SHA-256. Incluye tablas y archivos documentarios guardados en PostgreSQL; no incluye roles globales, secretos de Vercel ni archivos que existan solo en otros servicios.
+
+## Descarga desde el panel
+
+- Solo el rol `SUPER_ADMIN` ve **Administración → Copias de seguridad**.
+- El botón crea una instantánea consistente, la comprime y la cifra con AES-256-GCM antes de descargarla como `.ecvbackup`. Cada ejecución queda en auditoría con fecha, responsable, conteos y SHA-256.
+- Se excluyen `sesiones` y `rate_limits`: son datos transitorios y restaurarlos podría reactivar accesos antiguos o bloqueos temporales.
+- El archivo no queda almacenado ni disponible para volver a descargar desde Vercel. Debe moverse inmediatamente a almacenamiento externo privado.
+- La clave `BACKUP_ENCRYPTION_KEY` vive únicamente en el gestor de secretos. No está incluida en el archivo; debe conservarse una copia privada separada.
+- Vercel limita la respuesta de una función a 4,5 MB. El sistema detiene la descarga antes de ese límite y pide usar `pg_dump` cuando la base crece. Esta copia de panel es complementaria, no reemplaza el respaldo completo.
+- La restauración no se ofrece en el panel. Se realiza únicamente por un técnico sobre una base aislada, con validación posterior, para evitar sobrescribir producción por error.
 
 ## Uso manual
 

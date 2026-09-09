@@ -7,6 +7,7 @@ export const PERMISSIONS = {
   USER_MANAGE: "user:manage",
   USER_MANAGE_SUPER: "user:manage-super",
   AUDIT_VIEW: "audit:view",
+  BACKUP_MANAGE: "backup:manage",
   REPORTS_AGENCY: "reports:agency",
   REPORTS_GLOBAL: "reports:global",
   CASH_TODAY_VIEW: "cash:today-view",

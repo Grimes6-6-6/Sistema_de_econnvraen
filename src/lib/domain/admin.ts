@@ -38,6 +38,17 @@ export interface AuditEntry {
   metadata: Record<string, unknown>;
 }
 
+export interface BackupEntry {
+  id: string;
+  filename: string;
+  createdBy: string;
+  createdAt: string;
+  bytes: number;
+  tableCount: number;
+  rowCount: number;
+  sha256: string;
+}
+
 export interface TicketCancellationRequest {
   id: string;
   ticketId: string;

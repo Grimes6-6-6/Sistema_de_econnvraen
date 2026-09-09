@@ -5,7 +5,9 @@ describe("matriz empresarial de permisos", () => {
   it("reserva la gestión global al superadministrador", () => {
     expect(roleHasPermission("SUPER_ADMIN", PERMISSIONS.AGENCY_MANAGE)).toBe(true);
     expect(roleHasPermission("SUPER_ADMIN", PERMISSIONS.REPORTS_GLOBAL)).toBe(true);
+    expect(roleHasPermission("SUPER_ADMIN", PERMISSIONS.BACKUP_MANAGE)).toBe(true);
     expect(roleHasPermission("ADMINISTRADOR", PERMISSIONS.AGENCY_MANAGE)).toBe(false);
+    expect(roleHasPermission("ADMINISTRADOR", PERMISSIONS.BACKUP_MANAGE)).toBe(false);
   });
 
   it("limita al operador a tareas transaccionales", () => {

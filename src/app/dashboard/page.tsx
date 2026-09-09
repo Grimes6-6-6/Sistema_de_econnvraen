@@ -10,7 +10,7 @@ import { useDatabase, Viaje, Boleto, Encomienda } from "@/context/DatabaseContex
 import { useLocation } from "@/context/LocationContext";
 import AgencySwitcher from "@/components/AgencySwitcher";
 import AdminWorkspace from "@/components/AdminWorkspace";
-import YapePayment from "@/components/YapePayment";
+import WalletQrPayment from "@/components/WalletQrPayment";
 import NotificationInbox from "@/components/NotificationInbox";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
@@ -1874,7 +1874,13 @@ export default function DashboardPage() {
                       )}
                     </div>
 
-                    {ticketPaymentMethod === "YAPE" && <YapePayment key={`${selectedSeat}:${passengerPrecio}`} amount={passengerPrecio} />}
+                    {(ticketPaymentMethod === "YAPE" || ticketPaymentMethod === "PLIN") && (
+                      <WalletQrPayment
+                        key={`${ticketPaymentMethod}:${selectedSeat}:${passengerPrecio}`}
+                        method={ticketPaymentMethod}
+                        amount={passengerPrecio}
+                      />
+                    )}
 
                     <div className="flex gap-3 pt-4 border-t border-white/10">
                       <button
@@ -2594,7 +2600,15 @@ export default function DashboardPage() {
                           </div>
                         )}
                         <div className="sm:col-span-3">
-                          {parcelPaymentMethod === "YAPE" && <div className="mb-4"><YapePayment key={parcelCosto} amount={parcelCosto} /></div>}
+                          {(parcelPaymentMethod === "YAPE" || parcelPaymentMethod === "PLIN") && (
+                            <div className="mb-4">
+                              <WalletQrPayment
+                                key={`${parcelPaymentMethod}:${parcelCosto}`}
+                                method={parcelPaymentMethod}
+                                amount={parcelCosto}
+                              />
+                            </div>
+                          )}
                           <label htmlFor="parcel-description" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
                             Descripción del Contenido
                           </label>

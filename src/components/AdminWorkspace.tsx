@@ -5,6 +5,7 @@ import {
   Building2,
   CheckCircle2,
   ClipboardCopy,
+  Database,
   Download,
   Eye,
   FileClock,
@@ -19,6 +20,7 @@ import {
 import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import type {
   AuditEntry,
+  BackupEntry,
   ManagedRoute,
   ManagedUser,
   ManagedVehicle,
@@ -86,6 +88,8 @@ export default function AdminWorkspace() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [destinations, setDestinations] = useState<RouteDestination[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
+  const [backupConfigured, setBackupConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newUserRole, setNewUserRole] = useState<ManagedUser["role"]>("OPERADOR");
@@ -139,6 +143,14 @@ export default function AdminWorkspace() {
       if (can(PERMISSIONS.AUDIT_VIEW)) {
         tasks.push(
           api<{ entries: AuditEntry[] }>("/api/admin/audit").then((value) => setAudit(value.entries)),
+        );
+      }
+      if (can(PERMISSIONS.BACKUP_MANAGE)) {
+        tasks.push(
+          api<{ configured: boolean; backups: BackupEntry[] }>("/api/admin/backups").then((value) => {
+            setBackupConfigured(value.configured);
+            setBackups(value.backups);
+          }),
         );
       }
       await Promise.all(tasks);
@@ -556,6 +568,64 @@ export default function AdminWorkspace() {
     } finally { setBusy(false); }
   };
 
+  const downloadBackup = async () => {
+    const confirmation = await requestConfirmation({
+      title: "Crear copia cifrada",
+      message:
+        "Se descargará información sensible de la empresa en este dispositivo. Guárdala en un lugar privado y separado de la clave de recuperación.",
+      confirmLabel: "Crear y descargar",
+      cancelLabel: "Cancelar",
+      tone: "primary",
+    });
+    if (!confirmation.confirmed) return;
+
+    setBusy(true);
+    try {
+      const response = await fetch("/api/admin/backups", {
+        method: "POST",
+        cache: "no-store",
+        headers: { Accept: "application/octet-stream" },
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ApiError | null;
+        throw new Error(
+          payload?.error?.message || "No se pudo crear la copia de seguridad.",
+        );
+      }
+
+      const disposition = response.headers.get("content-disposition") || "";
+      const suggestedName = /filename="([^"]+)"/.exec(disposition)?.[1] || "econnvrae.ecvbackup";
+      const filename = suggestedName.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+
+      const overview = await api<{ configured: boolean; backups: BackupEntry[] }>(
+        "/api/admin/backups",
+      );
+      setBackupConfigured(overview.configured);
+      setBackups(overview.backups);
+      notify({
+        type: "success",
+        title: "Copia cifrada descargada",
+        message: "Muévela a un almacenamiento externo privado; el sistema no conserva el archivo descargable.",
+      });
+    } catch (reason) {
+      notify({
+        type: "error",
+        title: "No se pudo crear la copia",
+        message: reason instanceof Error ? reason.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="border-b border-white/10 pb-4">
@@ -835,6 +905,83 @@ export default function AdminWorkspace() {
 
       {can(PERMISSIONS.AGENCY_MANAGE) && (
         <section className={panelClass}><div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-emerald-400" /><h3 className="font-black text-white">Agencias</h3></div><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{agencies.map((agency) => <article key={agency.id} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"><b className="text-sm text-white">{agency.code} · {agency.city}</b><p className="text-xs text-slate-400">{agency.name}</p><p className="mt-1 text-[10px] text-slate-500">{agency.address}</p><div className="mt-3 flex gap-2"><button type="button" onClick={() => setEditingAgency(agency)} className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-black uppercase text-slate-300">Editar</button><button disabled={busy} onClick={() => void toggleAgency(agency)} className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${agency.isActive ? "border-rose-500/30 text-rose-300" : "border-emerald-500/30 text-emerald-300"}`}>{agency.isActive ? "Desactivar" : "Activar"}</button></div></article>)}</div>{editingAgency && <form action={(data) => void saveAgency(data)} className="mt-4 grid gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 sm:grid-cols-2 lg:grid-cols-3"><p className="sm:col-span-2 lg:col-span-3 text-xs font-black uppercase text-emerald-300">Editar {editingAgency.name}</p><label className="text-xs font-bold">Código<input name="code" defaultValue={editingAgency.code} required className={inputClass} /></label><label className="text-xs font-bold">Nombre<input name="name" defaultValue={editingAgency.name} required className={inputClass} /></label><label className="text-xs font-bold">Ciudad<input name="city" defaultValue={editingAgency.city} required className={inputClass} /></label><label className="text-xs font-bold sm:col-span-2">Dirección<input name="address" defaultValue={editingAgency.address} required className={inputClass} /></label><label className="text-xs font-bold">Teléfono<input name="phone" defaultValue={editingAgency.phone} className={inputClass} /></label><label className="text-xs font-bold">Correo<input name="email" type="email" defaultValue={editingAgency.email} className={inputClass} /></label><div className="flex items-end gap-2"><button disabled={busy} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white">Guardar</button><button type="button" onClick={() => setEditingAgency(null)} className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold">Cancelar</button></div></form>}</section>
+      )}
+
+      {can(PERMISSIONS.BACKUP_MANAGE) && (
+        <section className={panelClass}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-emerald-400" />
+                <h3 className="font-black text-white">Copias de seguridad</h3>
+              </div>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
+                Genera una copia cifrada de los datos operativos. Las sesiones y
+                los límites temporales se excluyen para no reactivar accesos al
+                restaurar.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={busy || !backupConfigured}
+              onClick={() => void downloadBackup()}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              {busy ? "Procesando…" : "Crear y descargar"}
+            </button>
+          </div>
+
+          {!backupConfigured && (
+            <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+              Falta configurar la clave de cifrado privada del servidor.
+            </p>
+          )}
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-xs leading-5 text-slate-400">
+            El archivo se guarda en las descargas de este dispositivo y contiene
+            datos confidenciales. La restauración no está disponible desde el
+            panel: debe hacerla un técnico en una base aislada y después validar
+            el sistema antes de tocar producción.
+          </div>
+
+          <div className="mt-4 overflow-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/10 text-left text-[10px] uppercase text-slate-500">
+                  <th className="p-2">Fecha</th>
+                  <th className="p-2">Responsable</th>
+                  <th className="p-2">Contenido</th>
+                  <th className="p-2">Tamaño</th>
+                  <th className="p-2">Verificación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-5 text-center text-slate-500">
+                      Aún no se han generado copias desde el panel.
+                    </td>
+                  </tr>
+                ) : (
+                  backups.map((backup) => (
+                    <tr key={backup.id} className="border-b border-white/5 text-slate-300">
+                      <td className="whitespace-nowrap p-2">{formatDate(backup.createdAt)}</td>
+                      <td className="p-2">{backup.createdBy}</td>
+                      <td className="p-2">
+                        {backup.tableCount} tablas · {backup.rowCount} registros
+                      </td>
+                      <td className="p-2">{formatFileSize(backup.bytes)}</td>
+                      <td className="p-2 font-mono text-[10px] text-emerald-300" title={backup.sha256}>
+                        SHA-256 {backup.sha256 ? backup.sha256.slice(0, 12) : "—"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {can(PERMISSIONS.AUDIT_VIEW) && (
