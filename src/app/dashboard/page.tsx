@@ -2229,35 +2229,42 @@ export default function DashboardPage() {
 
             {/* MODAL: REGISTRO DE ENCOMIENDA */}
             {isParcelModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+              <div className="dialog-backdrop fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-2 sm:p-4">
                 <div
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="parcel-dialog-title"
+                  aria-describedby="parcel-dialog-description"
                   onKeyDown={(event) => {
                     if (event.key === "Escape") setIsParcelModalOpen(false);
                     trapDialogFocus(event);
                   }}
-                  className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900 p-6 sm:p-8 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto"
+                  className="corporate-dialog flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl animate-fade-in flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
                 >
-                  <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                    <h3 id="parcel-dialog-title" className="text-lg font-black text-white">
-                      Registrar Nueva Encomienda
-                    </h3>
+                  <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-6 sm:py-4">
+                    <div>
+                      <h3 id="parcel-dialog-title" className="text-lg font-black text-white">
+                        Registrar nueva encomienda
+                      </h3>
+                      <p id="parcel-dialog-description" className="mt-1 text-xs text-slate-400">
+                        Completa los datos del envío para generar la guía y el recibo.
+                      </p>
+                    </div>
                     <button
                       type="button"
                       autoFocus
                       aria-label="Cerrar registro de encomienda"
                       onClick={() => setIsParcelModalOpen(false)}
-                      className="text-slate-400 hover:text-white cursor-pointer"
+                      className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
                     >
                       <X className="h-5 w-5" />
                     </button>
                   </div>
 
-                  <form onSubmit={handleParcelSubmit} className="space-y-4">
-                    {/* Remitente */}
-                    <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
+                  <form onSubmit={handleParcelSubmit} className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+                      {/* Remitente */}
+                      <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
                       <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
                         1. Datos del Remitente
                       </span>
@@ -2319,10 +2326,10 @@ export default function DashboardPage() {
                           />
                         </div>
                       </div>
-                    </div>
+                      </div>
 
-                    {/* Destinatario */}
-                    <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
+                      {/* Destinatario */}
+                      <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
                       <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
                         2. Datos del Destinatario
                       </span>
@@ -2386,10 +2393,10 @@ export default function DashboardPage() {
                           />
                         </div>
                       </div>
-                    </div>
+                      </div>
 
-                    {/* Viaje y Flete */}
-                    <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
+                      {/* Viaje y Flete */}
+                      <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-3">
                       <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
                         3. Detalle del Paquete y Asignación
                       </span>
@@ -2537,20 +2544,21 @@ export default function DashboardPage() {
                           />
                         </div>
                       </div>
+                      </div>
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-3">
+                    <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-white/10 bg-white/95 px-4 py-3 sm:flex-row sm:justify-end sm:gap-3 sm:px-6">
                       <button
                         type="button"
                         onClick={() => setIsParcelModalOpen(false)}
-                        className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-300"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 sm:w-auto"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
                         disabled={pendingAction === "parcel"}
-                        className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase px-5 py-2.5"
+                        className="w-full rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase text-white hover:bg-emerald-500 sm:w-auto"
                       >
                         {pendingAction === "parcel"
                           ? "Registrando…"
