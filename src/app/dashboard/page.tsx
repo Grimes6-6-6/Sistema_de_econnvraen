@@ -16,6 +16,7 @@ import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import { buildParcelTrackingUrl, maskDni } from "@/lib/domain/parcel-receipt";
+import { calculateParcelPrice } from "@/lib/domain/parcel-pricing";
 import {
   formatPaymentMethod,
   PAYMENT_METHODS,
@@ -398,11 +399,33 @@ export default function DashboardPage() {
   const [parcelPeso, setParcelPeso] = useState("");
   const [parcelDimensiones, setParcelDimensiones] = useState("");
   const [parcelValor, setParcelValor] = useState("0");
-  const [parcelCosto, setParcelCosto] = useState("20");
   const [parcelPaymentMethod, setParcelPaymentMethod] =
     useState<PaymentMethod>("EFECTIVO");
   const [parcelPaymentReference, setParcelPaymentReference] = useState("");
   const [parcelDesc, setParcelDesc] = useState("");
+
+  const parcelPriceQuote = useMemo(() => {
+    const trip = db.viajes.find((item) => item.id === parcelTripId);
+    const route = trip
+      ? db.rutas.find((item) => item.id === trip.id_ruta)
+      : null;
+    if (!route) return null;
+
+    return calculateParcelPrice({
+      distanceKm: Number.parseFloat(route.distancia.replace(",", ".")),
+      actualWeightKg: Number(parcelPeso),
+      dimensions: parcelDimensiones,
+      declaredValue: Number(parcelValor),
+    });
+  }, [
+    db.rutas,
+    db.viajes,
+    parcelDimensiones,
+    parcelPeso,
+    parcelTripId,
+    parcelValor,
+  ]);
+  const parcelCosto = parcelPriceQuote?.total.toFixed(2) ?? "";
 
   const filteredParcels = useMemo(
     () =>
@@ -499,6 +522,15 @@ export default function DashboardPage() {
       });
       return;
     }
+    if (!parcelPriceQuote) {
+      notify({
+        type: "warning",
+        title: "No se pudo calcular la tarifa",
+        message:
+          "Selecciona el viaje e ingresa un peso y tres dimensiones válidas, por ejemplo 30 x 20 x 15.",
+      });
+      return;
+    }
 
     setPendingAction("parcel");
     try {
@@ -513,7 +545,7 @@ export default function DashboardPage() {
         peso: parseFloat(parcelPeso) || 1,
         dimensiones: parcelDimensiones,
         valor: parseFloat(parcelValor) || 0,
-        costo: parseFloat(parcelCosto) || 20,
+        costo: parcelPriceQuote.total,
         metodoPago: parcelPaymentMethod,
         referenciaPago: parcelPaymentReference.trim(),
         descripcion: parcelDesc,
@@ -538,7 +570,6 @@ export default function DashboardPage() {
         setParcelPeso("");
         setParcelDimensiones("");
         setParcelValor("0");
-        setParcelCosto("20");
         setParcelPaymentMethod("EFECTIVO");
         setParcelPaymentReference("");
         setParcelDesc("");
@@ -2461,16 +2492,17 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <label htmlFor="parcel-cost" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Costo de Flete (S/)
+                            Tarifa calculada (S/)
                           </label>
                           <input
                             id="parcel-cost"
                             type="number"
-                            step="1"
-                            required
+                            step="0.50"
+                            readOnly
                             value={parcelCosto}
-                            onChange={(e) => setParcelCosto(e.target.value)}
-                            className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono font-bold"
+                            placeholder="Se calcula automáticamente"
+                            aria-describedby="parcel-price-breakdown"
+                            className="w-full cursor-not-allowed rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-mono font-bold text-slate-900"
                           />
                         </div>
                         <div>
@@ -2511,6 +2543,37 @@ export default function DashboardPage() {
                               </option>
                             ))}
                           </select>
+                        </div>
+                        <div
+                          id="parcel-price-breakdown"
+                          className="sm:col-span-3 rounded-xl border border-amber-200 bg-amber-50 p-3"
+                        >
+                          {parcelPriceQuote ? (
+                            <>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <strong className="text-xs text-slate-800">
+                                  Tarifa automática según el paquete y la ruta
+                                </strong>
+                                <strong className="text-sm text-amber-800">
+                                  Total: S/ {parcelPriceQuote.total.toFixed(2)}
+                                </strong>
+                              </div>
+                              <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                                Manejo S/ {parcelPriceQuote.handlingFee.toFixed(2)} · Ruta S/{" "}
+                                {parcelPriceQuote.distanceFee.toFixed(2)} · Peso cobrable{" "}
+                                {parcelPriceQuote.chargeableWeightKg.toFixed(2)} kg (S/{" "}
+                                {parcelPriceQuote.weightFee.toFixed(2)}) · Protección S/{" "}
+                                {parcelPriceQuote.protectionFee.toFixed(2)}
+                              </p>
+                              <p className="mt-1 text-[10px] text-slate-500">
+                                Se cobra el mayor entre el peso real ({parcelPriceQuote.actualWeightKg.toFixed(2)} kg) y el volumétrico ({parcelPriceQuote.volumetricWeightKg.toFixed(2)} kg).
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-[11px] text-slate-600">
+                              Selecciona el viaje e ingresa peso, dimensiones y valor declarado para calcular el precio.
+                            </p>
+                          )}
                         </div>
                         {paymentMethodRequiresReference(parcelPaymentMethod) && (
                           <div className="sm:col-span-3">

@@ -25,6 +25,7 @@ import {
 import { formatEntityId, parseEntityId } from "@/lib/domain/ids";
 import { canAdvanceParcelStatus } from "@/lib/domain/rules";
 import type { PaymentMethod } from "@/lib/domain/payments";
+import { calculateParcelPrice } from "@/lib/domain/parcel-pricing";
 import { createTrackingCode } from "@/lib/domain/tracking";
 import type {
   CancellationInput,
@@ -861,10 +862,13 @@ export async function createParcel(
       estado: string;
       id_agencia: number;
       agency_name: string;
+      distance_km: string;
     }>(
-      `SELECT trip.estado, trip.id_agencia, agency.nombre AS agency_name
+      `SELECT trip.estado, trip.id_agencia, agency.nombre AS agency_name,
+              route.distancia_km::text AS distance_km
        FROM viajes trip
        JOIN agencias agency ON agency.id_agencia = trip.id_agencia
+       JOIN rutas route ON route.id_ruta = trip.id_ruta
        WHERE trip.id_viaje = $1
          AND ($2::integer IS NULL OR trip.id_agencia = $2)
        FOR SHARE`,
@@ -872,6 +876,25 @@ export async function createParcel(
     );
     if (!trip.rows[0] || trip.rows[0].estado !== "PROGRAMADO") {
       throw conflict("TRIP_NOT_AVAILABLE", "El viaje no está disponible.");
+    }
+
+    const priceQuote = calculateParcelPrice({
+      distanceKm: Number(trip.rows[0].distance_km),
+      actualWeightKg: input.peso,
+      dimensions: input.dimensiones,
+      declaredValue: input.valor,
+    });
+    if (!priceQuote) {
+      throw conflict(
+        "PARCEL_PRICE_UNAVAILABLE",
+        "No se pudo calcular la tarifa con los datos proporcionados.",
+      );
+    }
+    if (Math.abs(input.costo - priceQuote.total) > 0.009) {
+      throw conflict(
+        "PARCEL_PRICE_CHANGED",
+        `La tarifa vigente es S/ ${priceQuote.total.toFixed(2)}. Revisa el cálculo antes de cobrar.`,
+      );
     }
 
     const sender = splitName(input.remitenteNombre);
@@ -916,7 +939,7 @@ export async function createParcel(
         input.peso,
         input.dimensiones,
         input.valor,
-        input.costo,
+        priceQuote.total,
         input.metodoPago,
         input.referenciaPago || "",
         input.descripcion,
@@ -949,6 +972,7 @@ export async function createParcel(
         tripId: input.id_viaje,
         trackingCode,
         paymentMethod: input.metodoPago,
+        priceQuote,
       },
     }, client);
     return created;

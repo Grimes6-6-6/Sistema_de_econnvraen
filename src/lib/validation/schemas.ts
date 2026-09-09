@@ -3,6 +3,7 @@ import {
   PAYMENT_METHODS,
   paymentMethodRequiresReference,
 } from "@/lib/domain/payments";
+import { parseParcelDimensions } from "@/lib/domain/parcel-pricing";
 import { hasValidTrackingChecksum } from "@/lib/domain/tracking";
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
@@ -391,7 +392,10 @@ export const parcelInputSchema = z
     destinatarioNombre: personName,
     destinatarioTelefono: phoneSchema,
     peso: z.number().finite().positive().max(1000),
-    dimensiones: safeText(3, 60),
+    dimensiones: safeText(3, 60).refine(
+      (value) => parseParcelDimensions(value) !== null,
+      "Usa tres medidas en centímetros, por ejemplo: 30 x 20 x 15.",
+    ),
     valor: z.number().finite().min(0).max(10_000_000),
     costo: z.number().finite().min(0).max(100_000),
     metodoPago: z.enum(PAYMENT_METHODS),
