@@ -18,6 +18,10 @@ import { PERMISSIONS, roleHasPermission } from "@/lib/auth/permissions";
 import { buildParcelTrackingUrl, maskDni } from "@/lib/domain/parcel-receipt";
 import { calculateParcelPrice } from "@/lib/domain/parcel-pricing";
 import {
+  formatConflictEnd,
+  getTripResourceConflicts,
+} from "@/lib/domain/trip-availability";
+import {
   formatPaymentMethod,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
@@ -57,6 +61,15 @@ interface DniLookupResult {
   apellidos: string;
   source: "real" | "mock";
 }
+
+const CUSTOM_PARCEL_DIMENSIONS = "CUSTOM";
+const DEFAULT_PARCEL_DIMENSIONS = "30 x 20 x 15";
+const PARCEL_DIMENSION_PRESETS = [
+  { value: "30 x 22 x 2", label: "Sobre o documentos · 30 × 22 × 2 cm" },
+  { value: DEFAULT_PARCEL_DIMENSIONS, label: "Paquete pequeño · 30 × 20 × 15 cm" },
+  { value: "45 x 35 x 30", label: "Caja mediana · 45 × 35 × 30 cm" },
+  { value: "60 x 45 x 40", label: "Caja grande · 60 × 45 × 40 cm" },
+] as const;
 
 function formatDateInput(date: Date): string {
   const year = date.getFullYear();
@@ -397,7 +410,12 @@ export default function DashboardPage() {
   const [parcelDestTelf, setParcelDestTelf] = useState("");
   const [parcelTripId, setParcelTripId] = useState("");
   const [parcelPeso, setParcelPeso] = useState("");
-  const [parcelDimensiones, setParcelDimensiones] = useState("");
+  const [parcelDimensionPreset, setParcelDimensionPreset] = useState(
+    DEFAULT_PARCEL_DIMENSIONS,
+  );
+  const [parcelDimensiones, setParcelDimensiones] = useState(
+    DEFAULT_PARCEL_DIMENSIONS,
+  );
   const [parcelValor, setParcelValor] = useState("0");
   const [parcelPaymentMethod, setParcelPaymentMethod] =
     useState<PaymentMethod>("EFECTIVO");
@@ -568,7 +586,8 @@ export default function DashboardPage() {
         setParcelDestTelf("");
         setParcelTripId("");
         setParcelPeso("");
-        setParcelDimensiones("");
+        setParcelDimensionPreset(DEFAULT_PARCEL_DIMENSIONS);
+        setParcelDimensiones(DEFAULT_PARCEL_DIMENSIONS);
         setParcelValor("0");
         setParcelPaymentMethod("EFECTIVO");
         setParcelPaymentReference("");
@@ -596,6 +615,20 @@ export default function DashboardPage() {
   const [tripHora, setTripHora] = useState("06:00");
   const [tripPrecio, setTripPrecio] = useState("50");
 
+  const tripResourceConflicts = useMemo(
+    () =>
+      getTripResourceConflicts({
+        routes: db.rutas,
+        trips: db.viajes,
+        candidate: {
+          routeId: tripRutaId,
+          date: tripFecha,
+          time: tripHora,
+        },
+      }),
+    [db.rutas, db.viajes, tripFecha, tripHora, tripRutaId],
+  );
+
   const handleTripSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tripRutaId || !tripVehiculoId || !tripConductorId) {
@@ -603,6 +636,27 @@ export default function DashboardPage() {
         type: "warning",
         title: "Completa la programación",
         message: "Selecciona ruta, vehículo y conductor.",
+      });
+      return;
+    }
+
+    const vehicleConflict = tripResourceConflicts.vehicles.get(tripVehiculoId);
+    const driverConflict = tripResourceConflicts.drivers.get(tripConductorId);
+    if (vehicleConflict || driverConflict) {
+      const details = [
+        vehicleConflict
+          ? `El vehículo está ocupado hasta ${formatConflictEnd(vehicleConflict, tripFecha)}.`
+          : "",
+        driverConflict
+          ? `El conductor está ocupado hasta ${formatConflictEnd(driverConflict, tripFecha)}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      notify({
+        type: "warning",
+        title: "Horario no disponible",
+        message: details,
       });
       return;
     }
@@ -2481,20 +2535,49 @@ export default function DashboardPage() {
                           />
                         </div>
                         <div>
-                          <label htmlFor="parcel-dimensions" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
-                            Dimensiones (cm)
+                          <label htmlFor="parcel-dimension-preset" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                            Tamaño del paquete
                           </label>
-                          <input
-                            id="parcel-dimensions"
-                            type="text"
+                          <select
+                            id="parcel-dimension-preset"
                             required
-                            minLength={3}
-                            maxLength={60}
-                            value={parcelDimensiones}
-                            onChange={(e) => setParcelDimensiones(e.target.value)}
-                            placeholder="30 x 20 x 15"
-                            className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono"
-                          />
+                            value={parcelDimensionPreset}
+                            onChange={(event) => {
+                              const preset = event.target.value;
+                              setParcelDimensionPreset(preset);
+                              setParcelDimensiones(
+                                preset === CUSTOM_PARCEL_DIMENSIONS ? "" : preset,
+                              );
+                            }}
+                            className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white"
+                          >
+                            {PARCEL_DIMENSION_PRESETS.map((preset) => (
+                              <option key={preset.value} value={preset.value}>
+                                {preset.label}
+                              </option>
+                            ))}
+                            <option value={CUSTOM_PARCEL_DIMENSIONS}>
+                              Otra medida · Ingresar dimensiones
+                            </option>
+                          </select>
+                          {parcelDimensionPreset === CUSTOM_PARCEL_DIMENSIONS && (
+                            <div className="mt-2">
+                              <label htmlFor="parcel-dimensions" className="text-[10px] font-bold uppercase text-slate-400">
+                                Dimensiones personalizadas (cm)
+                              </label>
+                              <input
+                                id="parcel-dimensions"
+                                type="text"
+                                required
+                                minLength={3}
+                                maxLength={60}
+                                value={parcelDimensiones}
+                                onChange={(event) => setParcelDimensiones(event.target.value)}
+                                placeholder="Largo x ancho x alto"
+                                className="mt-1 w-full rounded-xl border border-amber-300 bg-slate-900 px-3 py-2 text-xs font-mono text-white"
+                              />
+                            </div>
+                          )}
                         </div>
                         <div>
                           <label htmlFor="parcel-cost" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
@@ -2959,11 +3042,17 @@ export default function DashboardPage() {
                           className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2.5 text-xs text-white"
                         >
                           <option value="">Seleccione vehículo...</option>
-                          {db.vehiculos.map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {v.placa} ({v.marca} {v.modelo})
-                            </option>
-                          ))}
+                          {db.vehiculos.map((v) => {
+                            const conflict = tripResourceConflicts.vehicles.get(v.id);
+                            return (
+                              <option key={v.id} value={v.id} disabled={Boolean(conflict)}>
+                                {v.placa} ({v.marca} {v.modelo})
+                                {conflict
+                                  ? ` — Ocupado hasta ${formatConflictEnd(conflict, tripFecha)}`
+                                  : " — Disponible"}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
 
@@ -2979,14 +3068,24 @@ export default function DashboardPage() {
                           className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2.5 text-xs text-white"
                         >
                           <option value="">Seleccione conductor...</option>
-                          {db.conductores.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.nombres} ({c.nroLicencia})
-                            </option>
-                          ))}
+                          {db.conductores.map((c) => {
+                            const conflict = tripResourceConflicts.drivers.get(c.id);
+                            return (
+                              <option key={c.id} value={c.id} disabled={Boolean(conflict)}>
+                                {c.nombres} ({c.nroLicencia})
+                                {conflict
+                                  ? ` — Ocupado hasta ${formatConflictEnd(conflict, tripFecha)}`
+                                  : " — Disponible"}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
                     </div>
+
+                    <p className="rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-[11px] leading-relaxed text-sky-200">
+                      La disponibilidad se calcula con la fecha, hora y duración de la ruta. Los recursos ocupados no pueden seleccionarse.
+                    </p>
 
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
