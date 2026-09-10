@@ -3029,6 +3029,49 @@ export default function DashboardPage() {
                       </select>
                     </div>
 
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label htmlFor="trip-date" className="text-xs font-bold text-slate-300 uppercase block">
+                          Fecha
+                        </label>
+                        <input
+                          id="trip-date"
+                          type="date"
+                          required
+                          value={tripFecha}
+                          onChange={(e) => setTripFecha(e.target.value)}
+                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor="trip-time" className="text-xs font-bold text-slate-300 uppercase block">
+                          Hora
+                        </label>
+                        <input
+                          id="trip-time"
+                          type="time"
+                          required
+                          value={tripHora}
+                          onChange={(e) => setTripHora(e.target.value)}
+                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor="trip-price" className="text-xs font-bold text-slate-300 uppercase block">
+                          Precio (S/)
+                        </label>
+                        <input
+                          id="trip-price"
+                          type="number"
+                          step="1"
+                          required
+                          value={tripPrecio}
+                          onChange={(e) => setTripPrecio(e.target.value)}
+                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label htmlFor="trip-vehicle" className="text-xs font-bold text-slate-300 uppercase block">
@@ -3084,51 +3127,8 @@ export default function DashboardPage() {
                     </div>
 
                     <p className="rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-[11px] leading-relaxed text-sky-200">
-                      La disponibilidad se calcula con la fecha, hora y duración de la ruta. Los recursos ocupados no pueden seleccionarse.
+                      Primero define el horario. El sistema deshabilita los conductores y vehículos ocupados y muestra hasta qué hora estarán en servicio.
                     </p>
-
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label htmlFor="trip-date" className="text-xs font-bold text-slate-300 uppercase block">
-                          Fecha
-                        </label>
-                        <input
-                          id="trip-date"
-                          type="date"
-                          required
-                          value={tripFecha}
-                          onChange={(e) => setTripFecha(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label htmlFor="trip-time" className="text-xs font-bold text-slate-300 uppercase block">
-                          Hora
-                        </label>
-                        <input
-                          id="trip-time"
-                          type="time"
-                          required
-                          value={tripHora}
-                          onChange={(e) => setTripHora(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white font-mono"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label htmlFor="trip-price" className="text-xs font-bold text-slate-300 uppercase block">
-                          Precio (S/)
-                        </label>
-                        <input
-                          id="trip-price"
-                          type="number"
-                          step="1"
-                          required
-                          value={tripPrecio}
-                          onChange={(e) => setTripPrecio(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white font-mono font-bold"
-                        />
-                      </div>
-                    </div>
 
                     <div className="flex justify-end gap-3 pt-3">
                       <button
