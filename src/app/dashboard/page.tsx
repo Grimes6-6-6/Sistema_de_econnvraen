@@ -629,6 +629,18 @@ export default function DashboardPage() {
     [db.rutas, db.viajes, tripFecha, tripHora, tripRutaId],
   );
 
+  const selectedTripRoute = useMemo(
+    () => db.rutas.find((route) => route.id === tripRutaId),
+    [db.rutas, tripRutaId],
+  );
+
+  const availableTripVehicles = db.vehiculos.filter(
+    (vehicle) => !tripResourceConflicts.vehicles.has(vehicle.id),
+  ).length;
+  const availableTripDrivers = db.conductores.filter(
+    (driver) => !tripResourceConflicts.drivers.has(driver.id),
+  ).length;
+
   const handleTripSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tripRutaId || !tripVehiculoId || !tripConductorId) {
@@ -2982,7 +2994,7 @@ export default function DashboardPage() {
 
             {/* MODAL: PROGRAMAR VIAJE */}
             {isTripModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+              <div className="dialog-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 sm:p-4">
                 <div
                   role="dialog"
                   aria-modal="true"
@@ -2991,161 +3003,217 @@ export default function DashboardPage() {
                     if (event.key === "Escape") setIsTripModalOpen(false);
                     trapDialogFocus(event);
                   }}
-                  className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900 p-6 sm:p-8 shadow-2xl space-y-4 animate-fade-in"
+                  className="corporate-dialog my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl animate-fade-in flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
                 >
-                  <div className="flex justify-between items-center pb-3 border-b border-white/10">
-                    <h3 id="trip-dialog-title" className="text-lg font-black text-white">
-                      Programar Salida de Viaje
-                    </h3>
+                  <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                        <CalendarDays className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 id="trip-dialog-title" className="text-lg font-black text-slate-900">
+                          Programar nuevo viaje
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Define primero la salida y luego asigna los recursos disponibles.
+                        </p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       autoFocus
                       aria-label="Cerrar programación de viaje"
                       onClick={() => setIsTripModalOpen(false)}
-                      className="text-slate-400 hover:text-white cursor-pointer"
+                      className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                     >
                       <X className="h-5 w-5" />
                     </button>
                   </div>
 
-                  <form onSubmit={handleTripSubmit} className="space-y-3">
-                    <div className="space-y-1">
-                      <label htmlFor="trip-route" className="text-xs font-bold text-slate-300 uppercase block">
-                        Ruta
-                      </label>
-                      <select
-                        id="trip-route"
-                        required
-                        value={tripRutaId}
-                        onChange={(e) => setTripRutaId(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2.5 text-xs text-white"
-                      >
-                        <option value="">Seleccione ruta...</option>
-                        {db.rutas.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.origen} → {r.destino}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <form onSubmit={handleTripSubmit} className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+                      <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                        <div className="mb-4 flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-[11px] font-black text-white">1</span>
+                          <h4 className="text-sm font-black text-slate-900">Ruta y horario</h4>
+                        </div>
 
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label htmlFor="trip-date" className="text-xs font-bold text-slate-300 uppercase block">
-                          Fecha
-                        </label>
-                        <input
-                          id="trip-date"
-                          type="date"
-                          required
-                          value={tripFecha}
-                          onChange={(e) => setTripFecha(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label htmlFor="trip-time" className="text-xs font-bold text-slate-300 uppercase block">
-                          Hora
-                        </label>
-                        <input
-                          id="trip-time"
-                          type="time"
-                          required
-                          value={tripHora}
-                          onChange={(e) => setTripHora(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white font-mono"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label htmlFor="trip-price" className="text-xs font-bold text-slate-300 uppercase block">
-                          Precio (S/)
-                        </label>
-                        <input
-                          id="trip-price"
-                          type="number"
-                          step="1"
-                          required
-                          value={tripPrecio}
-                          onChange={(e) => setTripPrecio(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2 text-xs text-white font-mono font-bold"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label htmlFor="trip-vehicle" className="text-xs font-bold text-slate-300 uppercase block">
-                          Vehículo
-                        </label>
-                        <select
-                          id="trip-vehicle"
-                          required
-                          value={tripVehiculoId}
-                          onChange={(e) => setTripVehiculoId(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2.5 text-xs text-white"
-                        >
-                          <option value="">Seleccione vehículo...</option>
-                          {db.vehiculos.map((v) => {
-                            const conflict = tripResourceConflicts.vehicles.get(v.id);
-                            return (
-                              <option key={v.id} value={v.id} disabled={Boolean(conflict)}>
-                                {v.placa} ({v.marca} {v.modelo})
-                                {conflict
-                                  ? ` — Ocupado hasta ${formatConflictEnd(conflict, tripFecha)}`
-                                  : " — Disponible"}
+                        <div className="space-y-1.5">
+                          <label htmlFor="trip-route" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                            Ruta
+                          </label>
+                          <select
+                            id="trip-route"
+                            required
+                            value={tripRutaId}
+                            onChange={(event) => {
+                              const routeId = event.target.value;
+                              const route = db.rutas.find((item) => item.id === routeId);
+                              setTripRutaId(routeId);
+                              setTripVehiculoId("");
+                              setTripConductorId("");
+                              if (route) setTripPrecio(String(route.precio));
+                            }}
+                            className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                          >
+                            <option value="">Seleccione una ruta...</option>
+                            {db.rutas.map((route) => (
+                              <option key={route.id} value={route.id}>
+                                {route.origen} → {route.destino} · S/ {route.precio.toFixed(2)}
                               </option>
-                            );
-                          })}
-                        </select>
-                      </div>
+                            ))}
+                          </select>
+                        </div>
 
-                      <div className="space-y-1">
-                        <label htmlFor="trip-driver" className="text-xs font-bold text-slate-300 uppercase block">
-                          Conductor
-                        </label>
-                        <select
-                          id="trip-driver"
-                          required
-                          value={tripConductorId}
-                          onChange={(e) => setTripConductorId(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2.5 text-xs text-white"
-                        >
-                          <option value="">Seleccione conductor...</option>
-                          {db.conductores.map((c) => {
-                            const conflict = tripResourceConflicts.drivers.get(c.id);
-                            return (
-                              <option key={c.id} value={c.id} disabled={Boolean(conflict)}>
-                                {c.nombres} ({c.nroLicencia})
-                                {conflict
-                                  ? ` — Ocupado hasta ${formatConflictEnd(conflict, tripFecha)}`
-                                  : " — Disponible"}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
+                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <div className="space-y-1.5">
+                            <label htmlFor="trip-date" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                              Fecha
+                            </label>
+                            <input
+                              id="trip-date"
+                              type="date"
+                              required
+                              value={tripFecha}
+                              onChange={(event) => {
+                                setTripFecha(event.target.value);
+                                setTripVehiculoId("");
+                                setTripConductorId("");
+                              }}
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label htmlFor="trip-time" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                              Hora de salida
+                            </label>
+                            <input
+                              id="trip-time"
+                              type="time"
+                              required
+                              value={tripHora}
+                              onChange={(event) => {
+                                setTripHora(event.target.value);
+                                setTripVehiculoId("");
+                                setTripConductorId("");
+                              }}
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label htmlFor="trip-price" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                              Tarifa (S/)
+                            </label>
+                            <input
+                              id="trip-price"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              required
+                              value={tripPrecio}
+                              onChange={(e) => setTripPrecio(e.target.value)}
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-900"
+                            />
+                          </div>
+                        </div>
+
+                        {selectedTripRoute && (
+                          <p className="mt-3 text-xs leading-relaxed text-slate-600">
+                            {selectedTripRoute.distancia} · Duración aproximada: {selectedTripRoute.duracion}. La tarifa base de la ruta se completó automáticamente.
+                          </p>
+                        )}
+                      </section>
+
+                      <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                        <div className="mb-4 flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-[11px] font-black text-white">2</span>
+                          <h4 className="text-sm font-black text-slate-900">Vehículo y conductor</h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <label htmlFor="trip-vehicle" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                              Vehículo disponible
+                            </label>
+                            <select
+                              id="trip-vehicle"
+                              required
+                              value={tripVehiculoId}
+                              onChange={(e) => setTripVehiculoId(e.target.value)}
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                            >
+                              <option value="">Seleccione vehículo...</option>
+                              {db.vehiculos.map((vehicle) => {
+                                const conflict = tripResourceConflicts.vehicles.get(vehicle.id);
+                                return (
+                                  <option key={vehicle.id} value={vehicle.id} disabled={Boolean(conflict)}>
+                                    {vehicle.placa} · {vehicle.marca} {vehicle.modelo}
+                                    {conflict
+                                      ? ` — Ocupado hasta ${formatConflictEnd(conflict, tripFecha)}`
+                                      : " — Disponible"}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label htmlFor="trip-driver" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                              Conductor disponible
+                            </label>
+                            <select
+                              id="trip-driver"
+                              required
+                              value={tripConductorId}
+                              onChange={(e) => setTripConductorId(e.target.value)}
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                            >
+                              <option value="">Seleccione conductor...</option>
+                              {db.conductores.map((driver) => {
+                                const conflict = tripResourceConflicts.drivers.get(driver.id);
+                                return (
+                                  <option key={driver.id} value={driver.id} disabled={Boolean(conflict)}>
+                                    {driver.nombres} · Lic. {driver.nroLicencia}
+                                    {conflict
+                                      ? ` — Ocupado hasta ${formatConflictEnd(conflict, tripFecha)}`
+                                      : " — Disponible"}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-blue-950">
+                          <div className="flex items-start gap-3">
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
+                            <div>
+                              <p className="text-xs font-black">Disponibilidad verificada con el horario</p>
+                              <p className="mt-1 text-xs leading-relaxed text-blue-800">
+                                Hay {availableTripVehicles} vehículo{availableTripVehicles === 1 ? "" : "s"} y {availableTripDrivers} conductor{availableTripDrivers === 1 ? "" : "es"} disponibles. Los recursos ocupados quedan deshabilitados automáticamente.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
                     </div>
 
-                    <p className="rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-[11px] leading-relaxed text-sky-200">
-                      Primero define el horario. El sistema deshabilita los conductores y vehículos ocupados y muestra hasta qué hora estarán en servicio.
-                    </p>
-
-                    <div className="flex justify-end gap-3 pt-3">
+                    <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
                       <button
                         type="button"
                         onClick={() => setIsTripModalOpen(false)}
-                        className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-300"
+                        className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
                         disabled={pendingAction === "trip"}
-                        className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase px-5 py-2.5"
+                        className="min-h-11 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-black text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {pendingAction === "trip"
                           ? "Guardando…"
-                          : "Guardar Itinerario"}
+                          : "Guardar itinerario"}
                       </button>
                     </div>
                   </form>
