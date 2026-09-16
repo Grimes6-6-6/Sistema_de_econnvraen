@@ -632,8 +632,10 @@ export async function createTicket(
        capacidad: number;
        precio_final: string;
        id_agencia: number;
+       departure_future: boolean;
      }>(
        `SELECT v.id_viaje, v.estado, veh.capacidad, v.id_agencia,
+               v.fecha_hora_salida > clock_timestamp() AS departure_future,
                v.precio_final::text
         FROM viajes v
         JOIN vehiculos veh ON veh.id_vehiculo = v.id_vehiculo
@@ -643,8 +645,11 @@ export async function createTicket(
       [tripId, scopeAgencyId],
     );
     const tripRow = trip.rows[0];
-    if (!tripRow || tripRow.estado !== "PROGRAMADO") {
-      throw conflict("TRIP_NOT_AVAILABLE", "El viaje no está disponible.");
+    if (!tripRow || tripRow.estado !== "PROGRAMADO" || !tripRow.departure_future) {
+      throw conflict(
+        "TRIP_NOT_AVAILABLE",
+        "El viaje ya inició, su hora de salida pasó o no está disponible. Selecciona otra salida.",
+      );
     }
     if (input.asiento > tripRow.capacidad) {
       throw conflict(
@@ -863,8 +868,10 @@ export async function createParcel(
       id_agencia: number;
       agency_name: string;
       distance_km: string;
+      departure_future: boolean;
     }>(
       `SELECT trip.estado, trip.id_agencia, agency.nombre AS agency_name,
+              trip.fecha_hora_salida > clock_timestamp() AS departure_future,
               route.distancia_km::text AS distance_km
        FROM viajes trip
        JOIN agencias agency ON agency.id_agencia = trip.id_agencia
@@ -874,8 +881,11 @@ export async function createParcel(
        FOR SHARE`,
       [tripId, scopeAgencyId],
     );
-    if (!trip.rows[0] || trip.rows[0].estado !== "PROGRAMADO") {
-      throw conflict("TRIP_NOT_AVAILABLE", "El viaje no está disponible.");
+    if (!trip.rows[0] || trip.rows[0].estado !== "PROGRAMADO" || !trip.rows[0].departure_future) {
+      throw conflict(
+        "TRIP_NOT_AVAILABLE",
+        "El viaje ya inició, su hora de salida pasó o no está disponible. Selecciona otra salida.",
+      );
     }
 
     const priceQuote = calculateParcelPrice({
@@ -1130,8 +1140,13 @@ export async function createTrip(
       throw conflict("ROUTE_NOT_AVAILABLE", "La ruta no está disponible.");
     }
 
-    const overlapping = await client.query(
-      `SELECT 1
+    const overlapping = await client.query<{
+      id_viaje: number;
+      requires_completion: boolean;
+    }>(
+      `SELECT existing.id_viaje,
+              (existing.estado = 'EN_CURSO' OR existing.fecha_hora_salida <= NOW())
+                AS requires_completion
        FROM viajes existing
        JOIN rutas existing_route ON existing_route.id_ruta = existing.id_ruta
        WHERE existing.estado IN ('PROGRAMADO', 'EN_CURSO')
@@ -1139,19 +1154,24 @@ export async function createTrip(
            existing.id_vehiculo = $1
            OR existing.id_conductor = $2
          )
-         AND tstzrange(
-           existing.fecha_hora_salida,
-           COALESCE(
-             existing.fecha_hora_llegada,
-             existing.fecha_hora_salida
-               + existing_route.duracion_horas * INTERVAL '1 hour'
-           ),
-           '[)'
-         ) && tstzrange(
-           $3::timestamptz,
-           $3::timestamptz + $4::numeric * INTERVAL '1 hour',
-           '[)'
+         AND (
+           existing.estado = 'EN_CURSO'
+           OR existing.fecha_hora_salida <= NOW()
+           OR tstzrange(
+             existing.fecha_hora_salida,
+             COALESCE(
+               existing.fecha_hora_llegada,
+               existing.fecha_hora_salida
+                 + existing_route.duracion_horas * INTERVAL '1 hour'
+             ),
+             '[)'
+           ) && tstzrange(
+             $3::timestamptz,
+             $3::timestamptz + $4::numeric * INTERVAL '1 hour',
+             '[)'
+           )
          )
+       ORDER BY requires_completion DESC, existing.fecha_hora_salida
        LIMIT 1`,
       [
         vehicleId,
@@ -1161,9 +1181,12 @@ export async function createTrip(
       ],
     );
     if (overlapping.rowCount) {
+      const resourceConflict = overlapping.rows[0];
       throw conflict(
         "TRIP_RESOURCE_OVERLAP",
-        "El vehículo o conductor ya está ocupado en ese horario.",
+        resourceConflict.requires_completion
+          ? `El vehículo o conductor sigue asignado al viaje T${String(resourceConflict.id_viaje).padStart(3, "0")}. Finaliza ese viaje antes de volver a asignarlo, o cancélalo si aún no salió.`
+          : "El vehículo o conductor ya está ocupado en ese horario.",
       );
     }
 

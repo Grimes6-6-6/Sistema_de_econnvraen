@@ -9,6 +9,7 @@ export interface TripResourceConflict {
   tripId: string;
   busyUntilDate: string;
   busyUntilTime: string;
+  requiresCompletion: boolean;
 }
 
 export interface TripResourceConflicts {
@@ -26,6 +27,32 @@ interface TripAvailabilityInput {
   routes: Ruta[];
   trips: Viaje[];
   candidate: TripCandidate;
+  referenceNow?: Pick<TripCandidate, "date" | "time">;
+}
+
+export function getPeruWallClock(now = new Date()): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "00";
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    time: `${value("hour")}:${value("minute")}`,
+  };
+}
+
+export function isTripOpenForBooking(trip: Viaje, now = new Date()): boolean {
+  if (trip.estado !== "programado") return false;
+  const departure = parseWallClock(trip.fecha, trip.hora);
+  // Peru uses UTC-05:00; trip dates and times are stored in that wall clock.
+  return departure !== null && departure + 5 * 60 * 60 * 1_000 > now.getTime();
 }
 
 function parseWallClock(date: string, time: string): number | null {
@@ -82,11 +109,21 @@ function keepLatestConflict(
   resourceId: string,
   tripId: string,
   busyUntil: number,
+  requiresCompletion: boolean,
 ) {
-  const next = { tripId, ...formatWallClock(busyUntil) };
+  const next = {
+    tripId,
+    ...formatWallClock(busyUntil),
+    requiresCompletion,
+  };
   const current = conflicts.get(resourceId);
   if (!current) {
     conflicts.set(resourceId, next);
+    return;
+  }
+
+  if (current.requiresCompletion !== requiresCompletion) {
+    if (requiresCompletion) conflicts.set(resourceId, next);
     return;
   }
 
@@ -103,18 +140,24 @@ export function getTripResourceConflicts({
   routes,
   trips,
   candidate,
+  referenceNow,
 }: TripAvailabilityInput): TripResourceConflicts {
   const drivers = new Map<string, TripResourceConflict>();
   const vehicles = new Map<string, TripResourceConflict>();
   const candidateStart = parseWallClock(candidate.date, candidate.time);
+  const reference = referenceNow ?? getPeruWallClock();
+  const referenceTimestamp = parseWallClock(reference.date, reference.time);
   const candidateDuration = parseDurationHours(
     routes.find((route) => route.id === candidate.routeId),
   );
-  if (candidateStart === null || candidateDuration === null) {
+  if (candidateStart === null) {
     return { drivers, vehicles };
   }
 
-  const candidateEnd = candidateStart + candidateDuration * 60 * 60 * 1_000;
+  const candidateEnd =
+    candidateDuration === null
+      ? null
+      : candidateStart + candidateDuration * 60 * 60 * 1_000;
   for (const trip of trips) {
     if (!ACTIVE_TRIP_STATES.has(trip.estado)) continue;
 
@@ -122,23 +165,32 @@ export function getTripResourceConflicts({
     const existingDuration = parseDurationHours(
       routes.find((route) => route.id === trip.id_ruta),
     );
-    if (existingStart === null || existingDuration === null) continue;
+    if (existingStart === null) continue;
+    const requiresCompletion =
+      trip.estado === "en_curso" ||
+      (referenceTimestamp !== null && existingStart <= referenceTimestamp);
+    if (existingDuration === null && !requiresCompletion) continue;
 
-    const existingEnd = existingStart + existingDuration * 60 * 60 * 1_000;
-    const overlaps = existingStart < candidateEnd && candidateStart < existingEnd;
-    if (!overlaps) continue;
+    const existingEnd = existingStart + (existingDuration ?? 0) * 60 * 60 * 1_000;
+    const overlaps =
+      candidateEnd !== null &&
+      existingStart < candidateEnd &&
+      candidateStart < existingEnd;
+    if (!requiresCompletion && !overlaps) continue;
 
     keepLatestConflict(
       drivers,
       trip.id_conductor,
       trip.id,
       existingEnd,
+      requiresCompletion,
     );
     keepLatestConflict(
       vehicles,
       trip.id_vehiculo,
       trip.id,
       existingEnd,
+      requiresCompletion,
     );
   }
 
@@ -149,6 +201,9 @@ export function formatConflictEnd(
   conflict: TripResourceConflict,
   candidateDate: string,
 ): string {
+  if (conflict.requiresCompletion) {
+    return `finalizar ${conflict.tripId}`;
+  }
   return conflict.busyUntilDate === candidateDate
     ? conflict.busyUntilTime
     : `${conflict.busyUntilDate} ${conflict.busyUntilTime}`;

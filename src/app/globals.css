@@ -554,7 +554,7 @@
   background: #f7f9f8 !important;
 }
 
-.corporate-dialog :is([class~="bg-emerald-600"], [class~="bg-red-600"], [class~="bg-rose-600"]) {
+.corporate-dialog :is([class~="bg-emerald-600"], [class~="bg-emerald-700"], [class~="bg-red-600"], [class~="bg-rose-600"]) {
   color: #ffffff !important;
 }
 

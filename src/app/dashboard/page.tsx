@@ -19,7 +19,9 @@ import { buildParcelTrackingUrl, maskDni } from "@/lib/domain/parcel-receipt";
 import { calculateParcelPrice } from "@/lib/domain/parcel-pricing";
 import {
   formatConflictEnd,
+  getPeruWallClock,
   getTripResourceConflicts,
+  isTripOpenForBooking,
 } from "@/lib/domain/trip-availability";
 import {
   formatPaymentMethod,
@@ -360,6 +362,15 @@ export default function DashboardPage() {
       return;
     }
 
+    if (!isTripOpenForBooking(selectedTrip)) {
+      notify({
+        type: "warning",
+        title: "La salida ya no está disponible",
+        message: "La hora de salida pasó o el viaje ya inició. Selecciona otro viaje.",
+      });
+      return;
+    }
+
     setPendingAction("booking");
     try {
       const res = await addBoleto({
@@ -540,6 +551,15 @@ export default function DashboardPage() {
       });
       return;
     }
+    const assignedTrip = db.viajes.find((trip) => trip.id === parcelTripId);
+    if (!assignedTrip || !isTripOpenForBooking(assignedTrip)) {
+      notify({
+        type: "warning",
+        title: "La salida ya no está disponible",
+        message: "La hora de salida pasó o el viaje ya inició. Asigna la encomienda a otro viaje.",
+      });
+      return;
+    }
     if (!parcelPriceQuote) {
       notify({
         type: "warning",
@@ -614,6 +634,38 @@ export default function DashboardPage() {
   const [tripFecha, setTripFecha] = useState(getTodayDateString());
   const [tripHora, setTripHora] = useState("06:00");
   const [tripPrecio, setTripPrecio] = useState("50");
+  const [tripAvailabilityNow, setTripAvailabilityNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(
+      () => setTripAvailabilityNow(Date.now()),
+      30_000,
+    );
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!isTripModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isTripModalOpen]);
+
+  const openTripModal = () => {
+    const now = Date.now();
+    const nextHalfHour = Math.ceil((now + 60_000) / 1_800_000) * 1_800_000;
+    const departure = getPeruWallClock(new Date(nextHalfHour));
+    setTripAvailabilityNow(now);
+    setTripFecha(departure.date);
+    setTripHora(departure.time);
+    setTripRutaId("");
+    setTripVehiculoId("");
+    setTripConductorId("");
+    setTripPrecio("50");
+    setIsTripModalOpen(true);
+  };
 
   const tripResourceConflicts = useMemo(
     () =>
@@ -625,8 +677,9 @@ export default function DashboardPage() {
           date: tripFecha,
           time: tripHora,
         },
+        referenceNow: getPeruWallClock(new Date(tripAvailabilityNow)),
       }),
-    [db.rutas, db.viajes, tripFecha, tripHora, tripRutaId],
+    [db.rutas, db.viajes, tripAvailabilityNow, tripFecha, tripHora, tripRutaId],
   );
 
   const selectedTripRoute = useMemo(
@@ -652,8 +705,22 @@ export default function DashboardPage() {
       return;
     }
 
-    const vehicleConflict = tripResourceConflicts.vehicles.get(tripVehiculoId);
-    const driverConflict = tripResourceConflicts.drivers.get(tripConductorId);
+    if (new Date(`${tripFecha}T${tripHora}:00-05:00`).getTime() < Date.now()) {
+      notify({
+        type: "warning",
+        title: "La hora de salida ya pasó",
+        message: "Selecciona una fecha y hora futuras para programar el viaje.",
+      });
+      return;
+    }
+
+    const currentConflicts = getTripResourceConflicts({
+      routes: db.rutas,
+      trips: db.viajes,
+      candidate: { routeId: tripRutaId, date: tripFecha, time: tripHora },
+    });
+    const vehicleConflict = currentConflicts.vehicles.get(tripVehiculoId);
+    const driverConflict = currentConflicts.drivers.get(tripConductorId);
     if (vehicleConflict || driverConflict) {
       const details = [
         vehicleConflict
@@ -1615,10 +1682,12 @@ export default function DashboardPage() {
                       (v) =>
                         v.id_ruta === selectedRouteId &&
                         v.fecha === selectedDate &&
-                        v.estado === "programado",
+                        isTripOpenForBooking(v, new Date(tripAvailabilityNow)),
                     ).length === 0 ? (
                       <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl text-slate-500 text-xs font-medium">
-                        Selecciona una ruta y fecha para visualizar los viajes disponibles.
+                        {selectedRouteId
+                          ? "No hay salidas disponibles para esa fecha. Los viajes cuya hora de salida ya pasó no aceptan nuevos pasajes."
+                          : "Selecciona una ruta y fecha para visualizar los viajes disponibles."}
                       </div>
                     ) : (
                       db.viajes
@@ -1626,7 +1695,7 @@ export default function DashboardPage() {
                           (v) =>
                             v.id_ruta === selectedRouteId &&
                             v.fecha === selectedDate &&
-                            v.estado === "programado",
+                            isTripOpenForBooking(v, new Date(tripAvailabilityNow)),
                         )
                         .map((trip) => {
                           const veh = db.vehiculos.find(
@@ -1643,6 +1712,14 @@ export default function DashboardPage() {
                               key={trip.id}
                               type="button"
                               onClick={() => {
+                                if (!isTripOpenForBooking(trip)) {
+                                  notify({
+                                    type: "warning",
+                                    title: "La hora de salida ya pasó",
+                                    message: "Selecciona otra salida para emitir el pasaje.",
+                                  });
+                                  return;
+                                }
                                 if (available > 0) {
                                   setSelectedTrip(trip);
                                   setPassengerPrecio(trip.precio);
@@ -2519,7 +2596,9 @@ export default function DashboardPage() {
                           >
                             <option value="">Seleccione el viaje de salida...</option>
                             {db.viajes.map((v) => {
-                              if (v.estado !== "programado") return null;
+                              if (!isTripOpenForBooking(v, new Date(tripAvailabilityNow))) {
+                                return null;
+                              }
                               const r = db.rutas.find(
                                 (rt) => rt.id === v.id_ruta,
                               );
@@ -2531,6 +2610,9 @@ export default function DashboardPage() {
                               );
                             })}
                           </select>
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            Solo se muestran viajes programados cuya hora de salida aún no pasó.
+                          </p>
                         </div>
                         <div>
                           <label htmlFor="parcel-weight" className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
@@ -2880,7 +2962,7 @@ export default function DashboardPage() {
               </div>
               {can(PERMISSIONS.TRIP_MANAGE) && (
                 <button
-                  onClick={() => setIsTripModalOpen(true)}
+                  onClick={openTripModal}
                   className="rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 shadow-lg flex items-center gap-2 cursor-pointer transition"
                 >
                   <Plus className="h-4 w-4" /> Programar Nuevo Viaje
@@ -2993,7 +3075,7 @@ export default function DashboardPage() {
             </div>
 
             {/* MODAL: PROGRAMAR VIAJE */}
-            {isTripModalOpen && (
+            {isTripModalOpen && createPortal(
               <div className="dialog-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 sm:p-4">
                 <div
                   role="dialog"
@@ -3074,6 +3156,7 @@ export default function DashboardPage() {
                               id="trip-date"
                               type="date"
                               required
+                              min={getPeruWallClock(new Date(tripAvailabilityNow)).date}
                               value={tripFecha}
                               onChange={(event) => {
                                 setTripFecha(event.target.value);
@@ -3138,9 +3221,10 @@ export default function DashboardPage() {
                             <select
                               id="trip-vehicle"
                               required
+                              disabled={!tripRutaId || !tripFecha || !tripHora}
                               value={tripVehiculoId}
                               onChange={(e) => setTripVehiculoId(e.target.value)}
-                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="">Seleccione vehículo...</option>
                               {db.vehiculos.map((vehicle) => {
@@ -3164,9 +3248,10 @@ export default function DashboardPage() {
                             <select
                               id="trip-driver"
                               required
+                              disabled={!tripRutaId || !tripFecha || !tripHora}
                               value={tripConductorId}
                               onChange={(e) => setTripConductorId(e.target.value)}
-                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="">Seleccione conductor...</option>
                               {db.conductores.map((driver) => {
@@ -3188,9 +3273,13 @@ export default function DashboardPage() {
                           <div className="flex items-start gap-3">
                             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
                             <div>
-                              <p className="text-xs font-black">Disponibilidad verificada con el horario</p>
+                              <p className="text-xs font-black">
+                                {tripRutaId ? "Disponibilidad para la salida elegida" : "Primero define la ruta y el horario"}
+                              </p>
                               <p className="mt-1 text-xs leading-relaxed text-blue-800">
-                                Hay {availableTripVehicles} vehículo{availableTripVehicles === 1 ? "" : "s"} y {availableTripDrivers} conductor{availableTripDrivers === 1 ? "" : "es"} disponibles. Los recursos ocupados quedan deshabilitados automáticamente.
+                                {tripRutaId
+                                  ? `Hay ${availableTripVehicles} vehículo${availableTripVehicles === 1 ? "" : "s"} y ${availableTripDrivers} conductor${availableTripDrivers === 1 ? "" : "es"} disponibles. Si la salida de un viaje ya pasó, sus recursos siguen ocupados hasta finalizarlo; no se liberan por la duración estimada.`
+                                  : "Después podrás seleccionar el vehículo y el conductor. Los recursos con viajes pendientes de finalizar no se pueden volver a asignar."}
                               </p>
                             </div>
                           </div>
@@ -3218,7 +3307,8 @@ export default function DashboardPage() {
                     </div>
                   </form>
                 </div>
-              </div>
+              </div>,
+              document.body,
             )}
           </div>
         )}
