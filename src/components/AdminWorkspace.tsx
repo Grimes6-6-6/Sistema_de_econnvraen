@@ -30,6 +30,8 @@ import type {
 import type { Agency } from "@/lib/domain/agency";
 import { useDatabase } from "@/context/DatabaseContext";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import CreateRouteForm from "@/components/admin/CreateRouteForm";
+import type { ManagedRouteInput } from "@/lib/validation/schemas";
 
 interface RouteDestination {
   id: string;
@@ -39,7 +41,7 @@ interface RouteDestination {
 }
 
 interface ApiError {
-  error?: { message?: string };
+  error?: { message?: string; details?: Record<string, string[]> };
 }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -54,7 +56,11 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   });
   const payload = (await response.json().catch(() => null)) as T | ApiError | null;
   if (!response.ok) {
-    throw new Error((payload as ApiError | null)?.error?.message || "No se pudo completar la operación.");
+    const error = (payload as ApiError | null)?.error;
+    const details = Object.values(error?.details || {}).flat().filter((value) => typeof value === "string");
+    throw new Error(details.length > 0
+      ? details.join(" ")
+      : error?.message || "No se pudo completar la operación.");
   }
   return payload as T;
 }
@@ -398,22 +404,20 @@ export default function AdminWorkspace() {
     } finally { setBusy(false); }
   };
 
-  const createRoute = async (formData: FormData) => {
+  const createRoute = async (input: ManagedRouteInput) => {
     setBusy(true);
     try {
       const created = await api<{ route: ManagedRoute }>("/api/admin/routes", {
         method: "POST",
-        body: JSON.stringify({
-          originAgencyId: formData.get("originAgencyId"), destinationAgencyId: formData.get("destinationAgencyId"),
-          distanceKm: Number(formData.get("distanceKm")), durationHours: Number(formData.get("durationHours")),
-          price: Number(formData.get("price")), state: "ACTIVO",
-        }),
+        body: JSON.stringify(input),
       });
       setRoutes((current) => [...current, created.route]);
-      await refreshDatabase();
       notify({ type: "success", title: "Ruta creada" });
-    } catch (reason) {
-      notify({ type: "error", title: "No se pudo crear la ruta", message: reason instanceof Error ? reason.message : undefined });
+      try {
+        await refreshDatabase();
+      } catch {
+        notify({ type: "warning", title: "Ruta creada; actualización pendiente", message: "La ruta se guardó correctamente. Recarga la página para actualizar los datos operativos." });
+      }
     } finally { setBusy(false); }
   };
 
@@ -796,7 +800,10 @@ export default function AdminWorkspace() {
           <div className="flex items-center gap-2"><Truck className="h-5 w-5 text-emerald-400" /><h3 className="font-black text-white">Flota, rutas y documentos</h3></div>
           <div className="mt-4 grid gap-4 xl:grid-cols-3">
             <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"><summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Registrar vehículo</summary><form action={(data) => void createVehicle(data)} className="mt-3 space-y-2"><select name="agencyId" className={inputClass}>{activeAgencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select><input name="plate" required placeholder="Placa" className={inputClass} /><input name="type" required placeholder="Tipo" className={inputClass} /><input name="brand" required placeholder="Marca" className={inputClass} /><input name="model" required placeholder="Modelo" className={inputClass} /><div className="grid grid-cols-2 gap-2"><input name="capacity" type="number" min={1} max={80} required placeholder="Capacidad" className={inputClass} /><input name="year" type="number" min={1990} max={2100} placeholder="Año" className={inputClass} /></div><button disabled={busy} className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white">Guardar vehículo</button></form></details>
-            <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"><summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Crear ruta</summary><form action={(data) => void createRoute(data)} className="mt-3 space-y-2"><label className="text-[10px] text-slate-400">Origen<select name="originAgencyId" defaultValue={currentUser.agenciaId || ""} className={inputClass}>{destinations.map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select></label><label className="text-[10px] text-slate-400">Destino<select name="destinationAgencyId" className={inputClass}>{destinations.filter((agency) => agency.id !== currentUser.agenciaId).map((agency) => <option key={agency.id} value={agency.id}>{agency.code} · {agency.city}</option>)}</select></label><div className="grid grid-cols-2 gap-2"><input name="distanceKm" type="number" step="0.1" required placeholder="Km" className={inputClass} /><input name="durationHours" type="number" step="0.1" required placeholder="Horas" className={inputClass} /></div><input name="price" type="number" step="0.1" required placeholder="Precio base" className={inputClass} /><button disabled={busy} className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white">Guardar ruta</button></form></details>
+            <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Crear ruta</summary>
+              <CreateRouteForm agencies={destinations} role={currentUser.rol} activeAgencyId={currentUser.agenciaId} busy={busy} onCreateRoute={createRoute} />
+            </details>
             {currentUser.rol === "SUPER_ADMIN" && (
             <details className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
               <summary className="cursor-pointer text-xs font-black uppercase text-emerald-300">Registrar documento</summary>

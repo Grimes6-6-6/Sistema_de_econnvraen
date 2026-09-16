@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20.9.0"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",
@@ -20,22 +20,22 @@
     "db:backup": "node scripts/db-backup.mjs",
     "db:backup:verify": "node scripts/db-backup-verify.mjs",
     "test:backups": "node --test tests/backups.test.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run test:backups && npm run build"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.24.0",
-    "next": "^16.2.12",
+    "next": "^16.3.5",
     "pg": "^8.22.0",
-    "postcss": "^8.5.24",
+    "postcss": "^8.5.28",
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -48,12 +48,13 @@
     "@types/react-dom": "^19",
     "brace-expansion": "^5.0.8",
     "eslint": "^9",
-    "eslint-config-next": "^16.2.12",
+    "eslint-config-next": "^16.3.5",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "overrides": {
+    "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
     "postcss": "$postcss",
     "sharp": "$sharp"

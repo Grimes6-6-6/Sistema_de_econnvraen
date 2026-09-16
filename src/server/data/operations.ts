@@ -1283,7 +1283,9 @@ export async function updateTripStatus(
       if (!driverId || driverId !== current.id_conductor) {
         throw forbidden("Solo puedes actualizar tus propios viajes.");
       }
-      if (!current.is_today) {
+      // El conductor solo inicia salidas de hoy, pero debe poder registrar
+      // la llegada de su viaje en curso aunque haya cruzado la medianoche.
+      if (input.newState === "en_curso" && !current.is_today) {
         throw forbidden("Solo puedes operar viajes asignados para hoy.");
       }
     }

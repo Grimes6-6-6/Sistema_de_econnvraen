@@ -40,7 +40,6 @@ interface DocumentFileRow extends QueryResultRow {
   id_agencia: number;
   id_conductor: number | null;
   id_vehiculo: number | null;
-  creado_por: number | null;
   archivo_nombre: string | null;
   archivo_mime: AllowedDocumentMime | null;
   archivo_contenido: Buffer | null;
@@ -226,12 +225,45 @@ export async function listDriverOperationalDocuments(
      WHERE document.id_agencia = $1
        AND (
          document.id_conductor = $2
-         OR (document.id_vehiculo IS NOT NULL AND document.creado_por = $3)
+         OR (
+           document.id_vehiculo IS NOT NULL
+           AND EXISTS (
+             SELECT 1
+             FROM viajes trip
+             WHERE trip.id_vehiculo = document.id_vehiculo
+               AND trip.id_conductor = $2
+               AND trip.estado IN ('PROGRAMADO', 'EN_CURSO')
+               AND (trip.estado = 'EN_CURSO' OR trip.fecha_hora_salida > NOW())
+           )
+         )
        )
      ORDER BY document.id_documento DESC`,
-    [agencyId, driverId, actorId(user)],
+    [agencyId, driverId],
   );
   return result.rows.map(mapDocument);
+}
+
+/** Vehicles eligible for document uploads, using the database clock and scope. */
+export async function listDriverDocumentVehicleIds(user: SessionUser): Promise<string[]> {
+  const driverId = user.conductorId ? parseEntityId(user.conductorId, "C") : null;
+  const agencyId = user.agenciaId ? parseEntityId(user.agenciaId, "A") : null;
+  if (!driverId || !agencyId) throw forbidden("No se encontró tu perfil de conductor.");
+
+  const result = await query<{ id_vehiculo: number }>(
+    `SELECT vehicle.id_vehiculo
+     FROM vehiculos vehicle
+     WHERE vehicle.id_agencia_base = $1
+       AND EXISTS (
+         SELECT 1 FROM viajes trip
+         WHERE trip.id_vehiculo = vehicle.id_vehiculo
+           AND trip.id_conductor = $2
+           AND trip.estado IN ('PROGRAMADO', 'EN_CURSO')
+           AND (trip.estado = 'EN_CURSO' OR trip.fecha_hora_salida > NOW())
+       )
+     ORDER BY vehicle.placa`,
+    [agencyId, driverId],
+  );
+  return result.rows.map((row) => formatEntityId("V", row.id_vehiculo, 2));
 }
 
 interface DriverDocumentFileInput {
@@ -273,6 +305,8 @@ export async function uploadDriverOperationalDocument(
              FROM viajes trip
              WHERE trip.id_vehiculo = vehicle.id_vehiculo
                AND trip.id_conductor = $3
+               AND trip.estado IN ('PROGRAMADO', 'EN_CURSO')
+               AND (trip.estado = 'EN_CURSO' OR trip.fecha_hora_salida > NOW())
            )`,
         [vehicleId, agencyId, driverId],
       );
@@ -520,7 +554,7 @@ export async function getOperationalDocumentFile(
   const documentId = parseEntityId(documentValue, "DOC");
   if (!documentId) throw notFound("El documento no existe.");
   const result = await query<DocumentFileRow>(
-    `SELECT id_agencia, id_conductor, id_vehiculo, creado_por,
+    `SELECT id_agencia, id_conductor, id_vehiculo,
             archivo_nombre, archivo_mime, archivo_contenido
      FROM documentos_operativos
      WHERE id_documento = $1`,
@@ -531,13 +565,27 @@ export async function getOperationalDocumentFile(
     throw notFound("El archivo adjunto no está disponible.");
   }
 
-  const userId = actorId(user);
   const userAgency = user.agenciaId ? parseEntityId(user.agenciaId, "A") : null;
   const driverId = user.conductorId ? parseEntityId(user.conductorId, "C") : null;
   const canManage = roleHasPermission(user.rol, PERMISSIONS.FLEET_MANAGE) &&
     (user.rol === "SUPER_ADMIN" || (userAgency !== null && row.id_agencia === userAgency));
+  let hasCurrentVehicleAssignment = false;
+  if (row.id_vehiculo !== null && driverId !== null) {
+    const assignment = await query(
+      `SELECT 1
+       FROM viajes trip
+       WHERE trip.id_vehiculo = $1
+         AND trip.id_conductor = $2
+         AND trip.estado IN ('PROGRAMADO', 'EN_CURSO')
+         AND (trip.estado = 'EN_CURSO' OR trip.fecha_hora_salida > NOW())
+       LIMIT 1`,
+      [row.id_vehiculo, driverId],
+    );
+    hasCurrentVehicleAssignment = Boolean(assignment.rowCount);
+  }
   const ownsDriverFile = user.rol === "CONDUCTOR" && (
-    row.id_conductor === driverId || row.creado_por === userId
+    driverId !== null && userAgency === row.id_agencia &&
+    (row.id_conductor === driverId || hasCurrentVehicleAssignment)
   );
   if (!canManage && !ownsDriverFile) throw forbidden();
 

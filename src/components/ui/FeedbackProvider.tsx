@@ -226,7 +226,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
 
       {confirmation && (
         <div
-          className="dialog-backdrop fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/85 p-4"
+          className="dialog-backdrop fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/85 p-2 sm:p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeConfirmation(false);
           }}
@@ -237,9 +237,9 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             aria-labelledby={dialogTitleId}
             aria-describedby={dialogDescriptionId}
-            className="corporate-dialog w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-premium sm:p-7"
+            className="corporate-dialog my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-premium sm:max-h-[calc(100dvh-2rem)]"
           >
-            <div className="flex items-start gap-4">
+            <div className="flex shrink-0 items-start gap-4 border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4">
               <div
                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
                   confirmation.tone === "danger"
@@ -254,48 +254,47 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
                   <Info className="h-6 w-6" />
                 )}
               </div>
-              <div className="min-w-0">
-                <h2 id={dialogTitleId} className="text-xl font-black text-white">
+              <div className="min-w-0 self-center">
+                <h2 id={dialogTitleId} className="break-words text-xl font-black text-white">
                   {confirmation.title}
                 </h2>
-                <p
-                  id={dialogDescriptionId}
-                  className="mt-2 text-sm leading-6 text-slate-300"
-                >
-                  {confirmation.message}
-                </p>
               </div>
             </div>
 
-            {confirmation.input && (
-              <div className="mt-6">
-                <label
-                  htmlFor={dialogInputId}
-                  className="mb-2 block text-sm font-bold text-slate-200"
-                >
-                  {confirmation.input.label}
-                </label>
-                <input
-                  ref={inputRef}
-                  id={dialogInputId}
-                  value={confirmationValue}
-                  onChange={(event) => {
-                    setConfirmationValue(event.target.value);
-                    confirmationValueRef.current = event.target.value;
-                  }}
-                  placeholder={confirmation.input.placeholder}
-                  minLength={minLength}
-                  className="min-h-12 w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 text-white outline-none placeholder:text-slate-500 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
-                />
-                {minLength > 0 && (
-                  <p className="mt-2 text-xs text-slate-400">
-                    Mínimo {minLength} caracteres ({confirmationValue.trim().length}/{minLength}).
-                  </p>
-                )}
-              </div>
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
+              <p id={dialogDescriptionId} className="break-words text-sm leading-6 text-slate-300">
+                {confirmation.message}
+              </p>
+              {confirmation.input && (
+                <div className="mt-5">
+                  <label
+                    htmlFor={dialogInputId}
+                    className="mb-2 block text-sm font-bold text-slate-200"
+                  >
+                    {confirmation.input.label}
+                  </label>
+                  <input
+                    ref={inputRef}
+                    id={dialogInputId}
+                    value={confirmationValue}
+                    onChange={(event) => {
+                      setConfirmationValue(event.target.value);
+                      confirmationValueRef.current = event.target.value;
+                    }}
+                    placeholder={confirmation.input.placeholder}
+                    minLength={minLength}
+                    className="min-h-12 w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 text-white outline-none placeholder:text-slate-500 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                  />
+                  {minLength > 0 && (
+                    <p className="mt-2 text-xs text-slate-400">
+                      Mínimo {minLength} caracteres ({confirmationValue.trim().length}/{minLength}).
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
-            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end sm:px-6 sm:py-4">
               <button
                 ref={cancelButtonRef}
                 type="button"

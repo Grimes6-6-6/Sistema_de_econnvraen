@@ -23,7 +23,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 
 ## Requisitos
 
-- Node.js 20.9 o posterior.
+- Node.js 24 LTS (el mismo entorno configurado para Vercel).
 - PostgreSQL 14 o posterior.
 - HTTPS y un proxy inverso confiable para producción.
 
@@ -69,7 +69,7 @@ npm run verify
 npm audit
 ```
 
-`verify` comprueba estilo, tipos, pruebas automatizadas y compilación de producción. No se debe desplegar si algún paso falla.
+`verify` comprueba estilo, tipos, pruebas automatizadas (incluidas las de backups) y compilación de producción. No se debe desplegar si algún paso falla.
 
 ## Despliegue de producción
 
@@ -114,7 +114,7 @@ npm audit
 
 - `src/app`: páginas y API web.
 - `src/server`: reglas de negocio, seguridad y acceso a datos.
-- `src/lib`: tipos, validaciones y utilidades compartidas.
+- `src/lib`: tipos, validaciones y utilidades compartidas. `src/lib/auth/role-permissions.json` es la fuente única de permisos por rol para la aplicación y la base de datos.
 - `db/migrations`: historial canónico del esquema PostgreSQL.
 - `db/rollbacks`: reversiones controladas para migraciones sensibles.
 - `scripts`: migración, carga inicial y comprobación de base de datos.

@@ -1,3 +1,18 @@
+import { readFile } from "node:fs/promises";
+
+const rolePermissionConfig = JSON.parse(
+  await readFile(
+    new URL("../src/lib/auth/role-permissions.json", import.meta.url),
+    "utf8",
+  ),
+);
+const EXPECTED_ROLES = [
+  "SUPER_ADMIN",
+  "ADMINISTRADOR",
+  "OPERADOR",
+  "CONDUCTOR",
+];
+
 const BASELINE_COLUMNS = {
   personas: ["id_persona", "nro_documento", "nombres", "apellidos"],
   vehiculos: ["id_vehiculo", "placa", "capacidad"],
@@ -121,6 +136,35 @@ function findMissing(columns, specification) {
   return missing;
 }
 
+async function verifyRolePermissions(pool) {
+  const result = await pool.query(
+    `SELECT nombre, permisos
+     FROM roles
+     WHERE nombre = ANY($1::varchar[])`,
+    [EXPECTED_ROLES],
+  );
+  const actual = new Map(result.rows.map((row) => [row.nombre, row.permisos]));
+  const mismatches = [];
+  for (const role of EXPECTED_ROLES) {
+    const expected = rolePermissionConfig[role];
+    const permissions = actual.get(role);
+    if (!Array.isArray(permissions)) {
+      mismatches.push(`${role} (rol ausente o permisos no son un arreglo)`);
+      continue;
+    }
+    const expectedSorted = [...expected].sort();
+    const actualSorted = [...permissions].sort();
+    if (JSON.stringify(expectedSorted) !== JSON.stringify(actualSorted)) {
+      mismatches.push(role);
+    }
+  }
+  if (mismatches.length) {
+    throw new Error(
+      `Los permisos persistidos no coinciden con la matriz de la aplicación: ${mismatches.join(", ")}. Ejecuta las migraciones pendientes.`,
+    );
+  }
+}
+
 export async function verifyBaselineSchema(pool) {
   const columns = await readColumns(pool);
   const missing = findMissing(columns, BASELINE_COLUMNS);
@@ -144,4 +188,5 @@ export async function verifyCurrentSchema(pool) {
       `La base de datos no está lista para la aplicación. Faltan: ${missing.join(", ")}.`,
     );
   }
+  await verifyRolePermissions(pool);
 }

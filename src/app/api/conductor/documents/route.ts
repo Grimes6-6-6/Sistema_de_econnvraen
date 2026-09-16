@@ -9,6 +9,7 @@ import {
 } from "@/lib/security/document-files";
 import {
   getDriverIdentityVerification,
+  listDriverDocumentVehicleIds,
   listDriverOperationalDocuments,
   uploadDriverOperationalDocument,
 } from "@/server/admin/documents";
@@ -25,11 +26,12 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const user = await requireApiPermission(PERMISSIONS.DRIVER_SELF_MANAGE);
-    const [documents, identity] = await Promise.all([
+    const [documents, identity, vehicleIds] = await Promise.all([
       listDriverOperationalDocuments(user),
       getDriverIdentityVerification(user),
+      listDriverDocumentVehicleIds(user),
     ]);
-    return noStoreJson({ documents, identity });
+    return noStoreJson({ documents, identity, vehicleIds });
   } catch (error) {
     return handleRouteError(error);
   }

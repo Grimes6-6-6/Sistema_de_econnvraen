@@ -1,8 +1,12 @@
 import bcrypt from "bcryptjs";
+import { readFile } from "node:fs/promises";
 import { createPool } from "./db-client.mjs";
 
 const PASSWORD_COST = 12;
 const pool = createPool();
+const rolePermissionConfig = JSON.parse(
+  await readFile(new URL("../src/lib/auth/role-permissions.json", import.meta.url), "utf8"),
+);
 
 const seedUsers = [
   {
@@ -63,22 +67,22 @@ try {
     [
       "SUPER_ADMIN",
       "Administración global de todas las agencias",
-      ["agencias:*", "usuarios:*", "operaciones:*", "reportes:*"],
+      rolePermissionConfig.SUPER_ADMIN,
     ],
     [
       "ADMINISTRADOR",
       "Administración de sus agencias asignadas",
-      ["usuarios:*", "operaciones:*", "reportes:*"],
+      rolePermissionConfig.ADMINISTRADOR,
     ],
     [
       "OPERADOR",
       "Ventas, encomiendas, viajes y recojos",
-      ["boletos:write", "encomiendas:write", "viajes:write", "recojos:write"],
+      rolePermissionConfig.OPERADOR,
     ],
     [
       "CONDUCTOR",
       "Manifiestos y entregas de sus viajes",
-      ["viajes:read:self", "encomiendas:update:self"],
+      rolePermissionConfig.CONDUCTOR,
     ],
   ];
 

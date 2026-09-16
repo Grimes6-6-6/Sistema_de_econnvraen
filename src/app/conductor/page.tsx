@@ -12,6 +12,7 @@ import {
 import { useLocation } from "@/context/LocationContext";
 import NotificationInbox from "@/components/NotificationInbox";
 import { isDriverTripVisible } from "@/lib/domain/gps";
+import { getPeruWallClock } from "@/lib/domain/trip-availability";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import {
@@ -167,6 +168,7 @@ export default function ConductorPage() {
   const [profileAddress, setProfileAddress] = useState("");
   const [profileLicense, setProfileLicense] = useState("");
   const [driverDocuments, setDriverDocuments] = useState<OperationalDocument[]>([]);
+  const [documentVehicleIds, setDocumentVehicleIds] = useState<string[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [documentType, setDocumentType] = useState<OperationalDocument["documentType"]>("LICENCIA");
@@ -206,22 +208,25 @@ export default function ConductorPage() {
   }, []);
 
   useEffect(() => {
+    if (!currentUser?.conductorId || !currentUser.agenciaId) return;
     let cancelled = false;
     void fetch("/api/conductor/documents", { cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json()) as {
           documents?: OperationalDocument[];
+          vehicleIds?: string[];
           identity?: {
             state: "PENDIENTE" | "VERIFICADA" | "OBSERVADA";
             observation: string;
           };
           error?: { message?: string };
         };
-        if (!response.ok || !payload.documents || !payload.identity) {
+        if (!response.ok || !payload.documents || !payload.identity || !Array.isArray(payload.vehicleIds)) {
           throw new Error(payload.error?.message || "No se pudieron cargar los documentos.");
         }
         if (!cancelled) {
           setDriverDocuments(payload.documents);
+          setDocumentVehicleIds(payload.vehicleIds);
           setIdentityVerification(payload.identity);
         }
       })
@@ -240,7 +245,7 @@ export default function ConductorPage() {
     return () => {
       cancelled = true;
     };
-  }, [notify]);
+  }, [notify, currentUser?.conductorId, currentUser?.agenciaId, db.viajes]);
 
   const handleLogout = async () => {
     stopTracking();
@@ -254,22 +259,10 @@ export default function ConductorPage() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
 
-  const getTodayDateString = () => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const todayStr = getTodayDateString();
+  const todayStr = getPeruWallClock().date;
   const conductorId = currentUser?.conductorId || "";
   const conductorRecord = db.conductores.find((c) => c.id === conductorId);
-  const assignedVehicleIds = new Set(
-    db.viajes
-      .filter((trip) => trip.id_conductor === conductorId)
-      .map((trip) => trip.id_vehiculo),
-  );
+  const assignedVehicleIds = new Set(documentVehicleIds);
   const assignedVehicles = db.vehiculos.filter((vehicle) =>
     assignedVehicleIds.has(vehicle.id),
   );
@@ -1411,7 +1404,10 @@ export default function ConductorPage() {
                 </div>
               </div>
 
-              <form ref={documentFormRef} action={(data) => void uploadDocument(data)} className="mt-5 grid gap-4 sm:grid-cols-2">
+              <form ref={documentFormRef} onSubmit={(event) => {
+                event.preventDefault();
+                if (!isUploadingDocument) void uploadDocument(new FormData(event.currentTarget));
+              }} className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="text-xs font-bold text-slate-300">
                   Tipo de documento
                   <select
@@ -1436,7 +1432,7 @@ export default function ConductorPage() {
                       ))}
                     </select>
                     {assignedVehicles.length === 0 && (
-                      <small className="mt-1 block font-medium text-amber-400">No tienes vehículos asignados para este documento.</small>
+                      <small className="mt-1 block font-medium text-amber-400">No tienes vehículos asignados en una salida próxima o un viaje en curso. Consulta a administración.</small>
                     )}
                   </label>
                 )}

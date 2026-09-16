@@ -645,13 +645,13 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!isTripModalOpen) return;
+    if (!isTripModalOpen && !isParcelModalOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isTripModalOpen]);
+  }, [isTripModalOpen, isParcelModalOpen]);
 
   const openTripModal = () => {
     const now = Date.now();
