@@ -36,6 +36,8 @@ export interface Viaje {
   hora: string;
   estado: "programado" | "en_curso" | "completado" | "cancelado";
   precio: number;
+  /** Hora real en la que el conductor confirmó la llegada al destino. */
+  fechaLlegada?: string | null;
 }
 
 export interface Boleto {

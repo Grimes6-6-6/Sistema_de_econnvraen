@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type { QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth/types";
 import {
@@ -89,6 +90,7 @@ interface TripRow extends QueryResultRow {
   hora: string;
   estado: string;
   precio_final: string;
+  fecha_llegada: string | null;
 }
 
 interface TicketRow extends QueryResultRow {
@@ -259,6 +261,7 @@ function mapTrip(row: TripRow): Viaje {
     hora: row.hora,
     estado: TRIP_STATUS_FROM_DB[row.estado] || "programado",
     precio: asNumber(row.precio_final),
+    fechaLlegada: row.fecha_llegada,
   };
 }
 
@@ -398,7 +401,8 @@ async function readSnapshot(
         `SELECT v.id_viaje, v.id_ruta, v.id_vehiculo, v.id_conductor,
                 TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha,
                 TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'HH24:MI') AS hora,
-                v.estado, v.precio_final::text
+                v.estado, v.precio_final::text,
+                TO_CHAR(v.fecha_hora_llegada AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_llegada
          FROM viajes v
          WHERE ($1::integer IS NULL OR v.id_agencia = $1)
            AND ($2::integer IS NULL OR v.id_conductor = $2)
@@ -1234,7 +1238,8 @@ async function getTripById(
     `SELECT v.id_viaje, v.id_ruta, v.id_vehiculo, v.id_conductor,
             TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha,
             TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'HH24:MI') AS hora,
-            v.estado, v.precio_final::text
+            v.estado, v.precio_final::text,
+            TO_CHAR(v.fecha_hora_llegada AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_llegada
      FROM viajes v
      WHERE v.id_viaje = $1`,
     [tripId],
@@ -1306,6 +1311,60 @@ export async function updateTripStatus(
        WHERE id_viaje = $2`,
       [dbState, tripId],
     );
+
+    if (input.newState === "completado") {
+      // La llegada del vehículo también mueve los envíos que viajaban en él.
+      // No se marcan como ENTREGADOS: eso requiere la entrega al destinatario.
+      const parcelsInTransit = await client.query<{
+        id_encomienda: number;
+        codigo_tracking: string;
+      }>(
+        `SELECT id_encomienda, codigo_tracking
+         FROM encomiendas
+         WHERE id_viaje = $1 AND estado = 'EN_TRANSITO'
+         FOR UPDATE`,
+        [tripId],
+      );
+
+      for (const parcel of parcelsInTransit.rows) {
+        await client.query(
+          `UPDATE encomiendas
+           SET estado = 'EN_DESTINO', updated_at = NOW()
+           WHERE id_encomienda = $1 AND estado = 'EN_TRANSITO'`,
+          [parcel.id_encomienda],
+        );
+        await client.query(
+          `INSERT INTO tracking_encomiendas (
+             id_encomienda, estado, ubicacion, id_usuario, fecha_hora,
+             observacion, request_id
+           )
+           VALUES ($1, 'EN_DESTINO', 'Agencia de destino', $2, NOW(), $3, $4)`,
+          [
+            parcel.id_encomienda,
+            userId,
+            `Llegada registrada por el conductor del viaje ${tripValue}.`,
+            randomUUID(),
+          ],
+        );
+        await writeAuditLog(
+          {
+            userId,
+            agencyId: current.id_agencia,
+            action: "PARCEL_STATUS_UPDATED",
+            entity: "encomienda",
+            entityId: formatEntityId("E", parcel.id_encomienda, 3),
+            metadata: {
+              from: "en_transito",
+              to: "en_destino",
+              tripId: tripValue,
+              trackingCode: parcel.codigo_tracking,
+              source: "trip_arrival",
+            },
+          },
+          client,
+        );
+      }
+    }
 
     if (input.newState === "completado") {
       await client.query(
