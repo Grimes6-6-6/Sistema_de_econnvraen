@@ -11,6 +11,7 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob: https://tile.openstreetmap.org",
   `connect-src 'self'${isDevelopment ? " ws: http://localhost:*" : ""}`,
   "font-src 'self' data:",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

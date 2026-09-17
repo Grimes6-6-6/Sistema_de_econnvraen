@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, ImageUp, LoaderCircle, X } from "lucide-react";
 import type QrScanner from "qr-scanner";
 import { extractParcelTrackingCode } from "@/lib/domain/parcel-receipt";
+import { scanParcelQrImage } from "@/lib/qr/scan-parcel-image";
 
 type ParcelQrScannerProps = {
   onClose: () => void;
@@ -84,23 +85,17 @@ export default function ParcelQrScanner({
     setIsReadingImage(true);
     setCameraError("");
     try {
-      const { default: QrScannerClient } = await import("qr-scanner");
-      const result = await QrScannerClient.scanImage(file, {
-        returnDetailedScanResult: true,
-        alsoTryWithoutScanRegion: true,
-      });
-      const trackingCode = extractParcelTrackingCode(result.data);
-      if (!trackingCode) {
-        throw new Error("INVALID_PARCEL_QR");
-      }
+      const trackingCode = await scanParcelQrImage(file);
 
       handledRef.current = true;
       scannerRef.current?.stop();
       onCodeScanned(trackingCode);
       onClose();
-    } catch {
+    } catch (error) {
       setCameraError(
-        "No pudimos leer un QR válido en esa imagen. Intenta con una foto más clara.",
+        error instanceof Error && error.message === "INVALID_PARCEL_QR"
+          ? "El QR leído no pertenece a un recibo de encomienda válido."
+          : "No pudimos leer el QR. Recorta la imagen alrededor del código o usa el recibo original en mayor resolución.",
       );
     } finally {
       setIsReadingImage(false);

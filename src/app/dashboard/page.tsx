@@ -488,7 +488,7 @@ export default function DashboardPage() {
       );
       const dataUrl = await QRCode.toDataURL(trackingUrl, {
         errorCorrectionLevel: "M",
-        margin: 1,
+        margin: 4,
         width: 256,
         color: { dark: "#020617", light: "#ffffff" },
       });
