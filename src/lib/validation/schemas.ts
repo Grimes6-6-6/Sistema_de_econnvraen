@@ -26,6 +26,18 @@ const personName = safeText(2, 80).refine(
 );
 
 const requestIdSchema = z.string().uuid();
+export const ticketHistoryQuerySchema = z.object({
+  search: safeText(0, 100).default(""),
+  from: z.union([z.iso.date(), z.literal("")]).default(""),
+  to: z.union([z.iso.date(), z.literal("")]).default(""),
+  state: z.enum(["", "activo", "anulado"]).default(""),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+}).refine((value) => !value.from || !value.to || value.from <= value.to, {
+  message: "La fecha inicial no puede ser posterior a la fecha final.",
+  path: ["to"],
+});
+export type TicketHistoryQuery = z.infer<typeof ticketHistoryQuerySchema>;
+
 export const dniSchema = z.string().regex(/^\d{8}$/, "El DNI debe tener 8 dígitos.");
 const phoneSchema = z
   .string()

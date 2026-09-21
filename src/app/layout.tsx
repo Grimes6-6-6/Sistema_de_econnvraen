@@ -19,6 +19,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ECONNVRAE - Gestión de Transporte y Encomiendas VRAEM",
   description: "Plataforma web empresarial para la gestión de pasajes, viajes, recojos y encomiendas en la ruta Ayacucho-VRAEM.",
+  icons: {
+    icon: "/icon.png?v=econnvrae-mark-20260917",
+    shortcut: "/favicon.ico?v=econnvrae-mark-20260917",
+    apple: "/apple-icon.png?v=econnvrae-mark-20260917",
+  },
 };
 
 export default function RootLayout({

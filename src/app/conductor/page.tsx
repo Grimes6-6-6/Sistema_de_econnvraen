@@ -274,6 +274,26 @@ export default function ConductorPage() {
     db.boletos.filter((b) => b.id_viaje === tripId && b.estado !== "anulado");
   const getParcelsForTrip = (tripId: string) =>
     db.encomiendas.filter((e) => e.id_viaje === tripId);
+  const validDocumentCount = driverDocuments.filter(
+    (document) => document.state === "VIGENTE",
+  ).length;
+  const pendingDocumentCount = driverDocuments.filter(
+    (document) => document.state === "PENDIENTE",
+  ).length;
+  const attentionDocumentCount = driverDocuments.filter((document) =>
+    ["POR_VENCER", "VENCIDO", "OBSERVADO"].includes(document.state),
+  ).length;
+  const totalDriverTrips = db.viajes.filter(
+    (trip) => trip.id_conductor === conductorId,
+  );
+  const totalPassengers = totalDriverTrips.reduce(
+    (total, trip) => total + getBookedSeats(trip.id).length,
+    0,
+  );
+  const totalParcels = totalDriverTrips.reduce(
+    (total, trip) => total + getParcelsForTrip(trip.id).length,
+    0,
+  );
 
   const loadTripIncidents = useCallback(
     async (tripId: string) => {
@@ -1247,7 +1267,7 @@ export default function ConductorPage() {
 
         {/* ══════════════════ TAB 2: PERFIL ══════════════════ */}
         {mainTab === "perfil" && (
-          <div className="animate-fade-in max-w-2xl mx-auto space-y-6">
+          <div className="animate-fade-in mx-auto max-w-4xl space-y-6">
             {/* Feedback alert */}
             {profileMsg && (
               <div
@@ -1261,111 +1281,174 @@ export default function ConductorPage() {
               </div>
             )}
 
-            {/* Profile card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row items-center sm:items-start gap-5 shadow-premium">
-              <div className="h-20 w-20 rounded-2xl bg-linear-to-br from-emerald-500 to-green-700 flex items-center justify-center font-black text-3xl text-white shadow-lg border border-emerald-400/20 shrink-0">
-                {currentUser
-                  ? currentUser.nombres[0] + currentUser.apellidos[0]
-                  : "--"}
-              </div>
-              <div className="grow text-center sm:text-left">
-                <h2 className="text-xl font-black tracking-wide">
+            {/* Profile summary */}
+            <section className="flex flex-col gap-5 rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-premium sm:flex-row sm:items-center sm:p-6">
+              <div className="flex min-w-0 grow items-center gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/20 bg-linear-to-br from-emerald-500 to-green-700 text-2xl font-black text-white shadow-lg sm:h-20 sm:w-20 sm:text-3xl">
                   {currentUser
-                    ? `${currentUser.nombres} ${currentUser.apellidos}`
-                    : "Conductor"}
-                </h2>
-                <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest mt-0.5">
-                  Conductor de Ruta · ECONNVRAE
-                </p>
-                <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
-                  <span className={`border text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${identityVerification.state === "VERIFICADA" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : identityVerification.state === "OBSERVADA" ? "border-rose-500/20 bg-rose-500/10 text-rose-400" : "border-amber-500/20 bg-amber-500/10 text-amber-400"}`}>
-                    {identityVerification.state === "VERIFICADA" ? "Identidad verificada" : identityVerification.state === "OBSERVADA" ? "Identidad observada" : "Validación pendiente"}
-                  </span>
-                  <span className="bg-slate-800 text-slate-300 text-[9px] font-black uppercase px-2.5 py-1 rounded-lg">
-                    DNI: {currentUser?.dni || "No disponible"}
-                  </span>
+                    ? currentUser.nombres[0] + currentUser.apellidos[0]
+                    : "--"}
+                </div>
+                <div className="min-w-0">
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-400">
+                    Mi perfil de conductor
+                  </p>
+                  <h2 className="truncate text-lg font-black sm:text-xl">
+                    {currentUser
+                      ? `${currentUser.nombres} ${currentUser.apellidos}`
+                      : "Conductor"}
+                  </h2>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">
+                    Conductor de ruta · {currentUser?.agenciaNombre || "Sin agencia asignada"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${identityVerification.state === "VERIFICADA" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : identityVerification.state === "OBSERVADA" ? "border-rose-500/20 bg-rose-500/10 text-rose-400" : "border-amber-500/20 bg-amber-500/10 text-amber-400"}`}>
+                      {identityVerification.state === "VERIFICADA" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+                      {identityVerification.state === "VERIFICADA" ? "Identidad verificada" : identityVerification.state === "OBSERVADA" ? "Identidad observada" : "Validación pendiente"}
+                    </span>
+                    <span className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] font-black uppercase text-slate-300">
+                      DNI terminado en {currentUser?.dni?.slice(-4) || "----"}
+                    </span>
+                  </div>
                 </div>
               </div>
               <button
-                onClick={() => setIsEditingProfile(!isEditingProfile)}
-                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition-all cursor-pointer self-start"
+                type="button"
+                onClick={() => setIsEditingProfile((current) => !current)}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 self-start rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white sm:w-auto"
               >
-                {isEditingProfile ? (
-                  <X className="h-4 w-4" />
-                ) : (
-                  <Edit3 className="h-4 w-4" />
-                )}
-                {isEditingProfile ? "Cancelar" : "Editar"}
+                {isEditingProfile ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                {isEditingProfile ? "Cancelar" : "Editar datos"}
               </button>
-            </div>
+            </section>
 
-            {/* Info fields */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-premium space-y-5">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-3">
-                Información de Contacto
-              </h3>
-
-              {[
-                {
-                  icon: <Phone className="h-4 w-4 text-emerald-400" />,
-                  label: "Teléfono Celular",
-                  value: profilePhone,
-                  set: setProfilePhone,
-                },
-                {
-                  icon: <Mail className="h-4 w-4 text-emerald-400" />,
-                  label: "Correo Electrónico",
-                  value: profileEmail,
-                  set: setProfileEmail,
-                },
-                {
-                  icon: <MapPin className="h-4 w-4 text-emerald-400" />,
-                  label: "Dirección",
-                  value: profileAddress,
-                  set: setProfileAddress,
-                },
-                {
-                  icon: <FileText className="h-4 w-4 text-emerald-400" />,
-                  label: "Licencia / Brevete",
-                  value: conductorRecord?.nroLicencia || profileLicense,
-                  set: setProfileLicense,
-                  readOnly: true,
-                },
-              ].map(({ icon, label, value, set, readOnly }) => (
-                <div key={label} className="flex items-start gap-3">
-                  <div className="h-8 w-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 mt-1">
-                    {icon}
-                  </div>
-                  <div className="grow">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                      {label}
-                    </span>
-                    {isEditingProfile && !readOnly ? (
-                      <input
-                        aria-label={label}
-                        value={value}
-                        onChange={(e) => set(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-medium focus:outline-none focus:border-emerald-500 transition-colors"
-                      />
-                    ) : (
-                      <p className="text-sm font-semibold text-white">
-                        {value}
-                      </p>
-                    )}
-                  </div>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,0.65fr)]">
+              {/* Contact information */}
+              <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-premium sm:p-6">
+                <div className="border-b border-slate-800 pb-4">
+                  <h3 className="text-sm font-black text-white">Datos personales</h3>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Mantén actualizada la información con la que la empresa puede contactarte.
+                  </p>
                 </div>
-              ))}
 
-              {isEditingProfile && (
-                <button
-                  onClick={handleSaveProfile}
-                  disabled={isSavingProfile}
-                  className="w-full bg-linear-to-r from-emerald-800 to-green-700 hover:from-emerald-900 hover:to-green-800 text-white font-black py-3 rounded-xl text-sm uppercase tracking-widest shadow-premium transition-all cursor-pointer flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
-                >
-                  <Save className="h-4 w-4" />{" "}
-                  {isSavingProfile ? "Guardando..." : "Guardar Cambios"}
-                </button>
-              )}
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {[
+                    {
+                      icon: <Phone className="h-4 w-4 text-emerald-400" />,
+                      label: "Teléfono celular",
+                      value: profilePhone,
+                      set: setProfilePhone,
+                      inputMode: "tel" as const,
+                      autoComplete: "tel",
+                      placeholder: "Ej. 987 654 321",
+                    },
+                    {
+                      icon: <Mail className="h-4 w-4 text-emerald-400" />,
+                      label: "Correo electrónico",
+                      value: profileEmail,
+                      set: setProfileEmail,
+                      inputMode: "email" as const,
+                      autoComplete: "email",
+                      placeholder: "nombre@correo.com",
+                    },
+                    {
+                      icon: <MapPin className="h-4 w-4 text-emerald-400" />,
+                      label: "Dirección",
+                      value: profileAddress,
+                      set: setProfileAddress,
+                      inputMode: "text" as const,
+                      autoComplete: "street-address",
+                      placeholder: "Dirección de residencia",
+                    },
+                    {
+                      icon: <FileText className="h-4 w-4 text-emerald-400" />,
+                      label: "Licencia / brevete",
+                      value: conductorRecord?.nroLicencia || profileLicense,
+                      set: setProfileLicense,
+                      inputMode: "text" as const,
+                      autoComplete: "off",
+                      placeholder: "Sin licencia registrada",
+                      readOnly: true,
+                    },
+                  ].map(({ icon, label, value, set, inputMode, autoComplete, placeholder, readOnly }) => (
+                    <div key={label} className="flex min-h-24 gap-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+                        {icon}
+                      </div>
+                      <div className="min-w-0 grow">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          {label}
+                        </span>
+                        {isEditingProfile && !readOnly ? (
+                          <input
+                            aria-label={label}
+                            value={value}
+                            inputMode={inputMode}
+                            autoComplete={autoComplete}
+                            placeholder={placeholder}
+                            onChange={(event) => set(event.target.value)}
+                            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-medium text-white outline-none transition-colors focus:border-emerald-500"
+                          />
+                        ) : (
+                          <p className={`break-words text-sm font-semibold ${value.trim() ? "text-white" : "text-slate-400"}`}>
+                            {value.trim() || "No registrado"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {isEditingProfile && (
+                  <button
+                    type="button"
+                    onClick={handleSaveProfile}
+                    disabled={isSavingProfile}
+                    className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-emerald-800 to-green-700 py-3 text-sm font-black text-white shadow-premium transition-all disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4" />
+                    {isSavingProfile ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                )}
+              </section>
+
+              {/* Operational status */}
+              <aside className="rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-premium sm:p-6">
+                <div className="border-b border-slate-800 pb-4">
+                  <h3 className="text-sm font-black text-white">Estado operativo</h3>
+                  <p className="mt-1 text-xs text-slate-400">Resumen para saber si puedes salir a ruta.</p>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-3.5">
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${identityVerification.state === "VERIFICADA" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
+                      {identityVerification.state === "VERIFICADA" ? <CheckCircle2 className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Identidad</p>
+                      <p className="truncate text-xs font-bold text-white">
+                        {identityVerification.state === "VERIFICADA" ? "Verificada" : identityVerification.state === "OBSERVADA" ? "Con observación" : "Pendiente"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {[
+                    { label: "Documentos vigentes", value: validDocumentCount, tone: "text-emerald-400" },
+                    { label: "Pendientes de revisión", value: pendingDocumentCount, tone: "text-blue-400" },
+                    { label: "Requieren atención", value: attentionDocumentCount, tone: attentionDocumentCount > 0 ? "text-rose-400" : "text-slate-400" },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between gap-3 border-b border-slate-800 px-1 py-2.5 last:border-0">
+                      <span className="text-xs font-semibold text-slate-400">{item.label}</span>
+                      <strong className={`text-base ${item.tone}`}>{item.value}</strong>
+                    </div>
+                  ))}
+
+                  <p className="rounded-xl bg-slate-950/50 p-3 text-[11px] leading-relaxed text-slate-400">
+                    La habilitación final depende de que tu identidad y documentos obligatorios estén aprobados y vigentes.
+                  </p>
+                </div>
+              </aside>
             </div>
 
             {identityVerification.state !== "VERIFICADA" && (
@@ -1380,28 +1463,31 @@ export default function ConductorPage() {
               </div>
             )}
 
-            {driverDocuments.some((document) =>
-              document.state === "VENCIDO" || document.state === "POR_VENCER",
-            ) && (
+            {attentionDocumentCount > 0 && (
               <div role="alert" className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
                 <div>
                   <b className="text-sm">Tienes documentos que requieren atención</b>
-                  <p className="text-xs">Renueva los documentos vencidos o próximos a vencer antes de tu siguiente viaje.</p>
+                  <p className="text-xs">Revisa los documentos observados, vencidos o próximos a vencer antes de tu siguiente viaje.</p>
                 </div>
               </div>
             )}
 
             {/* Driver documents */}
             <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-premium">
-              <div className="flex items-start gap-3 border-b border-slate-800 pb-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-                  <FileCheck2 className="h-5 w-5" />
-                </span>
-                <div>
-                  <h3 className="font-black text-white">Mis documentos</h3>
-                  <p className="text-xs text-slate-400">Adjunta una foto clara o un PDF. Administración revisará cada envío.</p>
+              <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                    <FileCheck2 className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="font-black text-white">Mis documentos</h3>
+                    <p className="text-xs text-slate-400">Adjunta una foto clara o un PDF. Administración revisará cada envío.</p>
+                  </div>
                 </div>
+                <span className="w-fit rounded-full bg-slate-800 px-3 py-1 text-[10px] font-black uppercase text-slate-400">
+                  {driverDocuments.length} {driverDocuments.length === 1 ? "documento" : "documentos"}
+                </span>
               </div>
 
               <form ref={documentFormRef} onSubmit={(event) => {
@@ -1500,27 +1586,21 @@ export default function ConductorPage() {
             </section>
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-3 sm:grid-cols-3">
               {[
                 {
                   label: "Viajes Totales",
-                  value: db.viajes.filter(
-                    (v) => v.id_conductor === conductorId,
-                  ).length,
+                  value: totalDriverTrips.length,
                   color: "text-white",
                 },
                 {
                   label: "Pasajeros",
-                  value: db.viajes
-                    .filter((v) => v.id_conductor === conductorId)
-                    .reduce((s, t) => s + getBookedSeats(t.id).length, 0),
+                  value: totalPassengers,
                   color: "text-emerald-400",
                 },
                 {
                   label: "Encomiendas",
-                  value: db.viajes
-                    .filter((v) => v.id_conductor === conductorId)
-                    .reduce((s, t) => s + getParcelsForTrip(t.id).length, 0),
+                  value: totalParcels,
                   color: "text-amber-400",
                 },
               ].map(({ label, value, color }) => (

@@ -27,6 +27,7 @@ import { formatEntityId, parseEntityId } from "@/lib/domain/ids";
 import { canAdvanceParcelStatus } from "@/lib/domain/rules";
 import type { PaymentMethod } from "@/lib/domain/payments";
 import { calculateParcelPrice } from "@/lib/domain/parcel-pricing";
+import type { TicketHistoryResult } from "@/lib/domain/ticket-sales";
 import { createTrackingCode } from "@/lib/domain/tracking";
 import type {
   CancellationInput,
@@ -37,6 +38,7 @@ import type {
   PickupInput,
   PickupStatusInput,
   TicketInput,
+  TicketHistoryQuery,
   TripIncidentInput,
   TripInput,
   TripStatusInput,
@@ -350,6 +352,50 @@ function requireAgencyId(user: SessionUser): number {
 
 function agencyScopeId(user: SessionUser): number | null {
   return user.rol === "SUPER_ADMIN" ? null : requireAgencyId(user);
+}
+
+export async function listTicketHistory(
+  user: SessionUser,
+  filters: TicketHistoryQuery,
+): Promise<TicketHistoryResult> {
+  requirePermission(user, PERMISSIONS.TICKET_SELL);
+  const agencyId = agencyScopeId(user);
+  const pageSize = 20;
+  const values = [agencyId, filters.search, filters.from, filters.to, filters.state.toUpperCase()];
+  const fromSql = `FROM boletos b
+    JOIN personas p ON p.id_persona = b.id_persona_pasajero
+    JOIN viajes v ON v.id_viaje = b.id_viaje
+    JOIN rutas r ON r.id_ruta = v.id_ruta
+    WHERE ($1::integer IS NULL OR v.id_agencia = $1)
+      AND ($2::text = '' OR STRPOS(LOWER(CONCAT_WS(' ', b.codigo,
+        p.nro_documento, p.nombres, p.apellidos, r.origen, r.destino)), LOWER($2)) > 0)
+      AND ($3::text = '' OR b.fecha_emision >=
+        (NULLIF($3, '')::date::timestamp AT TIME ZONE 'America/Lima'))
+      AND ($4::text = '' OR b.fecha_emision <
+        ((NULLIF($4, '')::date + 1)::timestamp AT TIME ZONE 'America/Lima'))
+      AND ($5::text = '' OR b.estado = $5)`;
+  const count = await query<{ total: string }>(
+    `SELECT COUNT(*)::text AS total ${fromSql}`, values,
+  );
+  const total = Number(count.rows[0]?.total || 0);
+  const page = Math.min(filters.page, Math.max(1, Math.ceil(total / pageSize)));
+  const result = await query<TicketRow & { ruta: string; salida: string }>(
+    `SELECT b.id_boleto, b.codigo, b.id_viaje, b.asiento,
+      p.nro_documento AS pasajero_dni, p.nombres AS pasajero_nombres,
+      p.apellidos AS pasajero_apellidos, COALESCE(p.telefono, '') AS pasajero_telefono,
+      b.precio::text, b.metodo_pago, COALESCE(b.referencia_pago, '') AS referencia_pago,
+      TO_CHAR(b.fecha_emision AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_emision,
+      b.estado, b.sunat_estado, CONCAT(r.origen, ' → ', r.destino) AS ruta,
+      TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS salida
+    ${fromSql}
+    ORDER BY b.fecha_emision DESC, b.id_boleto DESC
+    LIMIT $6 OFFSET $7`,
+    [...values, pageSize, (page - 1) * pageSize],
+  );
+  return {
+    items: result.rows.map((row) => ({ ...mapTicket(row), ruta: row.ruta, salida: row.salida })),
+    total, page, pageSize,
+  };
 }
 
 async function readSnapshot(

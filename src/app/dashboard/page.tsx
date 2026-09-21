@@ -11,6 +11,7 @@ import { useLocation } from "@/context/LocationContext";
 import AgencySwitcher from "@/components/AgencySwitcher";
 import AdminWorkspace from "@/components/AdminWorkspace";
 import WalletQrPayment from "@/components/WalletQrPayment";
+import TicketSalesHistory from "@/components/TicketSalesHistory";
 import NotificationInbox from "@/components/NotificationInbox";
 import { DataLoadError, InitialDataLoading } from "@/components/ui/DataState";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
@@ -2126,118 +2127,16 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Tickets Table */}
-            <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-premium backdrop-blur-md space-y-4">
-              <h4 className="font-extrabold text-sm text-white">
-                Boletos Vendidos Recientemente
-              </h4>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b border-white/10 bg-slate-950/40">
-                      <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        Código
-                      </th>
-                      <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        Pasajero
-                      </th>
-                      <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        DNI
-                      </th>
-                      <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        Asiento
-                      </th>
-                      <th className="py-2.5 px-3 text-right text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        Precio
-                      </th>
-                      <th className="py-2.5 px-3 text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        Pago
-                      </th>
-                      <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        Estado
-                      </th>
-                      <th className="py-2.5 px-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                        Acción
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {db.boletos.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="text-center py-6 text-xs text-slate-500"
-                        >
-                          No hay boletos emitidos.
-                        </td>
-                      </tr>
-                    ) : (
-                      [...db.boletos]
-                        .reverse()
-                        .slice(0, 10)
-                        .map((b) => (
-                          <tr
-                            key={b.id}
-                            className="border-b border-white/5 last:border-0 hover:bg-white/5 text-xs text-slate-300 transition-colors"
-                          >
-                            <td className="py-3 px-3 font-mono font-black text-emerald-400">
-                              {b.codigo}
-                            </td>
-                            <td className="py-3 px-3 font-semibold text-slate-200">
-                              {b.pasajeroNombres} {b.pasajeroApellidos}
-                            </td>
-                            <td className="py-3 px-3 font-mono text-slate-400">
-                              {b.pasajeroDni}
-                            </td>
-                            <td className="py-3 px-3 text-center font-bold text-white">
-                              A{b.asiento}
-                            </td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
-                              S/ {b.precio.toFixed(2)}
-                            </td>
-                            <td className="py-3 px-3 font-semibold text-slate-700">
-                              {formatPaymentMethod(b.metodoPago)}
-                              {b.referenciaPago && (
-                                <small className="block font-mono text-[10px] text-slate-500">
-                                  Op. {b.referenciaPago}
-                                </small>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              <span
-                                className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${
-                                  b.estado === "anulado"
-                                    ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
-                                    : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                                }`}
-                              >
-                                {b.estado || "activo"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              {b.estado !== "anulado" &&
-                                can(PERMISSIONS.TICKET_CANCEL_REQUEST) && (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleCancelTicket(b)}
-                                  disabled={pendingAction === `cancel-ticket-${b.id}`}
-                                  className="min-h-11 rounded-lg px-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
-                                >
-                                  {pendingAction === `cancel-ticket-${b.id}`
-                                    ? "Procesando…"
-                                    : can(PERMISSIONS.TICKET_CANCEL_APPROVE)
-                                      ? "Anular"
-                                      : "Solicitar anulación"}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <TicketSalesHistory
+              key={`${currentUser?.id}:${currentUser?.agenciaId}`}
+              tickets={db.boletos}
+              trips={db.viajes}
+              routes={db.rutas}
+              canCancel={can(PERMISSIONS.TICKET_CANCEL_REQUEST)}
+              canApproveCancellation={can(PERMISSIONS.TICKET_CANCEL_APPROVE)}
+              pendingAction={pendingAction}
+              onCancel={handleCancelTicket}
+            />
           </div>
         )}
 
