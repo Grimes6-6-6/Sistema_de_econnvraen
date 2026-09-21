@@ -47,6 +47,8 @@ import {
   FileCheck2,
   ShieldCheck,
   Upload,
+  Camera,
+  Trash2,
 } from "lucide-react";
 
 // Dynamically load the map — no SSR (Leaflet needs window)
@@ -167,6 +169,11 @@ export default function ConductorPage() {
   const [profileEmail, setProfileEmail] = useState("");
   const [profileAddress, setProfileAddress] = useState("");
   const [profileLicense, setProfileLicense] = useState("");
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [profilePhotoPreviewUrl, setProfilePhotoPreviewUrl] = useState<string | null>(null);
+  const [removeProfilePhoto, setRemoveProfilePhoto] = useState(false);
+  const savedProfileContactRef = useRef({ phone: "", email: "", address: "" });
   const [driverDocuments, setDriverDocuments] = useState<OperationalDocument[]>([]);
   const [documentVehicleIds, setDocumentVehicleIds] = useState<string[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(true);
@@ -183,7 +190,12 @@ export default function ConductorPage() {
     void fetch("/api/conductor/profile", { cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json()) as {
-          contact?: { phone: string; email: string; address: string };
+          contact?: {
+            phone: string;
+            email: string;
+            address: string;
+            photoUrl: string | null;
+          };
         };
         if (!response.ok || !payload.contact) {
           throw new Error("No se pudo cargar el perfil.");
@@ -192,6 +204,12 @@ export default function ConductorPage() {
           setProfilePhone(payload.contact.phone);
           setProfileEmail(payload.contact.email);
           setProfileAddress(payload.contact.address);
+          setProfilePhotoUrl(payload.contact.photoUrl);
+          savedProfileContactRef.current = {
+            phone: payload.contact.phone,
+            email: payload.contact.email,
+            address: payload.contact.address,
+          };
         }
       })
       .catch(() => {
@@ -206,6 +224,14 @@ export default function ConductorPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profilePhotoPreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(profilePhotoPreviewUrl);
+      }
+    };
+  }, [profilePhotoPreviewUrl]);
 
   useEffect(() => {
     if (!currentUser?.conductorId || !currentUser.agenciaId) return;
@@ -283,18 +309,8 @@ export default function ConductorPage() {
   const attentionDocumentCount = driverDocuments.filter((document) =>
     ["POR_VENCER", "VENCIDO", "OBSERVADO"].includes(document.state),
   ).length;
-  const verifiedDniImage =
-    identityVerification.state === "VERIFICADA"
-      ? driverDocuments.find(
-          (document) =>
-            document.documentType === "DNI" &&
-            (document.state === "VIGENTE" || document.state === "POR_VENCER") &&
-            document.file?.mimeType.startsWith("image/"),
-        )
-      : undefined;
-  const driverPortraitUrl = verifiedDniImage?.file
-    ? `${verifiedDniImage.file.downloadUrl}?preview=1`
-    : null;
+  const driverPortraitUrl =
+    profilePhotoPreviewUrl || (!removeProfilePhoto ? profilePhotoUrl : null);
   const totalDriverTrips = db.viajes.filter(
     (trip) => trip.id_conductor === conductorId,
   );
@@ -441,13 +457,49 @@ export default function ConductorPage() {
         email: profileEmail,
         address: profileAddress,
       });
-      if (updated.phone) setProfilePhone(updated.phone);
-      if (updated.email) setProfileEmail(updated.email);
-      if (updated.address) setProfileAddress(updated.address);
+      setProfilePhone(updated.phone);
+      setProfileEmail(updated.email);
+      setProfileAddress(updated.address);
+      savedProfileContactRef.current = updated;
+
+      if (profilePhotoFile) {
+        const formData = new FormData();
+        formData.set("photo", profilePhotoFile);
+        const photoResponse = await fetch("/api/conductor/profile/photo", {
+          method: "PUT",
+          body: formData,
+        });
+        const photoPayload = (await photoResponse.json().catch(() => null)) as
+          | { photoUrl?: string; error?: { message?: string } }
+          | null;
+        if (!photoResponse.ok || !photoPayload?.photoUrl) {
+          throw new Error(
+            photoPayload?.error?.message || "No se pudo guardar la fotografía.",
+          );
+        }
+        setProfilePhotoUrl(photoPayload.photoUrl);
+      } else if (removeProfilePhoto && profilePhotoUrl) {
+        const photoResponse = await fetch("/api/conductor/profile/photo", {
+          method: "DELETE",
+        });
+        const photoPayload = (await photoResponse.json().catch(() => null)) as
+          | { success?: boolean; error?: { message?: string } }
+          | null;
+        if (!photoResponse.ok || !photoPayload?.success) {
+          throw new Error(
+            photoPayload?.error?.message || "No se pudo eliminar la fotografía.",
+          );
+        }
+        setProfilePhotoUrl(null);
+      }
+
+      setProfilePhotoFile(null);
+      setProfilePhotoPreviewUrl(null);
+      setRemoveProfilePhoto(false);
       setIsEditingProfile(false);
       setProfileMsg({
         type: "success",
-        text: "Datos de contacto actualizados correctamente.",
+        text: "Perfil actualizado correctamente.",
       });
     } catch (error) {
       setProfileMsg({
@@ -460,6 +512,49 @@ export default function ConductorPage() {
     } finally {
       setIsSavingProfile(false);
     }
+  };
+
+  const handleProfilePhotoSelection = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setProfileMsg({
+        type: "error",
+        text: "La fotografía debe ser JPG, PNG o WEBP.",
+      });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileMsg({
+        type: "error",
+        text: "La fotografía no puede superar los 5 MB.",
+      });
+      return;
+    }
+    setProfilePhotoFile(file);
+    setProfilePhotoPreviewUrl(URL.createObjectURL(file));
+    setRemoveProfilePhoto(false);
+    setProfileMsg(null);
+  };
+
+  const handleRemoveProfilePhoto = () => {
+    setProfilePhotoFile(null);
+    setProfilePhotoPreviewUrl(null);
+    setRemoveProfilePhoto(true);
+  };
+
+  const handleCancelProfileEdit = () => {
+    setProfilePhone(savedProfileContactRef.current.phone);
+    setProfileEmail(savedProfileContactRef.current.email);
+    setProfileAddress(savedProfileContactRef.current.address);
+    setProfilePhotoFile(null);
+    setProfilePhotoPreviewUrl(null);
+    setRemoveProfilePhoto(false);
+    setIsEditingProfile(false);
+    setProfileMsg(null);
   };
 
   const uploadDocument = async (formData: FormData) => {
@@ -1305,19 +1400,12 @@ export default function ConductorPage() {
                   {driverPortraitUrl && (
                     <span
                       role="img"
-                      aria-label="Foto del conductor obtenida de su DNI verificado"
-                      className="absolute inset-0 bg-slate-200 bg-no-repeat"
+                      aria-label="Foto de perfil del conductor"
+                      className="absolute inset-0 bg-slate-200 bg-cover bg-center bg-no-repeat"
                       style={{
                         backgroundImage: `url("${driverPortraitUrl}")`,
-                        backgroundPosition: "14% 44%",
-                        backgroundSize: "300% auto",
                       }}
                     />
-                  )}
-                  {driverPortraitUrl && (
-                    <span className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-white" title="Foto tomada del DNI verificado">
-                      <CheckCircle2 className="h-3 w-3" />
-                    </span>
                   )}
                 </div>
                 <div className="min-w-0">
@@ -1334,8 +1422,8 @@ export default function ConductorPage() {
                   </p>
                   <p className="mt-1 text-[10px] text-slate-400">
                     {driverPortraitUrl
-                      ? "Fotografía tomada del DNI aprobado por administración."
-                      : "La fotografía aparecerá cuando el DNI sea aprobado y tenga una imagen legible."}
+                      ? "Fotografía personal configurada para tu cuenta."
+                      : "Agrega una fotografía clara desde Editar datos."}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${identityVerification.state === "VERIFICADA" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : identityVerification.state === "OBSERVADA" ? "border-rose-500/20 bg-rose-500/10 text-rose-400" : "border-amber-500/20 bg-amber-500/10 text-amber-400"}`}>
@@ -1348,14 +1436,50 @@ export default function ConductorPage() {
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsEditingProfile((current) => !current)}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 self-start rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white sm:w-auto"
-              >
-                {isEditingProfile ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
-                {isEditingProfile ? "Cancelar" : "Editar datos"}
-              </button>
+              <div className="flex w-full shrink-0 flex-col gap-2 self-start sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isEditingProfile) handleCancelProfileEdit();
+                    else setIsEditingProfile(true);
+                  }}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white sm:w-auto"
+                >
+                  {isEditingProfile ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                  {isEditingProfile ? "Cancelar" : "Editar datos"}
+                </button>
+
+                {isEditingProfile && (
+                  <>
+                    <label
+                      htmlFor="driver-profile-photo"
+                      className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100"
+                    >
+                      <Camera className="h-4 w-4" />
+                      {driverPortraitUrl ? "Cambiar foto" : "Subir foto"}
+                    </label>
+                    <input
+                      id="driver-profile-photo"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={handleProfilePhotoSelection}
+                    />
+                    {driverPortraitUrl && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveProfilePhoto}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 px-4 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-50"
+                      >
+                        <Trash2 className="h-4 w-4" /> Quitar foto
+                      </button>
+                    )}
+                    <p className="max-w-44 text-center text-[10px] leading-relaxed text-slate-400">
+                      JPG, PNG o WEBP · máximo 5 MB
+                    </p>
+                  </>
+                )}
+              </div>
             </section>
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,0.65fr)]">

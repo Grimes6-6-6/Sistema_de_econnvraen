@@ -2607,14 +2607,21 @@ export async function updateDriverContact(
 
 export async function getDriverContact(
   user: SessionUser,
-): Promise<{ phone: string; email: string; address: string }> {
+): Promise<{
+  phone: string;
+  email: string;
+  address: string;
+  photoUrl: string | null;
+}> {
   const userId = requireUserId(user);
   const result = await query<{
     telefono: string | null;
     email: string | null;
     direccion: string | null;
+    foto_perfil_actualizada_at: string | null;
   }>(
-    `SELECT person.telefono, person.email, person.direccion
+    `SELECT person.telefono, person.email, person.direccion,
+            driver.foto_perfil_actualizada_at::text
      FROM usuarios user_account
      JOIN personas person ON person.id_persona = user_account.id_persona
      JOIN conductores driver ON driver.id_persona = person.id_persona
@@ -2631,5 +2638,98 @@ export async function getDriverContact(
     phone: result.rows[0].telefono || "",
     email: result.rows[0].email || "",
     address: result.rows[0].direccion || "",
+    photoUrl: result.rows[0].foto_perfil_actualizada_at
+      ? `/api/conductor/profile/photo?v=${encodeURIComponent(result.rows[0].foto_perfil_actualizada_at)}`
+      : null,
   };
+}
+
+export async function getDriverProfilePhoto(
+  user: SessionUser,
+): Promise<Buffer> {
+  const userId = requireUserId(user);
+  const result = await query<{ foto_perfil_contenido: Buffer | null }>(
+    `SELECT driver.foto_perfil_contenido
+     FROM usuarios user_account
+     JOIN conductores driver ON driver.id_persona = user_account.id_persona
+     WHERE user_account.id_usuario = $1
+       AND user_account.estado = 'ACTIVO'
+       AND driver.habilitado = TRUE
+     LIMIT 1`,
+    [userId],
+  );
+  const contents = result.rows[0]?.foto_perfil_contenido;
+  if (!contents) throw notFound("El conductor aún no tiene una foto de perfil.");
+  return contents;
+}
+
+export async function saveDriverProfilePhoto(
+  user: SessionUser,
+  contents: Buffer,
+): Promise<string> {
+  const userId = requireUserId(user);
+  const updatedAt = await withTransaction(async (client) => {
+    const result = await client.query<{ updated_at: string }>(
+      `UPDATE conductores driver
+       SET foto_perfil_contenido = $1,
+           foto_perfil_actualizada_at = NOW(),
+           updated_at = NOW()
+       FROM usuarios user_account
+       WHERE user_account.id_usuario = $2
+         AND user_account.id_persona = driver.id_persona
+         AND user_account.estado = 'ACTIVO'
+         AND driver.habilitado = TRUE
+       RETURNING driver.foto_perfil_actualizada_at::text AS updated_at`,
+      [contents, userId],
+    );
+    const timestamp = result.rows[0]?.updated_at;
+    if (!timestamp) throw notFound("No se encontró el perfil del conductor.");
+
+    await writeAuditLog(
+      {
+        userId,
+        agencyId: user.agenciaId ? parseEntityId(user.agenciaId, "A") : null,
+        action: "DRIVER_PROFILE_PHOTO_UPDATED",
+        entity: "conductor",
+        entityId: user.conductorId || null,
+        metadata: { bytes: contents.byteLength },
+      },
+      client,
+    );
+    return timestamp;
+  });
+  return `/api/conductor/profile/photo?v=${encodeURIComponent(updatedAt)}`;
+}
+
+export async function deleteDriverProfilePhoto(
+  user: SessionUser,
+): Promise<void> {
+  const userId = requireUserId(user);
+  await withTransaction(async (client) => {
+    const result = await client.query(
+      `UPDATE conductores driver
+       SET foto_perfil_contenido = NULL,
+           foto_perfil_actualizada_at = NULL,
+           updated_at = NOW()
+       FROM usuarios user_account
+       WHERE user_account.id_usuario = $1
+         AND user_account.id_persona = driver.id_persona
+         AND user_account.estado = 'ACTIVO'
+         AND driver.habilitado = TRUE
+       RETURNING driver.id_conductor`,
+      [userId],
+    );
+    if (!result.rowCount) throw notFound("No se encontró el perfil del conductor.");
+
+    await writeAuditLog(
+      {
+        userId,
+        agencyId: user.agenciaId ? parseEntityId(user.agenciaId, "A") : null,
+        action: "DRIVER_PROFILE_PHOTO_DELETED",
+        entity: "conductor",
+        entityId: user.conductorId || null,
+      },
+      client,
+    );
+  });
 }

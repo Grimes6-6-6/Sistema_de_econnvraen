@@ -53,6 +53,8 @@ const CURRENT_COLUMNS = {
     "identidad_observacion",
     "identidad_verificada_por",
     "identidad_verificada_at",
+    "foto_perfil_contenido",
+    "foto_perfil_actualizada_at",
   ],
   viajes: ["id_agencia", "motivo_cancelacion"],
   boletos: [
