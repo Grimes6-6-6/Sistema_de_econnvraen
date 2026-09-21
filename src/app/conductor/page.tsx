@@ -283,6 +283,18 @@ export default function ConductorPage() {
   const attentionDocumentCount = driverDocuments.filter((document) =>
     ["POR_VENCER", "VENCIDO", "OBSERVADO"].includes(document.state),
   ).length;
+  const verifiedDniImage =
+    identityVerification.state === "VERIFICADA"
+      ? driverDocuments.find(
+          (document) =>
+            document.documentType === "DNI" &&
+            (document.state === "VIGENTE" || document.state === "POR_VENCER") &&
+            document.file?.mimeType.startsWith("image/"),
+        )
+      : undefined;
+  const driverPortraitUrl = verifiedDniImage?.file
+    ? `${verifiedDniImage.file.downloadUrl}?preview=1`
+    : null;
   const totalDriverTrips = db.viajes.filter(
     (trip) => trip.id_conductor === conductorId,
   );
@@ -646,7 +658,7 @@ export default function ConductorPage() {
     <div className="corporate-app driver-portal grow flex flex-col min-h-screen text-slate-800">
       {/* ── Navigation Bar ─────────────────────────────────────────────── */}
       <header className="driver-header sticky top-0 z-30 border-b border-slate-200 bg-white">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <div className="min-w-0 flex items-center gap-3">
             <span className="h-10 w-10 rounded-lg bg-emerald-700 flex items-center justify-center font-bold text-sm text-white">
               {currentUser
@@ -703,7 +715,7 @@ export default function ConductorPage() {
         </div>
 
         {/* ── Bottom Tab bar ── */}
-        <div className="max-w-5xl mx-auto px-4 flex gap-1 pb-0">
+        <div className="mx-auto flex max-w-7xl gap-1 px-4 pb-0">
           {(
             [
               {
@@ -745,7 +757,7 @@ export default function ConductorPage() {
       </header>
 
       {/* ── Main Workspace ─────────────────────────────────────────────── */}
-      <main className="grow max-w-5xl mx-auto w-full px-4 py-8">
+      <main className="mx-auto w-full max-w-7xl grow px-4 py-8">
         {/* ══════════════════ TAB 1: VIAJES ══════════════════ */}
         {mainTab === "trips" && (
           <div className="animate-fade-in">
@@ -1267,7 +1279,7 @@ export default function ConductorPage() {
 
         {/* ══════════════════ TAB 2: PERFIL ══════════════════ */}
         {mainTab === "perfil" && (
-          <div className="animate-fade-in mx-auto max-w-4xl space-y-6">
+          <div className="animate-fade-in mx-auto max-w-6xl space-y-6">
             {/* Feedback alert */}
             {profileMsg && (
               <div
@@ -1284,10 +1296,29 @@ export default function ConductorPage() {
             {/* Profile summary */}
             <section className="flex flex-col gap-5 rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-premium sm:flex-row sm:items-center sm:p-6">
               <div className="flex min-w-0 grow items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/20 bg-linear-to-br from-emerald-500 to-green-700 text-2xl font-black text-white shadow-lg sm:h-20 sm:w-20 sm:text-3xl">
-                  {currentUser
-                    ? currentUser.nombres[0] + currentUser.apellidos[0]
-                    : "--"}
+                <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-emerald-400/30 bg-linear-to-br from-emerald-500 to-green-700 text-2xl font-black text-white shadow-lg sm:h-24 sm:w-24 sm:text-3xl">
+                  <span aria-hidden="true">
+                    {currentUser
+                      ? currentUser.nombres[0] + currentUser.apellidos[0]
+                      : "--"}
+                  </span>
+                  {driverPortraitUrl && (
+                    <span
+                      role="img"
+                      aria-label="Foto del conductor obtenida de su DNI verificado"
+                      className="absolute inset-0 bg-slate-200 bg-no-repeat"
+                      style={{
+                        backgroundImage: `url("${driverPortraitUrl}")`,
+                        backgroundPosition: "14% 44%",
+                        backgroundSize: "300% auto",
+                      }}
+                    />
+                  )}
+                  {driverPortraitUrl && (
+                    <span className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-white" title="Foto tomada del DNI verificado">
+                      <CheckCircle2 className="h-3 w-3" />
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-400">
@@ -1300,6 +1331,11 @@ export default function ConductorPage() {
                   </h2>
                   <p className="mt-1 text-xs font-semibold text-slate-400">
                     Conductor de ruta · {currentUser?.agenciaNombre || "Sin agencia asignada"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {driverPortraitUrl
+                      ? "Fotografía tomada del DNI aprobado por administración."
+                      : "La fotografía aparecerá cuando el DNI sea aprobado y tenga una imagen legible."}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${identityVerification.state === "VERIFICADA" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : identityVerification.state === "OBSERVADA" ? "border-rose-500/20 bg-rose-500/10 text-rose-400" : "border-amber-500/20 bg-amber-500/10 text-amber-400"}`}>
