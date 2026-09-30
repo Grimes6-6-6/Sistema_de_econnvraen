@@ -118,6 +118,10 @@ export async function listOperationalDocuments(
   const result = await query<DocumentRow>(
     `${DOCUMENT_SELECT}
      WHERE ($1::integer IS NULL OR document.id_agencia = $1)
+       AND NOT (
+         document.tipo_documento = 'OTRO'
+         AND document.numero = 'FOTO-PERFIL'
+       )
      ORDER BY document.fecha_vencimiento, titular_nombre`,
     [agencyId],
   );
@@ -223,6 +227,10 @@ export async function listDriverOperationalDocuments(
   const result = await query<DocumentRow>(
     `${DOCUMENT_SELECT}
      WHERE document.id_agencia = $1
+       AND NOT (
+         document.tipo_documento = 'OTRO'
+         AND document.numero = 'FOTO-PERFIL'
+       )
        AND (
          document.id_conductor = $2
          OR (

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth/types";
 import {
@@ -2618,13 +2618,24 @@ export async function getDriverContact(
     telefono: string | null;
     email: string | null;
     direccion: string | null;
-    foto_perfil_actualizada_at: string | null;
+    foto_actualizada_at: string | null;
   }>(
     `SELECT person.telefono, person.email, person.direccion,
-            driver.foto_perfil_actualizada_at::text
+            profile_photo.updated_at::text AS foto_actualizada_at
      FROM usuarios user_account
      JOIN personas person ON person.id_persona = user_account.id_persona
      JOIN conductores driver ON driver.id_persona = person.id_persona
+     LEFT JOIN LATERAL (
+       SELECT document.updated_at
+       FROM documentos_operativos document
+       WHERE document.id_conductor = driver.id_conductor
+         AND document.titular_tipo = 'CONDUCTOR'
+         AND document.tipo_documento = 'OTRO'
+         AND document.numero = 'FOTO-PERFIL'
+         AND document.archivo_contenido IS NOT NULL
+       ORDER BY document.id_documento DESC
+       LIMIT 1
+     ) profile_photo ON TRUE
      WHERE user_account.id_usuario = $1
        AND user_account.estado = 'ACTIVO'
        AND driver.habilitado = TRUE
@@ -2638,8 +2649,8 @@ export async function getDriverContact(
     phone: result.rows[0].telefono || "",
     email: result.rows[0].email || "",
     address: result.rows[0].direccion || "",
-    photoUrl: result.rows[0].foto_perfil_actualizada_at
-      ? `/api/conductor/profile/photo?v=${encodeURIComponent(result.rows[0].foto_perfil_actualizada_at)}`
+    photoUrl: result.rows[0].foto_actualizada_at
+      ? `/api/conductor/profile/photo?v=${encodeURIComponent(result.rows[0].foto_actualizada_at)}`
       : null,
   };
 }
@@ -2648,17 +2659,24 @@ export async function getDriverProfilePhoto(
   user: SessionUser,
 ): Promise<Buffer> {
   const userId = requireUserId(user);
-  const result = await query<{ foto_perfil_contenido: Buffer | null }>(
-    `SELECT driver.foto_perfil_contenido
+  const result = await query<{ archivo_contenido: Buffer | null }>(
+    `SELECT document.archivo_contenido
      FROM usuarios user_account
      JOIN conductores driver ON driver.id_persona = user_account.id_persona
+     JOIN documentos_operativos document
+       ON document.id_conductor = driver.id_conductor
+      AND document.titular_tipo = 'CONDUCTOR'
+      AND document.tipo_documento = 'OTRO'
+      AND document.numero = 'FOTO-PERFIL'
      WHERE user_account.id_usuario = $1
        AND user_account.estado = 'ACTIVO'
        AND driver.habilitado = TRUE
+       AND document.archivo_contenido IS NOT NULL
+     ORDER BY document.id_documento DESC
      LIMIT 1`,
     [userId],
   );
-  const contents = result.rows[0]?.foto_perfil_contenido;
+  const contents = result.rows[0]?.archivo_contenido;
   if (!contents) throw notFound("El conductor aún no tiene una foto de perfil.");
   return contents;
 }
@@ -2669,21 +2687,66 @@ export async function saveDriverProfilePhoto(
 ): Promise<string> {
   const userId = requireUserId(user);
   const updatedAt = await withTransaction(async (client) => {
-    const result = await client.query<{ updated_at: string }>(
-      `UPDATE conductores driver
-       SET foto_perfil_contenido = $1,
-           foto_perfil_actualizada_at = NOW(),
-           updated_at = NOW()
+    const driver = await client.query<{
+      id_conductor: number;
+      id_agencia_base: number;
+    }>(
+      `SELECT driver.id_conductor, driver.id_agencia_base
        FROM usuarios user_account
-       WHERE user_account.id_usuario = $2
-         AND user_account.id_persona = driver.id_persona
+       JOIN conductores driver ON driver.id_persona = user_account.id_persona
+       WHERE user_account.id_usuario = $1
          AND user_account.estado = 'ACTIVO'
          AND driver.habilitado = TRUE
-       RETURNING driver.foto_perfil_actualizada_at::text AS updated_at`,
-      [contents, userId],
+       FOR SHARE`,
+      [userId],
+    );
+    const currentDriver = driver.rows[0];
+    if (!currentDriver) throw notFound("No se encontró el perfil del conductor.");
+
+    const sha256 = createHash("sha256").update(contents).digest("hex");
+    const result = await client.query<{ updated_at: string }>(
+      `INSERT INTO documentos_operativos (
+         id_agencia, titular_tipo, id_conductor, id_vehiculo,
+         tipo_documento, numero, fecha_emision, fecha_vencimiento,
+         estado, observacion, creado_por, origen_registro,
+         archivo_nombre, archivo_mime, archivo_tamano, archivo_sha256,
+         archivo_contenido
+       )
+       VALUES (
+         $1, 'CONDUCTOR', $2, NULL,
+         'OTRO', 'FOTO-PERFIL', CURRENT_DATE, (CURRENT_DATE + INTERVAL '100 years')::date,
+         'VIGENTE', 'Fotografía de perfil del conductor', $3, 'CONDUCTOR',
+         'foto-perfil.webp', 'image/webp', $4, $5, $6
+       )
+       ON CONFLICT (
+         titular_tipo,
+         (COALESCE(id_conductor, 0)),
+         (COALESCE(id_vehiculo, 0)),
+         tipo_documento,
+         numero
+       ) DO UPDATE SET
+         archivo_nombre = EXCLUDED.archivo_nombre,
+         archivo_mime = EXCLUDED.archivo_mime,
+         archivo_tamano = EXCLUDED.archivo_tamano,
+         archivo_sha256 = EXCLUDED.archivo_sha256,
+         archivo_contenido = EXCLUDED.archivo_contenido,
+         observacion = EXCLUDED.observacion,
+         creado_por = EXCLUDED.creado_por,
+         origen_registro = 'CONDUCTOR',
+         estado = 'VIGENTE',
+         updated_at = NOW()
+       RETURNING updated_at::text`,
+      [
+        currentDriver.id_agencia_base,
+        currentDriver.id_conductor,
+        userId,
+        contents.byteLength,
+        sha256,
+        contents,
+      ],
     );
     const timestamp = result.rows[0]?.updated_at;
-    if (!timestamp) throw notFound("No se encontró el perfil del conductor.");
+    if (!timestamp) throw notFound("No se pudo guardar la fotografía.");
 
     await writeAuditLog(
       {
@@ -2692,7 +2755,7 @@ export async function saveDriverProfilePhoto(
         action: "DRIVER_PROFILE_PHOTO_UPDATED",
         entity: "conductor",
         entityId: user.conductorId || null,
-        metadata: { bytes: contents.byteLength },
+        metadata: { bytes: contents.byteLength, sha256 },
       },
       client,
     );
@@ -2707,19 +2770,19 @@ export async function deleteDriverProfilePhoto(
   const userId = requireUserId(user);
   await withTransaction(async (client) => {
     const result = await client.query(
-      `UPDATE conductores driver
-       SET foto_perfil_contenido = NULL,
-           foto_perfil_actualizada_at = NULL,
-           updated_at = NOW()
-       FROM usuarios user_account
+      `DELETE FROM documentos_operativos document
+       USING usuarios user_account, conductores driver
        WHERE user_account.id_usuario = $1
          AND user_account.id_persona = driver.id_persona
          AND user_account.estado = 'ACTIVO'
          AND driver.habilitado = TRUE
-       RETURNING driver.id_conductor`,
+         AND document.id_conductor = driver.id_conductor
+         AND document.titular_tipo = 'CONDUCTOR'
+         AND document.tipo_documento = 'OTRO'
+         AND document.numero = 'FOTO-PERFIL'
+       RETURNING document.id_documento`,
       [userId],
     );
-    if (!result.rowCount) throw notFound("No se encontró el perfil del conductor.");
 
     await writeAuditLog(
       {
@@ -2728,6 +2791,7 @@ export async function deleteDriverProfilePhoto(
         action: "DRIVER_PROFILE_PHOTO_DELETED",
         entity: "conductor",
         entityId: user.conductorId || null,
+        metadata: { existed: Boolean(result.rowCount) },
       },
       client,
     );
