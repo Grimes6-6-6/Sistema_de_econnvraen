@@ -755,10 +755,20 @@ export default function ConductorPage() {
       <header className="driver-header sticky top-0 z-30 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <div className="min-w-0 flex items-center gap-3">
-            <span className="h-10 w-10 rounded-lg bg-emerald-700 flex items-center justify-center font-bold text-sm text-white">
-              {currentUser
-                ? currentUser.nombres[0] + currentUser.apellidos[0]
-                : "--"}
+            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-emerald-700 text-sm font-bold text-white">
+              <span aria-hidden="true">
+                {currentUser
+                  ? currentUser.nombres[0] + currentUser.apellidos[0]
+                  : "--"}
+              </span>
+              {driverPortraitUrl && (
+                <span
+                  role="img"
+                  aria-label="Foto de perfil del conductor"
+                  className="absolute inset-0 bg-slate-200 bg-cover bg-center bg-no-repeat"
+                  style={{ backgroundImage: `url("${driverPortraitUrl}")` }}
+                />
+              )}
             </span>
             <div className="min-w-0">
               <h3 className="truncate text-sm font-black tracking-wide">
