@@ -137,7 +137,7 @@ export async function issueSmsChallenge(
     );
     if (!stored.rowCount) throw new Error("SMS_CHALLENGE_SESSION_CHANGED");
     await auditSms(target, "AUTH_MFA_SMS_SENT", ipHash, phone, {
-      provider: "TWILIO",
+      provider: message.provider,
     });
     return {
       maskedPhone: maskMobile(phone),
@@ -157,7 +157,10 @@ export async function issueSmsChallenge(
       [target.tokenHash, target.userId, reservationTime],
     );
     await auditSms(target, "AUTH_MFA_SMS_FAILED", ipHash, phone, {
-      provider: "TWILIO",
+      provider:
+        error instanceof SmsProviderError
+          ? error.provider
+          : process.env.SMS_PROVIDER?.trim().toUpperCase() || "UNKNOWN",
       providerCode:
         error instanceof SmsProviderError ? error.providerCode : null,
       providerStatus:
@@ -171,6 +174,8 @@ export async function issueSmsChallenge(
                 "TWILIO_ACCOUNT_SID_INVALID",
                 "TWILIO_API_KEY_SID_INVALID",
                 "TWILIO_FROM_NUMBER_INVALID",
+                "TEXTBEE_SIM_SUBSCRIPTION_ID_INVALID",
+                "SMS_PROVIDER_INVALID",
               ].includes(error.message)
             ? error.message
             : "INTERNAL",

@@ -39,7 +39,7 @@ Plataforma web empresarial para gestionar pasajes, viajes, encomiendas, recojos 
 
    - `DATABASE_URL`
    - `AUTH_HASH_PEPPER` con un valor aleatorio de 32 caracteres o más
-   - credenciales `TWILIO_*` para habilitar los códigos por SMS
+   - credenciales de TextBee (`TEXTBEE_*`) o Twilio (`TWILIO_*`) para habilitar los códigos por SMS
    - las cuatro contraseñas `SEED_*_PASSWORD` únicamente durante la carga inicial
 
 3. Preparar y validar la base de datos:
@@ -78,7 +78,7 @@ npm audit
 3. Definir `AUTH_HASH_PEPPER`; el servidor rechaza la operación de producción si falta.
 4. Activar `TRUST_PROXY=true` solo si el proxy elimina y vuelve a escribir de forma confiable los encabezados reenviados.
 5. Definir `ALLOWED_ORIGIN` solo cuando exista un cliente web autorizado en otro dominio.
-6. Configurar `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET` y `TWILIO_FROM_NUMBER` antes de activar la verificación SMS para una cuenta. `TWILIO_SMS_TRIAL_TEMPLATE=true` se usa únicamente durante la prueba gratuita y debe cambiarse a `false` al actualizar la cuenta.
+6. Elegir `SMS_PROVIDER=TEXTBEE` y configurar `TEXTBEE_API_KEY` (más `TEXTBEE_DEVICE_ID` y `TEXTBEE_SIM_SUBSCRIPTION_ID` si se desea fijar un dispositivo/SIM), o elegir `SMS_PROVIDER=TWILIO` y configurar las credenciales `TWILIO_*`, antes de activar la verificación SMS para una cuenta. Las credenciales son exclusivas del servidor y nunca deben usar el prefijo `NEXT_PUBLIC_`.
 7. Ejecutar `npm run db:migrate` antes de iniciar la nueva versión. Las migraciones son acumulativas y no deben editarse después de aplicarse.
    Las migraciones deben ejecutarse con la cuenta administrativa de Neon. Vercel usa una cuenta operativa limitada y valida el esquema antes de compilar. Las migraciones aplicadas forman un historial inmutable: no se borran, renombran ni editan; cualquier cambio se agrega en un archivo nuevo. Las reversiones controladas 008 a 014 están en `db/rollbacks/` y deben usarse únicamente sobre un respaldo o una rama aislada. La reversión 014 restaura la estructura antigua de TOTP, pero no puede recuperar secretos ni códigos eliminados.
 8. Compilar e iniciar:
@@ -96,7 +96,7 @@ npm audit
 - Consulta de datos por DNI mediante un proveedor externo: configurar `RENIEC_API_TOKEN`. ApiPeruDev usa registros públicos y no es una conexión directa con RENIEC. El modo simulado debe permanecer desactivado en demostración y producción.
 - Emisión fiscal SUNAT/PSE: la plataforma conserva el estado interno del comprobante, pero el envío a un proveedor fiscal requiere contratar y configurar dicho servicio.
 - Mapas: la visualización usa teselas de OpenStreetMap; para operación intensiva debe contratarse un proveedor con garantía de servicio o alojar teselas propias.
-- SMS: la integración está preparada con Twilio. En una cuenta de prueba solo deben activarse destinatarios permitidos por el proveedor; para operar con todo el personal debe habilitarse el servicio y registrarse un celular real para cada usuario protegido.
+- SMS: la integración admite TextBee mediante un teléfono Android o Twilio. Con TextBee, el teléfono debe permanecer conectado, con el gateway habilitado, permiso para SMS, inicio automático y sin restricción de batería. Con Twilio de prueba solo pueden usarse destinatarios permitidos por el proveedor.
 - Correo o WhatsApp: requieren proveedor, credenciales y consentimiento de los destinatarios antes de activarse.
 
 ## Operación y seguridad

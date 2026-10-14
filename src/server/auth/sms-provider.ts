@@ -5,6 +5,15 @@ import { randomInt } from "node:crypto";
 const PERU_MOBILE = /^9\d{8}$/;
 const E164_PERU_MOBILE = /^\+519\d{8}$/;
 const TWILIO_TRIAL_TEMPLATE = "sms_2fa";
+const TEXTBEE_SEND_URL = "https://api.textbee.dev/api/v1/gateway/send-sms";
+
+export type SmsProviderName = "TEXTBEE" | "TWILIO";
+
+interface SmsSendResult {
+  code: string;
+  messageSid: string;
+  provider: SmsProviderName;
+}
 
 interface TwilioMessageResponse {
   sid?: string;
@@ -14,15 +23,36 @@ interface TwilioMessageResponse {
   message?: string;
 }
 
+interface TextbeeSendResponse {
+  data?: {
+    success?: boolean;
+    message?: string;
+    smsBatchId?: string;
+    recipientCount?: number;
+    successCount?: number;
+    failureCount?: number;
+    warning?: string;
+  };
+  message?: string;
+}
+
 export class SmsProviderError extends Error {
   constructor(
     public readonly providerCode: number | null = null,
     public readonly httpStatus: number | null = null,
     public readonly failureKind: "NETWORK" | "REJECTED" | "INVALID_RESPONSE" = "REJECTED",
+    public readonly provider: SmsProviderName | null = null,
   ) {
     super("SMS_PROVIDER_ERROR");
     this.name = "SmsProviderError";
   }
+}
+
+function resolveProvider(): SmsProviderName {
+  const configured = process.env.SMS_PROVIDER?.trim().toUpperCase();
+  if (configured === "TEXTBEE" || configured === "TWILIO") return configured;
+  if (configured) throw new Error("SMS_PROVIDER_INVALID");
+  return process.env.TEXTBEE_API_KEY?.trim() ? "TEXTBEE" : "TWILIO";
 }
 
 function readTwilioConfig() {
@@ -47,9 +77,29 @@ function readTwilioConfig() {
   return { accountSid, apiKeySid, apiKeySecret, fromNumber };
 }
 
+function readTextbeeConfig() {
+  const apiKey = process.env.TEXTBEE_API_KEY?.trim();
+  const deviceId = process.env.TEXTBEE_DEVICE_ID?.trim();
+  const rawSimSubscriptionId = process.env.TEXTBEE_SIM_SUBSCRIPTION_ID?.trim();
+
+  if (!apiKey) throw new Error("SMS_PROVIDER_NOT_CONFIGURED");
+
+  let simSubscriptionId: number | undefined;
+  if (rawSimSubscriptionId) {
+    simSubscriptionId = Number(rawSimSubscriptionId);
+    if (!Number.isInteger(simSubscriptionId) || simSubscriptionId < 0) {
+      throw new Error("TEXTBEE_SIM_SUBSCRIPTION_ID_INVALID");
+    }
+  }
+
+  return { apiKey, deviceId: deviceId || undefined, simSubscriptionId };
+}
+
 export function isSmsProviderConfigured(): boolean {
   try {
-    readTwilioConfig();
+    const provider = resolveProvider();
+    if (provider === "TEXTBEE") readTextbeeConfig();
+    else readTwilioConfig();
     return true;
   } catch {
     return false;
@@ -71,7 +121,58 @@ function extractTrialCode(messageBody: string | undefined): string | null {
   return messageBody?.match(/verification code is\s+(\d{6})/i)?.[1] || null;
 }
 
-export async function sendSmsOtp(phone: string): Promise<{ code: string; messageSid: string }> {
+async function sendTextbeeSmsOtp(phone: string): Promise<SmsSendResult> {
+  const config = readTextbeeConfig();
+  const generatedCode = String(randomInt(100_000, 1_000_000));
+  const body: Record<string, unknown> = {
+    message: `ECONNVRAE: tu código de acceso es ${generatedCode}. Vence en 5 minutos. No lo compartas.`,
+    recipients: [phone],
+  };
+  if (config.deviceId) body.deviceId = config.deviceId;
+  if (config.simSubscriptionId !== undefined) {
+    body.simSubscriptionId = config.simSubscriptionId;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(TEXTBEE_SEND_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey,
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new SmsProviderError(null, null, "NETWORK", "TEXTBEE");
+  }
+
+  const payload = (await response.json().catch(() => null)) as TextbeeSendResponse | null;
+  const result = payload?.data;
+  const successfulCount = result?.successCount || 0;
+  const failedCount = result?.failureCount || 0;
+  const accepted =
+    result?.success === true || Boolean(result?.smsBatchId) || successfulCount > 0;
+  if (
+    !response.ok ||
+    !result ||
+    result.success === false ||
+    (failedCount > 0 && successfulCount <= 0) ||
+    !accepted
+  ) {
+    throw new SmsProviderError(null, response.status, "REJECTED", "TEXTBEE");
+  }
+
+  return {
+    code: generatedCode,
+    messageSid: result.smsBatchId || "textbee-accepted",
+    provider: "TEXTBEE",
+  };
+}
+
+async function sendTwilioSmsOtp(phone: string): Promise<SmsSendResult> {
   const config = readTwilioConfig();
   const trialMode = process.env.TWILIO_SMS_TRIAL_TEMPLATE === "true";
   const generatedCode = String(randomInt(100_000, 1_000_000));
@@ -103,7 +204,7 @@ export async function sendSmsOtp(phone: string): Promise<{ code: string; message
       },
     );
   } catch {
-    throw new SmsProviderError(null, null, "NETWORK");
+    throw new SmsProviderError(null, null, "NETWORK", "TWILIO");
   }
 
   const payload = (await response.json().catch(() => null)) as TwilioMessageResponse | null;
@@ -112,12 +213,19 @@ export async function sendSmsOtp(phone: string): Promise<{ code: string; message
       payload?.code || null,
       response.status,
       "REJECTED",
+      "TWILIO",
     );
   }
 
   const code = trialMode ? extractTrialCode(payload.body) : generatedCode;
   if (!code) {
-    throw new SmsProviderError(null, response.status, "INVALID_RESPONSE");
+    throw new SmsProviderError(null, response.status, "INVALID_RESPONSE", "TWILIO");
   }
-  return { code, messageSid: payload.sid };
+  return { code, messageSid: payload.sid, provider: "TWILIO" };
+}
+
+export async function sendSmsOtp(phone: string): Promise<SmsSendResult> {
+  return resolveProvider() === "TEXTBEE"
+    ? sendTextbeeSmsOtp(phone)
+    : sendTwilioSmsOtp(phone);
 }

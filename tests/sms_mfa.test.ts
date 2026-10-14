@@ -11,6 +11,7 @@ import {
 
 describe("autenticación por SMS", () => {
   beforeEach(() => {
+    vi.stubEnv("SMS_PROVIDER", "TWILIO");
     vi.stubEnv("TWILIO_ACCOUNT_SID", `AC${"1".repeat(32)}`);
     vi.stubEnv("TWILIO_API_KEY_SID", `SK${"2".repeat(32)}`);
     vi.stubEnv("TWILIO_API_KEY_SECRET", "secret-value-for-tests");
@@ -51,7 +52,50 @@ describe("autenticación por SMS", () => {
     await expect(sendSmsOtp("+51973187642")).resolves.toEqual({
       code: "654321",
       messageSid: `SM${"3".repeat(32)}`,
+      provider: "TWILIO",
     });
+  });
+
+  it("envía el código mediante el gateway Android de TextBee", async () => {
+    vi.stubEnv("SMS_PROVIDER", "TEXTBEE");
+    vi.stubEnv("TEXTBEE_API_KEY", "textbee-api-key-for-tests");
+    vi.stubEnv("TEXTBEE_DEVICE_ID", "test-device-id");
+    vi.stubEnv("TEXTBEE_SIM_SUBSCRIPTION_ID", "1");
+    let requestBody: Record<string, unknown> | null = null;
+    let requestMessage = "";
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestMessage = String(requestBody.message);
+      return new Response(
+        JSON.stringify({
+          data: {
+            success: true,
+            smsBatchId: "textbee-batch-123",
+            recipientCount: 1,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await sendSmsOtp("+51973187642");
+
+    expect(result).toMatchObject({
+      messageSid: "textbee-batch-123",
+      provider: "TEXTBEE",
+    });
+    expect(result.code).toMatch(/^\d{6}$/);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.textbee.dev/api/v1/gateway/send-sms",
+      expect.objectContaining({ method: "POST", cache: "no-store" }),
+    );
+    expect(requestBody).toMatchObject({
+      recipients: ["+51973187642"],
+      deviceId: "test-device-id",
+      simSubscriptionId: 1,
+    });
+    expect(requestMessage).toContain(result.code);
   });
 
   it("convierte el error del proveedor en un error controlado", async () => {
