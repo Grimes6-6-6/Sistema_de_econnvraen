@@ -31,7 +31,10 @@ interface TextbeeSendResponse {
     recipientCount?: number;
     successCount?: number;
     failureCount?: number;
-    warning?: string;
+    warning?: {
+      code?: string;
+      message?: string;
+    };
   };
   message?: string;
 }
@@ -145,7 +148,11 @@ async function sendTextbeeSmsOtp(phone: string): Promise<SmsSendResult> {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
-  } catch {
+  } catch (error) {
+    console.error("TextBee SMS request failed", {
+      failureKind: "NETWORK",
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
     throw new SmsProviderError(null, null, "NETWORK", "TEXTBEE");
   }
 
@@ -162,6 +169,14 @@ async function sendTextbeeSmsOtp(phone: string): Promise<SmsSendResult> {
     (failedCount > 0 && successfulCount <= 0) ||
     !accepted
   ) {
+    console.error("TextBee SMS request failed", {
+      failureKind: "REJECTED",
+      status: response.status,
+      providerMessage: result?.message || payload?.message || null,
+      warningCode: result?.warning?.code || null,
+      successCount: successfulCount,
+      failureCount: failedCount,
+    });
     throw new SmsProviderError(null, response.status, "REJECTED", "TEXTBEE");
   }
 
