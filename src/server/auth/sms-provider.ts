@@ -24,6 +24,7 @@ interface TwilioMessageResponse {
 }
 
 interface TextbeeSendResponse {
+  error?: string;
   data?: {
     success?: boolean;
     message?: string;
@@ -37,6 +38,24 @@ interface TextbeeSendResponse {
     };
   };
   message?: string;
+}
+
+// TextBee's HttpException responses use `error`, not `message`.
+// Only log recognized configuration errors; provider text may contain user data.
+function textbeeFailureReason(payload: TextbeeSendResponse | null): string {
+  const message = payload?.error || payload?.data?.message || payload?.message;
+  switch (message) {
+    case "Device not found":
+      return "DEVICE_NOT_FOUND";
+    case "Invalid device id":
+      return "DEVICE_ID_INVALID";
+    case "Device does not exist or is not enabled":
+      return "DEVICE_MISSING_OR_DISABLED";
+    case "No enabled device found. Enable a device or pass a deviceId.":
+      return "NO_ENABLED_DEVICE";
+    default:
+      return "UNCLASSIFIED_PROVIDER_ERROR";
+  }
 }
 
 export class SmsProviderError extends Error {
@@ -172,7 +191,7 @@ async function sendTextbeeSmsOtp(phone: string): Promise<SmsSendResult> {
     console.error("TextBee SMS request failed", {
       failureKind: "REJECTED",
       status: response.status,
-      providerMessage: result?.message || payload?.message || null,
+      providerReason: textbeeFailureReason(payload),
       warningCode: result?.warning?.code || null,
       successCount: successfulCount,
       failureCount: failedCount,
