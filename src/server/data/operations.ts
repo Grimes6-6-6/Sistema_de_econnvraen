@@ -411,6 +411,21 @@ async function readSnapshot(
     throw forbidden("Tu usuario no está vinculado a un conductor habilitado.");
   }
 
+  // A scheduled departure that has already passed can no longer be started or
+  // cancelled. Close it automatically so its vehicle and driver are released
+  // the next time the dashboard is opened.
+  await executor.query(
+    `UPDATE viajes
+     SET estado = 'CANCELADO',
+         motivo_cancelacion = COALESCE(motivo_cancelacion, 'Viaje caducado: la hora de salida ya pasó.'),
+         updated_at = NOW()
+     WHERE estado = 'PROGRAMADO'
+       AND fecha_hora_salida <= NOW()
+       AND ($1::integer IS NULL OR id_agencia = $1)
+       AND ($2::integer IS NULL OR id_conductor = $2)`,
+    [agencyId, driverId],
+  );
+
   const [routes, vehicles, drivers, trips, tickets, parcels, tracking, pickups] =
     await Promise.all([
       executor.query<RouteRow>(
