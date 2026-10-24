@@ -49,17 +49,16 @@ function hashToken(token: string): string {
 }
 
 function numericUserId(user: SessionUser): number {
-  const match = /^U(\d{1,10})$/.exec(user.id);
-  if (match) return Number(match[1]);
-  const parsed = parseEntityId(user.id, "U");
-  return parsed ?? 0;
+  const match = /^U(\d{3,10})$/.exec(user.id);
+  if (!match) throw new Error("INVALID_SESSION_USER_ID");
+  return Number(match[1]);
 }
 
 function numericAgencyId(user: SessionUser): number | null {
   if (!user.agenciaId) return null;
-  const match = /^A(\d{1,10})$/.exec(user.agenciaId);
-  if (match) return Number(match[1]);
-  return parseEntityId(user.agenciaId, "A");
+  const match = /^A(\d{2,10})$/.exec(user.agenciaId);
+  if (!match) throw new Error("INVALID_SESSION_AGENCY_ID");
+  return Number(match[1]);
 }
 
 function toSessionUser(row: SessionRow): SessionUser {
@@ -151,13 +150,7 @@ export async function createSession(
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const userId = numericUserId(user);
-  let agencyId = numericAgencyId(user);
-  if (agencyId === null) {
-    const fallbackAgency = await query<{ id_agencia: number }>(
-      `SELECT id_agencia FROM agencias WHERE estado = 'ACTIVA' ORDER BY id_agencia LIMIT 1`,
-    );
-    agencyId = fallbackAgency.rows[0]?.id_agencia ?? null;
-  }
+  const agencyId = numericAgencyId(user);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_SECONDS * 1000);
   const smsChallengeExpiresAt = options?.smsChallenge
     ? new Date(Date.now() + SMS_CHALLENGE_DURATION_SECONDS * 1000)
