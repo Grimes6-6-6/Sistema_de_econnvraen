@@ -230,14 +230,9 @@ export default function DashboardPage() {
     router.refresh();
   };
 
-  // Helper date
-  const getTodayDateString = () => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
+  // Helper date — use Peru wall-clock so the date always matches the
+  // timezone used by the database (America/Lima).
+  const getTodayDateString = () => getPeruWallClock().date;
 
   // ==========================================================================
   // TAB: OVERVIEW (DASHBOARD)
@@ -3379,7 +3374,7 @@ export default function DashboardPage() {
                     if (event.key === "Escape") setIsNewPickupModalOpen(false);
                     trapDialogFocus(event);
                   }}
-                  className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
+                  className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
                 >
                   <div className="flex items-center justify-between border-b border-white/10 pb-3">
                     <h3 id="pickup-dialog-title" className="font-black text-white">Nueva solicitud de recojo</h3>
