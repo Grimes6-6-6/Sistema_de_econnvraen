@@ -333,7 +333,8 @@ async function getConductorId(userId: number): Promise<number | null> {
   const result = await query<NumericIdRow>(
     `SELECT c.id_conductor AS id
      FROM conductores c
-     WHERE c.id_usuario = $1
+     JOIN usuarios u ON u.id_persona = c.id_persona
+     WHERE u.id_usuario = $1
      LIMIT 1`,
     [userId],
   );
@@ -449,17 +450,14 @@ async function readSnapshot(
         [agencyId],
       ),
       executor.query<DriverRow>(
-        `SELECT c.id_conductor,
-                COALESCE(p.nombres, '') AS nombres,
-                COALESCE(p.apellidos, '') AS apellidos,
-                COALESCE(c.licencia, '') AS nro_licencia,
-                COALESCE(c.categoria, '') AS categoria_licencia,
-                c.fecha_vencimiento::text
+        `SELECT c.id_conductor, p.nombres, p.apellidos, c.nro_licencia,
+                c.categoria_licencia, c.fecha_vencimiento::text
          FROM conductores c
-         LEFT JOIN usuarios u ON u.id_usuario = c.id_usuario
-         LEFT JOIN personas p ON p.id_persona = u.id_persona
+         JOIN personas p ON p.id_persona = c.id_persona
+         WHERE c.habilitado = TRUE
+           AND ($1::integer IS NULL OR c.id_agencia_base = $1)
          ORDER BY p.apellidos, p.nombres`,
-        [],
+        [agencyId],
       ),
       executor.query<TripRow>(
         `SELECT v.id_viaje, v.id_ruta, v.id_vehiculo, v.id_conductor,
@@ -1844,10 +1842,11 @@ export async function assignPickup(
   if (!pickupId || !driverId) throw notFound("La solicitud o el conductor no existe.");
 
   return withTransaction(async (client) => {
-    const driver = await client.query<{ user_id: number; id_agencia: number | null }>(
-      `SELECT c.id_usuario AS user_id, NULL::integer AS id_agencia
+    const driver = await client.query<{ user_id: number; id_agencia: number }>(
+      `SELECT u.id_usuario AS user_id, c.id_agencia_base AS id_agencia
        FROM conductores c
-       WHERE c.id_conductor = $1`,
+       JOIN usuarios u ON u.id_persona = c.id_persona
+       WHERE c.id_conductor = $1 AND c.habilitado = TRUE AND u.estado = 'ACTIVO'`,
       [driverId],
     );
     if (!driver.rows[0]) throw conflict("DRIVER_NOT_AVAILABLE", "El conductor no está disponible.");
@@ -2429,8 +2428,7 @@ export async function getTripIncidents(
        TO_CHAR(i.created_at AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI:SS') AS created_at
      FROM incidencias_viajes i
      JOIN conductores c ON c.id_conductor = i.id_conductor
-     LEFT JOIN usuarios u ON u.id_usuario = c.id_usuario
-     LEFT JOIN personas p ON p.id_persona = u.id_persona
+     JOIN personas p ON p.id_persona = c.id_persona
      JOIN agencias a ON a.id_agencia = i.id_agencia
      JOIN viajes v ON v.id_viaje = i.id_viaje
      WHERE i.id_viaje = $1

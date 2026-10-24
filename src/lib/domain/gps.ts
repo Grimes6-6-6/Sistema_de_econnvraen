@@ -1,6 +1,6 @@
 import type { VehicleLocation } from "./types";
 
-export const GPS_FRESH_SECONDS = 900;
+export const GPS_FRESH_SECONDS = 45;
 export const GPS_RETRY_MAX_AGE_MS = 15 * 60_000;
 
 export function isDriverTripVisible(trip: { id_conductor: string; fecha: string; estado: string }, driverId: string, today: string) {
