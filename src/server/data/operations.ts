@@ -261,7 +261,7 @@ function mapTrip(row: TripRow): Viaje {
     id_conductor: formatEntityId("C", row.id_conductor, 2),
     fecha: row.fecha,
     hora: row.hora,
-    estado: TRIP_STATUS_FROM_DB[row.estado] || "programado",
+    estado: TRIP_STATUS_FROM_DB[row.estado?.toUpperCase()] || "programado",
     precio: asNumber(row.precio_final),
     fechaLlegada: row.fecha_llegada,
   };
