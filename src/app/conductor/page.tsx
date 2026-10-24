@@ -1891,25 +1891,36 @@ export default function ConductorPage() {
                           Iniciar GPS
                         </button>
                       ) : scheduledTrip ? (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            await handleTripStatus("en_curso", scheduledTrip);
-                          }}
-                          disabled={!conductorId || pendingAction === "trip-en_curso"}
-                          className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-premium"
-                        >
-                          <Navigation className="h-4 w-4" />
-                          {pendingAction === "trip-en_curso" ? "Iniciando…" : "Iniciar Viaje y GPS"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await handleTripStatus("en_curso", scheduledTrip);
+                            }}
+                            disabled={!conductorId || pendingAction === "trip-en_curso"}
+                            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-premium"
+                          >
+                            <Navigation className="h-4 w-4" />
+                            {pendingAction === "trip-en_curso" ? "Iniciando…" : "Iniciar Viaje y GPS"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => startTracking(conductorId)}
+                            disabled={!conductorId}
+                            className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all cursor-pointer border border-white/10"
+                          >
+                            <Zap className="h-3.5 w-3.5 text-yellow-400" />
+                            Solo GPS
+                          </button>
+                        </div>
                       ) : (
                         <button
                           type="button"
                           onClick={() => startTracking(conductorId)}
                           disabled={!conductorId}
-                          className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
+                          className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-premium"
                         >
-                          <Navigation className="h-3.5 w-3.5 text-emerald-400" />
+                          <Zap className="h-4 w-4 text-yellow-300" />
                           Activar GPS
                         </button>
                       )}
