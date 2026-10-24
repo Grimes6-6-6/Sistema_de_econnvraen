@@ -79,7 +79,7 @@ export async function authenticateUser(
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
-     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
      LEFT JOIN LATERAL (
        SELECT ua.id_agencia
        FROM usuarios_agencias ua
