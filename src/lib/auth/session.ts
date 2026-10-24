@@ -83,63 +83,56 @@ function toSessionUser(row: SessionRow): SessionUser {
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (!token || !SESSION_TOKEN_PATTERN.test(token)) return null;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token || !SESSION_TOKEN_PATTERN.test(token)) return null;
 
-    const result = await query<SessionRow>(
-      `SELECT
-         u.id_usuario,
-         u.username,
-         r.nombre AS rol,
-         p.nombres,
-         p.apellidos,
-         p.nro_documento AS dni,
-         driver.id_conductor,
-         s.id_agencia_activa AS id_agencia,
-         agency.nombre AS agencia_nombre,
-         FALSE AS must_change_password
-       FROM sesiones s
-       JOIN usuarios u ON u.id_usuario = s.id_usuario
-       JOIN roles r ON r.id_rol = u.id_rol
-       LEFT JOIN personas p ON p.id_persona = u.id_persona
-       LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
-       LEFT JOIN agencias agency
-         ON agency.id_agencia = s.id_agencia_activa
-        AND agency.estado = 'ACTIVA'
-       WHERE s.token_hash = $1
-         AND s.revoked_at IS NULL
-         AND s.expires_at > NOW()
-         AND s.last_seen_at > NOW() - ($2::integer * INTERVAL '1 minute')
-         AND s.created_at >= u.password_changed_at
-         AND u.estado = 'ACTIVO'
-         AND (
-           r.nombre IN ('SUPER_ADMIN', 'CONDUCTOR')
-           OR agency.id_agencia IS NOT NULL
+  const result = await query<SessionRow>(
+    `SELECT
+       u.id_usuario,
+       u.username,
+       r.nombre AS rol,
+       p.nombres,
+       p.apellidos,
+       p.nro_documento AS dni,
+       driver.id_conductor,
+       s.id_agencia_activa AS id_agencia,
+       agency.nombre AS agencia_nombre,
+       FALSE AS must_change_password
+     FROM sesiones s
+     JOIN usuarios u ON u.id_usuario = s.id_usuario
+     JOIN roles r ON r.id_rol = u.id_rol
+     LEFT JOIN personas p ON p.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
+     LEFT JOIN agencias agency
+       ON agency.id_agencia = s.id_agencia_activa
+      AND agency.estado = 'ACTIVA'
+     WHERE s.token_hash = $1
+       AND s.revoked_at IS NULL
+       AND s.expires_at > NOW()
+       AND s.last_seen_at > NOW() - ($2::integer * INTERVAL '1 minute')
+       AND s.created_at >= u.password_changed_at
+       AND u.estado = 'ACTIVO'
+       AND agency.id_agencia IS NOT NULL
+       AND (
+         r.nombre = 'SUPER_ADMIN'
+         OR EXISTS (
+           SELECT 1
+           FROM usuarios_agencias membership
+           WHERE membership.id_usuario = u.id_usuario
+             AND membership.id_agencia = s.id_agencia_activa
+             AND membership.estado = 'ACTIVO'
          )
-         AND (
-           r.nombre IN ('SUPER_ADMIN', 'CONDUCTOR')
-           OR EXISTS (
-             SELECT 1
-             FROM usuarios_agencias membership
-             WHERE membership.id_usuario = u.id_usuario
-               AND membership.id_agencia = s.id_agencia_activa
-               AND membership.estado = 'ACTIVO'
-           )
-         )
-       LIMIT 1`,
-      [hashToken(token), SESSION_IDLE_TIMEOUT_MINUTES],
-    );
-    if (!result.rows[0]) return null;
-    await query(
-      "UPDATE sesiones SET last_seen_at = NOW() WHERE token_hash = $1",
-      [hashToken(token)],
-    ).catch(() => {});
-    return toSessionUser(result.rows[0]);
-  } catch {
-    return null;
-  }
+       )
+     LIMIT 1`,
+    [hashToken(token), SESSION_IDLE_TIMEOUT_MINUTES],
+  );
+  if (!result.rows[0]) return null;
+  await query(
+    "UPDATE sesiones SET last_seen_at = NOW() WHERE token_hash = $1",
+    [hashToken(token)],
+  );
+  return toSessionUser(result.rows[0]);
 }
 
 export async function createSession(

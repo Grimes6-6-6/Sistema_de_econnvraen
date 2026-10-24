@@ -93,6 +93,7 @@ export default function LoginPage() {
           ? "/conductor"
           : "/dashboard",
     );
+    router.refresh();
   };
 
   useEffect(() => {
