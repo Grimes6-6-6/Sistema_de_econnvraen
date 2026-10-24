@@ -313,9 +313,8 @@ export default function DashboardPage() {
       .map((b) => b.asiento);
   };
 
-  const searchPassengerDni = async (dniToQuery?: string) => {
-    const dni = (dniToQuery || passengerDni).trim();
-    if (dni.length !== 8 || !/^\d+$/.test(dni)) {
+  const searchPassengerDni = async () => {
+    if (passengerDni.length !== 8 || !/^\d+$/.test(passengerDni)) {
       notify({
         type: "warning",
         title: "DNI incompleto",
@@ -327,7 +326,7 @@ export default function DashboardPage() {
     setIsQueryingReniec(true);
 
     try {
-      const data = await lookupDni(dni);
+      const data = await lookupDni(passengerDni);
       setPassengerNombres(data.nombres);
       setPassengerApellidos(data.apellidos);
       if (data.source === "mock") {
@@ -500,8 +499,8 @@ export default function DashboardPage() {
     }
   };
 
-  const searchParcelClient = async (role: "rem" | "dest", dniToQuery?: string) => {
-    const dni = (dniToQuery || (role === "rem" ? parcelRemDni : parcelDestDni)).trim();
+  const searchParcelClient = async (role: "rem" | "dest") => {
+    const dni = role === "rem" ? parcelRemDni : parcelDestDni;
     if (dni.length !== 8 || !/^\d+$/.test(dni)) {
       notify({
         type: "warning",
@@ -516,9 +515,9 @@ export default function DashboardPage() {
     try {
       const data = await lookupDni(dni);
       if (role === "rem") {
-        setParcelRemNombre(`${data.nombres} ${data.apellidos}`.trim());
+        setParcelRemNombre(`${data.nombres} ${data.apellidos}`);
       } else {
-        setParcelDestNombre(`${data.nombres} ${data.apellidos}`.trim());
+        setParcelDestNombre(`${data.nombres} ${data.apellidos}`);
       }
       if (data.source === "mock") {
         notify({
@@ -1920,25 +1919,18 @@ export default function DashboardPage() {
                         <input
                           id="passenger-dni"
                           type="text"
-                          inputMode="numeric"
                           maxLength={8}
                           pattern="\d{8}"
                           required
                           value={passengerDni}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "");
-                            setPassengerDni(val);
-                            if (val.length === 8) {
-                              void searchPassengerDni(val);
-                            }
-                          }}
+                          onChange={(e) => setPassengerDni(e.target.value)}
                           placeholder="8 dígitos"
                           className="grow rounded-xl bg-slate-950/80 border border-white/10 px-3.5 py-2.5 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"
                         />
                         <button
                           type="button"
-                          onClick={() => void searchPassengerDni()}
-                          disabled={isQueryingReniec || passengerDni.length !== 8}
+                          onClick={searchPassengerDni}
+                          disabled={isQueryingReniec}
                           className="rounded-xl bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 text-xs font-black uppercase px-4 py-2.5 transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
                         >
                           <Search className="h-4 w-4" />
@@ -2395,26 +2387,18 @@ export default function DashboardPage() {
                             <input
                               id="parcel-sender-dni"
                               type="text"
-                              inputMode="numeric"
                               required
                               maxLength={8}
                               value={parcelRemDni}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/\D/g, "");
-                                setParcelRemDni(val);
-                                if (val.length === 8) {
-                                  void searchParcelClient("rem", val);
-                                }
-                              }}
-                              placeholder="8 dígitos"
-                              className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono"
+                              onChange={(e) => setParcelRemDni(e.target.value)}
+                              className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white"
                             />
                             <button
                               type="button"
-                              onClick={() => void searchParcelClient("rem")}
-                              disabled={isQueryingReniecParcel !== null || parcelRemDni.length !== 8}
+                              onClick={() => searchParcelClient("rem")}
+                              disabled={isQueryingReniecParcel !== null}
                               aria-label="Consultar DNI del remitente"
-                              className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition cursor-pointer disabled:opacity-50"
+                              className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 cursor-pointer"
                             >
                               <Search className="h-3.5 w-3.5" />
                             </button>
@@ -2468,26 +2452,18 @@ export default function DashboardPage() {
                             <input
                               id="parcel-recipient-dni"
                               type="text"
-                              inputMode="numeric"
                               required
                               maxLength={8}
                               value={parcelDestDni}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/\D/g, "");
-                                setParcelDestDni(val);
-                                if (val.length === 8) {
-                                  void searchParcelClient("dest", val);
-                                }
-                              }}
-                              placeholder="8 dígitos"
-                              className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono"
+                              onChange={(e) => setParcelDestDni(e.target.value)}
+                              className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white"
                             />
                             <button
                               type="button"
-                              onClick={() => void searchParcelClient("dest")}
-                              disabled={isQueryingReniecParcel !== null || parcelDestDni.length !== 8}
+                              onClick={() => searchParcelClient("dest")}
+                              disabled={isQueryingReniecParcel !== null}
                               aria-label="Consultar DNI del destinatario"
-                              className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition cursor-pointer disabled:opacity-50"
+                              className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 cursor-pointer"
                             >
                               <Search className="h-3.5 w-3.5" />
                             </button>
