@@ -1345,11 +1345,14 @@ export async function updateTripStatus(
       if (!driverId || driverId !== current.id_conductor) {
         throw forbidden("Solo puedes actualizar tus propios viajes.");
       }
+      if (input.newState === "en_curso" && !current.is_ready) {
+        throw forbidden("No puedes iniciar viajes programados para fechas futuras.");
+      }
     }
 
     const isStarting = input.newState === "en_curso";
     const validCurrent = isStarting
-      ? ["PROGRAMADO", "EN_CURSO", "EN_RUTA"].includes(current.estado)
+      ? current.estado === "PROGRAMADO"
       : ["EN_CURSO", "EN_RUTA"].includes(current.estado);
     if (!validCurrent) {
       throw conflict(
@@ -1967,6 +1970,7 @@ export async function getVehicleLocations(
   user: SessionUser,
 ): Promise<VehicleLocation[]> {
   const userId = requireUserId(user);
+  const scopeAgencyId = agencyScopeId(user);
   const driverId =
     user.rol === "CONDUCTOR" ? await getConductorId(userId) : null;
   if (user.rol === "CONDUCTOR" && !driverId) {
@@ -1976,43 +1980,47 @@ export async function getVehicleLocations(
   const result = await query<VehicleLocationRow>(
     `SELECT
        c.id_conductor,
-       COALESCE(p.nombres || ' ' || p.apellidos, 'Conductor ' || c.id_conductor) AS conductor_name,
-       COALESCE(trip_info.origen || ' → ' || trip_info.destino, 'En servicio') AS route_label,
-       COALESCE(veh.placa, '---') AS placa,
+       p.nombres || ' ' || p.apellidos AS conductor_name,
+       assignment.origen || ' → ' || assignment.destino AS route_label,
+       assignment.placa,
        location.latitude::text,
        location.longitude::text,
        location.accuracy_m::text,
        location.speed_kmh::text,
        location.heading::text,
-       FLOOR(EXTRACT(EPOCH FROM location.updated_at) * 1000)::bigint::text AS timestamp_ms,
+       FLOOR(EXTRACT(EPOCH FROM location.captured_at) * 1000)::bigint::text
+         AS timestamp_ms,
        GREATEST(
          0,
-         FLOOR(EXTRACT(EPOCH FROM (NOW() - location.updated_at)))
+         FLOOR(EXTRACT(EPOCH FROM (NOW() - location.captured_at)))
        )::integer AS age_seconds,
        location.is_active
      FROM ubicaciones_vehiculos location
      JOIN conductores c ON c.id_conductor = location.id_conductor
-     LEFT JOIN usuarios u ON u.id_usuario = c.id_usuario
-     LEFT JOIN personas p ON p.id_persona = u.id_persona
+     JOIN personas p ON p.id_persona = c.id_persona
      LEFT JOIN LATERAL (
-       SELECT v.origen, v.destino, v.id_vehiculo
-       FROM viajes v
-       WHERE v.id_conductor = c.id_conductor
-         AND v.estado IN ('EN_CURSO', 'EN_RUTA', 'PROGRAMADO')
-       ORDER BY CASE WHEN v.estado IN ('EN_CURSO', 'EN_RUTA') THEN 0 ELSE 1 END
+       SELECT r.origen, r.destino, vehicle.placa
+       FROM viajes trip
+       JOIN rutas r ON r.id_ruta = trip.id_ruta
+       JOIN vehiculos vehicle ON vehicle.id_vehiculo = trip.id_vehiculo
+       WHERE trip.id_conductor = c.id_conductor
+         AND trip.estado IN ('PROGRAMADO', 'EN_CURSO')
+       ORDER BY
+         CASE WHEN trip.estado = 'EN_CURSO' THEN 0 ELSE 1 END,
+         ABS(EXTRACT(EPOCH FROM (trip.fecha_hora_salida - NOW())))
        LIMIT 1
-     ) trip_info ON TRUE
-     LEFT JOIN vehiculos veh ON veh.id_vehiculo = trip_info.id_vehiculo
-     WHERE location.is_active = TRUE
-       AND ($1::integer IS NULL OR location.id_conductor = $1)
+     ) assignment ON TRUE
+     WHERE location.updated_at >= NOW() - INTERVAL '15 minutes'
+       AND ($1::integer IS NULL OR c.id_agencia_base = $1)
+       AND ($2::integer IS NULL OR c.id_conductor = $2)
      ORDER BY location.updated_at DESC`,
-    [driverId],
+    [scopeAgencyId, driverId],
   );
 
   return result.rows.map((row) => ({
     conductorId: formatEntityId("C", row.id_conductor, 2),
     conductorName: row.conductor_name,
-    routeLabel: row.route_label || "En servicio",
+    routeLabel: row.route_label || "Sin ruta asignada",
     placa: row.placa || "---",
     lat: asNumber(row.latitude),
     lng: asNumber(row.longitude),
@@ -2021,7 +2029,7 @@ export async function getVehicleLocations(
     heading: row.heading === null ? null : asNumber(row.heading),
     timestamp: asNumber(row.timestamp_ms),
     ageSeconds: row.age_seconds,
-    isActive: row.is_active,
+    isActive: row.is_active && row.age_seconds <= 45,
   }));
 }
 
@@ -2058,6 +2066,37 @@ export async function updateVehicleLocation(
   }
 
   await withTransaction(async (client) => {
+    const driver = await client.query<{
+      id_conductor: number;
+      id_agencia: number;
+    }>(
+      `SELECT id_conductor, id_agencia_base AS id_agencia
+       FROM conductores
+       WHERE id_conductor = $1
+         AND habilitado = TRUE
+         AND ($2::integer IS NULL OR id_agencia_base = $2)
+       FOR SHARE`,
+      [driverId, scopeAgencyId],
+    );
+    if (!driver.rows[0]) {
+      throw conflict(
+        "DRIVER_NOT_AVAILABLE",
+        "El conductor no está disponible.",
+      );
+    }
+
+    const previous = await client.query<{
+      is_active: boolean;
+      captured_at: string;
+    }>(
+      `SELECT is_active, captured_at::text
+       FROM ubicaciones_vehiculos
+       WHERE id_conductor = $1
+       FOR UPDATE`,
+      [driverId],
+    );
+    const wasActive = previous.rows[0]?.is_active ?? false;
+
     if (!input.isActive) {
       await client.query(
         `UPDATE ubicaciones_vehiculos
@@ -2065,33 +2104,96 @@ export async function updateVehicleLocation(
          WHERE id_conductor = $1`,
         [driverId, userId],
       );
-      return;
+    } else {
+      const activeTrip = await client.query<{ id_viaje: number }>(
+        `SELECT id_viaje
+         FROM viajes
+         WHERE id_conductor = $1
+           AND estado IN ('EN_CURSO', 'EN_RUTA')
+         ORDER BY fecha_hora_salida DESC
+         LIMIT 1
+         FOR SHARE`,
+        [driverId],
+      );
+      const tripId = activeTrip.rows[0]?.id_viaje;
+      if (!tripId) {
+        throw conflict(
+          "GPS_ACTIVE_TRIP_REQUIRED",
+          "Inicia el viaje asignado antes de transmitir la ubicación GPS.",
+        );
+      }
+
+      const history = await client.query(
+        `INSERT INTO historial_ubicaciones_vehiculos (
+           request_id, id_conductor, id_viaje, latitude, longitude,
+           accuracy_m, speed_kmh, heading, captured_at, updated_by
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10)
+         ON CONFLICT (request_id) DO NOTHING
+         RETURNING id_ubicacion`,
+        [
+          input.requestId,
+          driverId,
+          tripId,
+          input.latitude,
+          input.longitude,
+          input.accuracy,
+          input.speed,
+          input.heading,
+          input.capturedAt,
+          userId,
+        ],
+      );
+      if (!history.rowCount) return;
+
+      await client.query(
+        `INSERT INTO ubicaciones_vehiculos (
+           id_conductor, id_viaje, request_id, latitude, longitude,
+           accuracy_m, speed_kmh, heading, captured_at, is_active, updated_by
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, TRUE, $10)
+         ON CONFLICT (id_conductor) DO UPDATE
+         SET id_viaje = EXCLUDED.id_viaje,
+             request_id = EXCLUDED.request_id,
+             latitude = EXCLUDED.latitude,
+             longitude = EXCLUDED.longitude,
+             accuracy_m = EXCLUDED.accuracy_m,
+             speed_kmh = EXCLUDED.speed_kmh,
+             heading = EXCLUDED.heading,
+             captured_at = EXCLUDED.captured_at,
+             is_active = TRUE,
+             updated_by = EXCLUDED.updated_by,
+             updated_at = NOW()
+         WHERE EXCLUDED.captured_at > ubicaciones_vehiculos.captured_at`,
+        [
+          driverId,
+          tripId,
+          input.requestId,
+          input.latitude,
+          input.longitude,
+          input.accuracy,
+          input.speed,
+          input.heading,
+          input.capturedAt,
+          userId,
+        ],
+      );
     }
 
-    await client.query(
-      `INSERT INTO ubicaciones_vehiculos (
-         id_conductor, latitude, longitude, accuracy_m, speed_kmh, heading, is_active, updated_by, updated_at
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, NOW())
-       ON CONFLICT (id_conductor) DO UPDATE
-       SET latitude = EXCLUDED.latitude,
-           longitude = EXCLUDED.longitude,
-           accuracy_m = EXCLUDED.accuracy_m,
-           speed_kmh = EXCLUDED.speed_kmh,
-           heading = EXCLUDED.heading,
-           is_active = TRUE,
-           updated_by = EXCLUDED.updated_by,
-           updated_at = NOW()`,
-      [
-        driverId,
-        input.latitude,
-        input.longitude,
-        input.accuracy,
-        input.speed,
-        input.heading,
-        userId,
-      ],
-    );
+    if (wasActive !== input.isActive) {
+      await writeAuditLog(
+        {
+          userId,
+          agencyId: driver.rows[0].id_agencia,
+          action: input.isActive
+            ? "GPS_TRACKING_STARTED"
+            : "GPS_TRACKING_STOPPED",
+          entity: "conductor",
+          entityId: formatEntityId("C", driverId, 2),
+        },
+        client,
+      );
+    }
   });
 }
 
