@@ -245,7 +245,9 @@ export default function DashboardPage() {
   const todayStr = getTodayDateString();
 
   const kpis = useMemo(() => {
-    const todayTrips = db.viajes.filter((v) => v.fecha === todayStr);
+    const todayTrips = db.viajes.filter(
+      (v) => v.fecha === todayStr && v.estado !== "cancelado",
+    );
     const todayTripsIds = todayTrips.map((v) => v.id);
     const todayBoletos = db.boletos.filter(
       (b) => todayTripsIds.includes(b.id_viaje) && b.estado !== "anulado",
@@ -1432,7 +1434,7 @@ export default function DashboardPage() {
                     Ver itinerario <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                {db.viajes.filter((trip) => trip.fecha === todayStr).length === 0 ? (
+                {db.viajes.filter((trip) => trip.fecha === todayStr && trip.estado === "programado").length === 0 ? (
                   <div className="flex min-h-52 flex-col items-center justify-center px-6 py-10 text-center">
                     <CalendarDays className="mb-3 h-8 w-8 text-slate-300" />
                     <p className="text-sm font-semibold text-slate-800">Todavía no hay salidas programadas</p>
@@ -1462,7 +1464,7 @@ export default function DashboardPage() {
                       </thead>
                       <tbody>
                         {db.viajes
-                          .filter((trip) => trip.fecha === todayStr)
+                          .filter((trip) => trip.fecha === todayStr && trip.estado === "programado")
                           .sort((left, right) => left.hora.localeCompare(right.hora))
                           .map((trip) => {
                             const route = db.rutas.find((item) => item.id === trip.id_ruta);
