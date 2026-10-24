@@ -35,11 +35,7 @@ try {
     "SELECT 1 FROM schema_migrations WHERE filename = '001_initial.sql'",
   );
   if (initialMigration.rowCount) {
-    try {
-      await verifyBaselineSchema(pool);
-    } catch (schemaError) {
-      console.warn("Verificación de esquema base no bloqueante:", schemaError instanceof Error ? schemaError.message : String(schemaError));
-    }
+    await verifyBaselineSchema(pool);
   }
 
   for (const filename of filenames) {
