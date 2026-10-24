@@ -107,7 +107,8 @@ const DOCUMENT_SELECT = `
          document.archivo_nombre, document.archivo_mime, document.archivo_tamano
   FROM documentos_operativos document
   LEFT JOIN conductores driver ON driver.id_conductor = document.id_conductor
-  LEFT JOIN personas driver_person ON driver_person.id_persona = driver.id_persona
+  LEFT JOIN usuarios driver_user ON driver_user.id_usuario = driver.id_usuario
+  LEFT JOIN personas driver_person ON driver_person.id_persona = driver_user.id_persona
   LEFT JOIN vehiculos vehicle ON vehicle.id_vehiculo = document.id_vehiculo
 `;
 

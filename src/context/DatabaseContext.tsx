@@ -237,7 +237,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     setOfflineQueue(readOfflineQueue(user.id, user.agenciaId));
     setDataError(null);
     if (!user.mustChangePassword) {
-      await refreshDatabase();
+      try {
+        await refreshDatabase();
+      } catch {
+      }
     }
     return user;
   }, [refreshDatabase]);

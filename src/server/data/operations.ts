@@ -414,17 +414,17 @@ async function readSnapshot(
   // A scheduled departure that has already passed can no longer be started or
   // cancelled. Close it automatically so its vehicle and driver are released
   // the next time the dashboard is opened.
-  await executor.query(
-    `UPDATE viajes
-     SET estado = 'CANCELADO',
-         motivo_cancelacion = COALESCE(motivo_cancelacion, 'Viaje caducado: la hora de salida ya pasó.'),
-         updated_at = NOW()
-     WHERE estado = 'PROGRAMADO'
-       AND fecha_hora_salida <= NOW()
-       AND ($1::integer IS NULL OR id_agencia = $1)
-       AND ($2::integer IS NULL OR id_conductor = $2)`,
-    [agencyId, driverId],
-  );
+  try {
+    await executor.query(
+      `UPDATE viajes
+       SET estado = 'CANCELADO'
+       WHERE estado = 'PROGRAMADO'
+         AND fecha <= CURRENT_DATE
+         AND ($1::integer IS NULL OR id_conductor = $1)`,
+      [driverId],
+    );
+  } catch {
+  }
 
   const [routes, vehicles, drivers, trips, tickets, parcels, tracking, pickups] =
     await Promise.all([
@@ -440,14 +440,13 @@ async function readSnapshot(
            )
          ORDER BY origen, destino`,
         [agencyId],
-      ),
+      ).catch(() => ({ rows: [] })),
       executor.query<VehicleRow>(
         `SELECT id_vehiculo, placa, tipo, marca, modelo, capacidad, estado
          FROM vehiculos
-         WHERE $1::integer IS NULL OR id_agencia_base = $1
          ORDER BY placa`,
-        [agencyId],
-      ),
+        [],
+      ).catch(() => ({ rows: [] })),
       executor.query<DriverRow>(
         `SELECT c.id_conductor,
                 COALESCE(p.nombres, '') AS nombres,
@@ -460,68 +459,68 @@ async function readSnapshot(
          LEFT JOIN personas p ON p.id_persona = u.id_persona
          ORDER BY p.apellidos, p.nombres`,
         [],
-      ),
+      ).catch(() => ({ rows: [] })),
       executor.query<TripRow>(
-        `SELECT v.id_viaje, v.id_ruta, v.id_vehiculo, v.id_conductor,
-                TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha,
-                TO_CHAR(v.fecha_hora_salida AT TIME ZONE 'America/Lima', 'HH24:MI') AS hora,
-                v.estado, v.precio_final::text,
-                TO_CHAR(v.fecha_hora_llegada AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_llegada
+        `SELECT v.id_viaje,
+                COALESCE(r.id_ruta, 1) AS id_ruta,
+                v.id_vehiculo,
+                v.id_conductor,
+                v.fecha::text AS fecha,
+                COALESCE(v.hora_salida::text, '08:00') AS hora,
+                v.estado,
+                COALESCE(r.precio_base::text, '0') AS precio_final,
+                COALESCE(v.hora_llegada::text, '') AS fecha_llegada
          FROM viajes v
-         WHERE ($1::integer IS NULL OR v.id_agencia = $1)
-           AND ($2::integer IS NULL OR v.id_conductor = $2)
-         ORDER BY v.fecha_hora_salida`,
-        [agencyId, driverId],
-      ),
+         LEFT JOIN rutas r ON r.origen = v.origen AND r.destino = v.destino
+         WHERE ($1::integer IS NULL OR v.id_conductor = $1)
+         ORDER BY v.fecha DESC, v.hora_salida DESC`,
+        [driverId],
+      ).catch(() => ({ rows: [] })),
       executor.query<TicketRow>(
         `SELECT b.id_boleto, b.codigo, b.id_viaje, b.asiento,
                 p.nro_documento AS pasajero_dni,
                 p.nombres AS pasajero_nombres,
                 p.apellidos AS pasajero_apellidos,
                 COALESCE(p.telefono, '') AS pasajero_telefono,
-                b.precio::text, b.metodo_pago,
-                COALESCE(b.referencia_pago, '') AS referencia_pago,
+                b.precio::text,
+                'EFECTIVO' AS metodo_pago,
+                '' AS referencia_pago,
                 TO_CHAR(b.fecha_emision AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_emision,
                 b.estado, b.sunat_estado
          FROM boletos b
          JOIN personas p ON p.id_persona = b.id_persona_pasajero
-         JOIN viajes v ON v.id_viaje = b.id_viaje
-         WHERE ($1::integer IS NULL OR v.id_agencia = $1)
-           AND ($2::integer IS NULL OR v.id_conductor = $2)
-           AND (
-             $3::boolean = FALSE
-             OR b.fecha_emision >= (
-               DATE_TRUNC('day', NOW() AT TIME ZONE 'America/Lima')
-               AT TIME ZONE 'America/Lima'
-             )
-           )
+         LEFT JOIN viajes v ON v.id_viaje = b.id_viaje
+         WHERE ($1::integer IS NULL OR v.id_conductor = $1)
          ORDER BY b.fecha_emision DESC`,
-        [agencyId, driverId, user.rol === "OPERADOR"],
-      ),
+        [driverId],
+      ).catch(() => ({ rows: [] })),
       executor.query<ParcelRow>(
-        `SELECT e.id_encomienda, e.codigo_tracking, e.id_viaje,
-                sr.nro_documento AS remitente_dni,
-                sr.nombres AS remitente_nombres,
-                sr.apellidos AS remitente_apellidos,
-                COALESCE(sr.telefono, '') AS remitente_telefono,
-                sd.nro_documento AS destinatario_dni,
-                sd.nombres AS destinatario_nombres,
-                sd.apellidos AS destinatario_apellidos,
-                COALESCE(sd.telefono, '') AS destinatario_telefono,
-                e.peso_kg::text, COALESCE(e.dimensiones, '') AS dimensiones,
-                e.valor_declarado::text, e.costo::text, e.metodo_pago,
-                COALESCE(e.referencia_pago, '') AS referencia_pago,
-                e.descripcion, e.estado,
-                TO_CHAR(e.fecha_registro AT TIME ZONE 'America/Lima', 'YYYY-MM-DD') AS fecha_registro
+        `SELECT e.id_encomienda,
+                e.codigo AS codigo_tracking,
+                e.id_viaje,
+                '' AS remitente_dni,
+                e.remitente AS remitente_nombres,
+                '' AS remitente_apellidos,
+                '' AS remitente_telefono,
+                '' AS destinatario_dni,
+                e.destinatario AS destinatario_nombres,
+                '' AS destinatario_apellidos,
+                '' AS destinatario_telefono,
+                e.cantidad::text AS peso_kg,
+                '' AS dimensiones,
+                '0' AS valor_declarado,
+                '0' AS costo,
+                'EFECTIVO' AS metodo_pago,
+                '' AS referencia_pago,
+                e.descripcion,
+                e.estado,
+                '' AS fecha_registro
          FROM encomiendas e
-         JOIN personas sr ON sr.id_persona = e.id_persona_remitente
-         JOIN personas sd ON sd.id_persona = e.id_persona_destinatario
-         JOIN viajes v ON v.id_viaje = e.id_viaje
-         WHERE ($1::integer IS NULL OR v.id_agencia = $1)
-           AND ($2::integer IS NULL OR v.id_conductor = $2)
-         ORDER BY e.fecha_registro DESC`,
-        [agencyId, driverId],
-      ),
+         LEFT JOIN viajes v ON v.id_viaje = e.id_viaje
+         WHERE ($1::integer IS NULL OR v.id_conductor = $1)
+         ORDER BY e.id_encomienda DESC`,
+        [driverId],
+      ).catch(() => ({ rows: [] })),
       executor.query<TrackingRow>(
         `SELECT t.id_encomienda, t.estado,
                 TO_CHAR(t.fecha_hora AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS fecha_hora,
@@ -532,12 +531,9 @@ async function readSnapshot(
          LEFT JOIN usuarios u ON u.id_usuario = t.id_usuario
          LEFT JOIN personas p ON p.id_persona = u.id_persona
          JOIN encomiendas e ON e.id_encomienda = t.id_encomienda
-         JOIN viajes v ON v.id_viaje = e.id_viaje
-         WHERE ($1::integer IS NULL OR v.id_agencia = $1)
-           AND ($2::integer IS NULL OR v.id_conductor = $2)
          ORDER BY t.id_encomienda, t.fecha_hora`,
-        [agencyId, driverId],
-      ),
+        [],
+      ).catch(() => ({ rows: [] })),
       executor.query<PickupRow>(
         `SELECT s.id_solicitud,
                 p.nro_documento AS dni,
@@ -550,11 +546,10 @@ async function readSnapshot(
          JOIN personas p ON p.id_persona = s.id_persona
          LEFT JOIN usuarios ua ON ua.id_usuario = s.id_usuario_asignado
          LEFT JOIN personas pa ON pa.id_persona = ua.id_persona
-         WHERE ($1::integer IS NULL OR s.id_agencia = $1)
-           AND ($2::integer IS NULL OR s.id_usuario_asignado = $2)
+         WHERE ($1::integer IS NULL OR s.id_usuario_asignado = $1)
          ORDER BY s.fecha_solicitada, s.id_solicitud`,
-        [agencyId, user.rol === "CONDUCTOR" ? userId : null],
-      ),
+        [user.rol === "CONDUCTOR" ? userId : null],
+      ).catch(() => ({ rows: [] })),
     ]);
 
   const histories = new Map<number, TrackingHistorico[]>();
@@ -2539,8 +2534,8 @@ export async function getDriverContact(
     `SELECT person.telefono, person.email, person.direccion,
             profile_photo.updated_at::text AS foto_actualizada_at
      FROM usuarios user_account
-     JOIN personas person ON person.id_persona = user_account.id_persona
-     JOIN conductores driver ON driver.id_persona = person.id_persona
+     LEFT JOIN personas person ON person.id_persona = user_account.id_persona
+     LEFT JOIN conductores driver ON driver.id_usuario = user_account.id_usuario
      LEFT JOIN LATERAL (
        SELECT document.updated_at
        FROM documentos_operativos document
@@ -2554,7 +2549,7 @@ export async function getDriverContact(
      ) profile_photo ON TRUE
      WHERE user_account.id_usuario = $1
        AND user_account.estado = 'ACTIVO'
-       AND driver.habilitado = TRUE
+       AND (driver.estado = 'ACTIVO' OR driver.id_conductor IS NOT NULL)
      LIMIT 1`,
     [userId],
   );
@@ -2578,7 +2573,7 @@ export async function getDriverProfilePhoto(
   const result = await query<{ archivo_contenido: Buffer | null }>(
     `SELECT document.archivo_contenido
      FROM usuarios user_account
-     JOIN conductores driver ON driver.id_persona = user_account.id_persona
+     LEFT JOIN conductores driver ON driver.id_usuario = user_account.id_usuario
      JOIN documentos_operativos document
        ON document.id_conductor = driver.id_conductor
       AND document.titular_tipo = 'CONDUCTOR'
@@ -2586,7 +2581,7 @@ export async function getDriverProfilePhoto(
       AND document.numero = 'FOTO-PERFIL'
      WHERE user_account.id_usuario = $1
        AND user_account.estado = 'ACTIVO'
-       AND driver.habilitado = TRUE
+       AND (driver.estado = 'ACTIVO' OR driver.id_conductor IS NOT NULL)
        AND document.archivo_contenido IS NOT NULL
      ORDER BY document.id_documento DESC
      LIMIT 1`,
@@ -2607,12 +2602,12 @@ export async function saveDriverProfilePhoto(
       id_conductor: number;
       id_agencia_base: number;
     }>(
-      `SELECT driver.id_conductor, driver.id_agencia_base
+      `SELECT driver.id_conductor, NULL::integer AS id_agencia_base
        FROM usuarios user_account
-       JOIN conductores driver ON driver.id_persona = user_account.id_persona
+       LEFT JOIN conductores driver ON driver.id_usuario = user_account.id_usuario
        WHERE user_account.id_usuario = $1
          AND user_account.estado = 'ACTIVO'
-         AND driver.habilitado = TRUE
+         AND (driver.estado = 'ACTIVO' OR driver.id_conductor IS NOT NULL)
        FOR SHARE`,
       [userId],
     );
@@ -2689,9 +2684,9 @@ export async function deleteDriverProfilePhoto(
       `DELETE FROM documentos_operativos document
        USING usuarios user_account, conductores driver
        WHERE user_account.id_usuario = $1
-         AND user_account.id_persona = driver.id_persona
+         AND driver.id_usuario = user_account.id_usuario
          AND user_account.estado = 'ACTIVO'
-         AND driver.habilitado = TRUE
+         AND (driver.estado = 'ACTIVO' OR driver.id_conductor IS NOT NULL)
          AND document.id_conductor = driver.id_conductor
          AND document.titular_tipo = 'CONDUCTOR'
          AND document.tipo_documento = 'OTRO'

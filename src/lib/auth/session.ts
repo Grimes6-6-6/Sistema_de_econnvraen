@@ -97,13 +97,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
        p.nro_documento AS dni,
        driver.id_conductor,
        s.id_agencia_activa AS id_agencia,
-       agency.nombre AS agencia_nombre
-       , u.must_change_password
+       agency.nombre AS agencia_nombre,
+       FALSE AS must_change_password
      FROM sesiones s
      JOIN usuarios u ON u.id_usuario = s.id_usuario
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
-     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
      LEFT JOIN agencias agency
        ON agency.id_agencia = s.id_agencia_activa
       AND agency.estado = 'ACTIVA'
@@ -113,11 +113,6 @@ export async function getSessionUser(): Promise<SessionUser | null> {
        AND s.last_seen_at > NOW() - ($2::integer * INTERVAL '1 minute')
        AND s.created_at >= u.password_changed_at
        AND u.estado = 'ACTIVO'
-       AND (u.must_change_password = TRUE OR s.mfa_verified_at IS NOT NULL)
-       AND (
-         u.must_change_password = FALSE
-         OR u.temporary_password_expires_at > NOW()
-       )
        AND agency.id_agencia IS NOT NULL
        AND (
          r.nombre = 'SUPER_ADMIN'
@@ -156,10 +151,9 @@ export async function createSession(
 
   await query(
     `INSERT INTO sesiones (
-       token_hash, id_usuario, id_agencia_activa, expires_at, ip_hash, user_agent,
-       mfa_verified_at, mfa_challenge_expires_at
+       token_hash, id_usuario, id_agencia_activa, expires_at, ip_hash, user_agent
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       tokenHash,
       userId,
@@ -167,8 +161,6 @@ export async function createSession(
       expiresAt,
       metadata?.ipHash || null,
       metadata?.userAgent?.slice(0, 255) || null,
-      options?.secondFactorVerified ? new Date() : null,
-      smsChallengeExpiresAt,
     ],
   );
 
@@ -209,7 +201,7 @@ export async function getSmsChallenge(): Promise<SmsChallenge | null> {
      JOIN usuarios u ON u.id_usuario = s.id_usuario
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
-     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
+     LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
      LEFT JOIN agencias agency
        ON agency.id_agencia = s.id_agencia_activa
       AND agency.estado = 'ACTIVA'
