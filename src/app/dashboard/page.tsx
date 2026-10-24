@@ -54,6 +54,7 @@ import {
   BellRing,
   Menu,
   UserRound,
+  Loader2,
 } from "lucide-react";
 
 // Map loaded client-side only (Leaflet needs window)
@@ -785,6 +786,49 @@ export default function DashboardPage() {
   const [pickupDate, setPickupDate] = useState(getTodayDateString());
   const [pickupAddress, setPickupAddress] = useState("");
   const [pickupDescription, setPickupDescription] = useState("");
+  const [isQueryingPickupDni, setIsQueryingPickupDni] = useState(false);
+  const lastQueriedPickupDni = React.useRef("");
+
+  useEffect(() => {
+    if (pickupDni.length === 8 && isNewPickupModalOpen) {
+      if (lastQueriedPickupDni.current === pickupDni) return;
+      lastQueriedPickupDni.current = pickupDni;
+
+      let isCurrent = true;
+      setIsQueryingPickupDni(true);
+      lookupDni(pickupDni)
+        .then((data) => {
+          if (!isCurrent) return;
+          const fullName = `${data.nombres} ${data.apellidos}`.trim();
+          setPickupName(fullName);
+          if (data.source === "mock") {
+            notify({
+              type: "warning",
+              title: "Consulta de prueba",
+              message: "Verifica el nombre antes de registrar la solicitud.",
+            });
+          }
+        })
+        .catch((error) => {
+          if (!isCurrent) return;
+          notify({
+            type: "warning",
+            title: "No se pudo consultar el DNI",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Ingresa el nombre completo manualmente.",
+          });
+        })
+        .finally(() => {
+          if (isCurrent) setIsQueryingPickupDni(false);
+        });
+
+      return () => {
+        isCurrent = false;
+      };
+    }
+  }, [pickupDni, isNewPickupModalOpen, notify]);
 
   const submitNewPickup = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -805,6 +849,7 @@ export default function DashboardPage() {
       setPickupDate(getTodayDateString());
       setPickupAddress("");
       setPickupDescription("");
+      lastQueriedPickupDni.current = "";
       notify({
         type: "success",
         title: "Recojo registrado",
@@ -3362,119 +3407,195 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {isNewPickupModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+            {isNewPickupModalOpen && createPortal(
+              <div className="dialog-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md">
                 <div
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="pickup-dialog-title"
                   onKeyDown={(event) => {
-                    if (event.key === "Escape") setIsNewPickupModalOpen(false);
+                    if (event.key === "Escape") {
+                      setIsNewPickupModalOpen(false);
+                      lastQueriedPickupDni.current = "";
+                    }
                     trapDialogFocus(event);
                   }}
-                  className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
+                  className="corporate-dialog my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-lg animate-fade-in flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
                 >
-                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                    <h3 id="pickup-dialog-title" className="font-black text-white">Nueva solicitud de recojo</h3>
+                  <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                        <Home className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 id="pickup-dialog-title" className="text-lg font-black text-slate-900">
+                          Nueva solicitud de recojo
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Ingresa el DNI del cliente para autocompletar sus datos con RENIEC.
+                        </p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       autoFocus
                       aria-label="Cerrar"
-                      onClick={() => setIsNewPickupModalOpen(false)}
-                      className="p-2 text-slate-400 hover:text-white"
+                      onClick={() => {
+                        setIsNewPickupModalOpen(false);
+                        lastQueriedPickupDni.current = "";
+                      }}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
                     >
                       <X className="h-5 w-5" />
                     </button>
                   </div>
-                  <form onSubmit={submitNewPickup} className="mt-4 space-y-3">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <label className="text-xs font-bold text-slate-300">
-                        DNI
+
+                  <form onSubmit={submitNewPickup} className="flex flex-1 flex-col overflow-y-auto">
+                    <div className="space-y-4 p-5 sm:p-6">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <label htmlFor="pickup-dni" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                            DNI (8 dígitos)
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="pickup-dni"
+                              required
+                              pattern="\d{8}"
+                              maxLength={8}
+                              placeholder="Ej. 72481920"
+                              value={pickupDni}
+                              onChange={(e) =>
+                                setPickupDni(e.target.value.replace(/\D/g, "").slice(0, 8))
+                              }
+                              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pr-9 pl-3 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                            />
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                              {isQueryingPickupDni ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                              ) : (
+                                <Search className="h-4 w-4 text-slate-400" />
+                              )}
+                            </div>
+                          </div>
+                          {isQueryingPickupDni && (
+                            <p className="text-[11px] font-semibold text-emerald-700 animate-pulse">
+                              Consultando RENIEC automáticamente...
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor="pickup-phone" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                            Celular
+                          </label>
+                          <input
+                            id="pickup-phone"
+                            required
+                            pattern="9\d{8}"
+                            maxLength={9}
+                            placeholder="Ej. 987654321"
+                            value={pickupPhone}
+                            onChange={(e) =>
+                              setPickupPhone(e.target.value.replace(/\D/g, "").slice(0, 9))
+                            }
+                            className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="pickup-name" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                            Nombre completo
+                          </label>
+                          {isQueryingPickupDni && (
+                            <span className="text-[11px] font-semibold text-emerald-600 animate-pulse">
+                              Autocompletando...
+                            </span>
+                          )}
+                        </div>
                         <input
+                          id="pickup-name"
                           required
-                          pattern="\d{8}"
-                          maxLength={8}
-                          value={pickupDni}
-                          onChange={(e) =>
-                            setPickupDni(e.target.value.replace(/\D/g, ""))
-                          }
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                          placeholder="Nombres y apellidos"
+                          value={pickupName}
+                          onChange={(e) => setPickupName(e.target.value)}
+                          className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                         />
-                      </label>
-                      <label className="text-xs font-bold text-slate-300">
-                        Celular
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="pickup-date" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                          Fecha de recojo
+                        </label>
                         <input
+                          id="pickup-date"
+                          type="date"
                           required
-                          pattern="9\d{8}"
-                          maxLength={9}
-                          value={pickupPhone}
-                          onChange={(e) =>
-                            setPickupPhone(e.target.value.replace(/\D/g, ""))
-                          }
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                          min={getTodayDateString()}
+                          value={pickupDate}
+                          onChange={(e) => setPickupDate(e.target.value)}
+                          className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                         />
-                      </label>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="pickup-address" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                          Dirección de recojo
+                        </label>
+                        <input
+                          id="pickup-address"
+                          required
+                          minLength={8}
+                          placeholder="Ej. Jr. Callao 123, Ayacucho"
+                          value={pickupAddress}
+                          onChange={(e) => setPickupAddress(e.target.value)}
+                          className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="pickup-description" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                          Descripción del envío
+                        </label>
+                        <textarea
+                          id="pickup-description"
+                          required
+                          minLength={3}
+                          maxLength={240}
+                          rows={3}
+                          placeholder="Ej. Paquete con documentos y encomienda personal"
+                          value={pickupDescription}
+                          onChange={(e) => setPickupDescription(e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                        />
+                      </div>
                     </div>
-                    <label className="block text-xs font-bold text-slate-300">
-                      Nombre completo
-                      <input
-                        required
-                        value={pickupName}
-                        onChange={(e) => setPickupName(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                      />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-300">
-                      Fecha de recojo
-                      <input
-                        type="date"
-                        required
-                        min={getTodayDateString()}
-                        value={pickupDate}
-                        onChange={(e) => setPickupDate(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                      />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-300">
-                      Dirección
-                      <input
-                        required
-                        minLength={8}
-                        value={pickupAddress}
-                        onChange={(e) => setPickupAddress(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                      />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-300">
-                      Descripción del envío
-                      <textarea
-                        required
-                        minLength={3}
-                        maxLength={240}
-                        value={pickupDescription}
-                        onChange={(e) => setPickupDescription(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                      />
-                    </label>
-                    <div className="flex justify-end gap-2 pt-2">
+
+                    <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
                       <button
                         type="button"
-                        onClick={() => setIsNewPickupModalOpen(false)}
-                        className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold"
+                        onClick={() => {
+                          setIsNewPickupModalOpen(false);
+                          lastQueriedPickupDni.current = "";
+                        }}
+                        className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
-                        disabled={pendingAction === "pickup"}
-                        className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white"
+                        disabled={pendingAction === "pickup" || isQueryingPickupDni}
+                        className="min-h-11 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-black uppercase tracking-wider text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {pendingAction === "pickup" ? "Registrando…" : "Registrar"}
                       </button>
                     </div>
                   </form>
                 </div>
-              </div>
+              </div>,
+              document.body,
             )}
 
             {/* MODAL: ASIGNAR CHOFER A RECOJO */}
