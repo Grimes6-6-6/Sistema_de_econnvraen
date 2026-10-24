@@ -133,7 +133,7 @@ const USER_SELECT = `
   LEFT JOIN personas p ON p.id_persona = u.id_persona
   LEFT JOIN usuarios_agencias ua ON ua.id_usuario = u.id_usuario
   LEFT JOIN agencias a ON a.id_agencia = ua.id_agencia
-  LEFT JOIN conductores c ON c.id_usuario = u.id_usuario
+  LEFT JOIN conductores c ON c.id_persona = u.id_persona
 `;
 
 export async function listManagedUsers(user: SessionUser): Promise<ManagedUser[]> {
@@ -261,8 +261,8 @@ export async function reviewDriverIdentity(
               ) AS missing_documents
        FROM usuarios account
        JOIN roles role ON role.id_rol = account.id_rol
-       JOIN conductores driver ON driver.id_usuario = account.id_usuario
-       LEFT JOIN personas person ON person.id_persona = account.id_persona
+       JOIN conductores driver ON driver.id_persona = account.id_persona
+       JOIN personas person ON person.id_persona = driver.id_persona
        WHERE account.id_usuario = $1
          AND role.nombre = 'CONDUCTOR'
        FOR UPDATE OF driver`,

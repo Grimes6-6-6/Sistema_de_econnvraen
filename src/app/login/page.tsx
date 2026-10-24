@@ -54,7 +54,7 @@ const PORTAL_CONTENT = {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginUser, verifySmsCode, resendSmsCode, logoutUser, currentUser } = useDatabase();
+  const { loginUser, verifySmsCode, resendSmsCode, logoutUser } = useDatabase();
   const [portal, setPortal] = useState<LoginPortal>("agency");
   const [authStage, setAuthStage] = useState<AuthStage>("credentials");
   const [username, setUsername] = useState("");
@@ -95,12 +95,6 @@ export default function LoginPage() {
     );
     router.refresh();
   };
-
-  useEffect(() => {
-    if (currentUser) {
-      routeAuthenticatedUser(currentUser);
-    }
-  }, [currentUser]);
 
   const handleLoginSubmit = async (
     event: React.FormEvent<HTMLFormElement>,

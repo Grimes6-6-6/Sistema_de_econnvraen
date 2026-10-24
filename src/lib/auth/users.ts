@@ -60,13 +60,13 @@ export async function authenticateUser(
        p.telefono,
        driver.id_conductor,
        membership.id_agencia,
-       agency.nombre AS agencia_nombre,
-       FALSE AS must_change_password,
-       FALSE AS sms_mfa_enabled
+       agency.nombre AS agencia_nombre
+       , u.must_change_password
+       , u.sms_mfa_enabled
      FROM usuarios u
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
-     LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
+     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
      LEFT JOIN LATERAL (
        SELECT ua.id_agencia
        FROM usuarios_agencias ua
@@ -81,6 +81,10 @@ export async function authenticateUser(
      LEFT JOIN agencias agency ON agency.id_agencia = membership.id_agencia
      WHERE LOWER(u.username) = LOWER($1)
        AND u.estado = 'ACTIVO'
+       AND (
+         u.must_change_password = FALSE
+         OR u.temporary_password_expires_at > NOW()
+       )
        AND (r.nombre = 'SUPER_ADMIN' OR membership.id_agencia IS NOT NULL)
      LIMIT 1`,
     [username],
