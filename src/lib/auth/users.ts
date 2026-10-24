@@ -61,7 +61,6 @@ export async function authenticateUser(
        driver.id_conductor,
        COALESCE(
          membership.id_agencia,
-         driver.id_agencia_base,
          (SELECT id_agencia FROM agencias WHERE estado = 'ACTIVA' ORDER BY id_agencia LIMIT 1)
        ) AS id_agencia,
        COALESCE(
@@ -71,7 +70,6 @@ export async function authenticateUser(
            FROM agencias
            WHERE id_agencia = COALESCE(
              membership.id_agencia,
-             driver.id_agencia_base,
              (SELECT id_agencia FROM agencias WHERE estado = 'ACTIVA' ORDER BY id_agencia LIMIT 1)
            )
          )
