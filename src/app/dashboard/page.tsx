@@ -3362,207 +3362,190 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {isNewPickupModalOpen &&
-              createPortal(
-                <div className="dialog-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 sm:p-4">
-                  <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="pickup-dialog-title"
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") setIsNewPickupModalOpen(false);
-                      trapDialogFocus(event);
-                    }}
-                    className="corporate-dialog my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-lg animate-fade-in flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
-                  >
-                    <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4 sm:px-6">
-                      <h3 id="pickup-dialog-title" className="font-black text-white">
-                        Nueva solicitud de recojo
-                      </h3>
+            {isNewPickupModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="pickup-dialog-title"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsNewPickupModalOpen(false);
+                    trapDialogFocus(event);
+                  }}
+                  className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
+                >
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <h3 id="pickup-dialog-title" className="font-black text-white">Nueva solicitud de recojo</h3>
+                    <button
+                      type="button"
+                      autoFocus
+                      aria-label="Cerrar"
+                      onClick={() => setIsNewPickupModalOpen(false)}
+                      className="p-2 text-slate-400 hover:text-white"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <form onSubmit={submitNewPickup} className="mt-4 space-y-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="text-xs font-bold text-slate-300">
+                        DNI
+                        <input
+                          required
+                          pattern="\d{8}"
+                          maxLength={8}
+                          value={pickupDni}
+                          onChange={(e) =>
+                            setPickupDni(e.target.value.replace(/\D/g, ""))
+                          }
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                        />
+                      </label>
+                      <label className="text-xs font-bold text-slate-300">
+                        Celular
+                        <input
+                          required
+                          pattern="9\d{8}"
+                          maxLength={9}
+                          value={pickupPhone}
+                          onChange={(e) =>
+                            setPickupPhone(e.target.value.replace(/\D/g, ""))
+                          }
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                        />
+                      </label>
+                    </div>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Nombre completo
+                      <input
+                        required
+                        value={pickupName}
+                        onChange={(e) => setPickupName(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Fecha de recojo
+                      <input
+                        type="date"
+                        required
+                        min={getTodayDateString()}
+                        value={pickupDate}
+                        onChange={(e) => setPickupDate(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Dirección
+                      <input
+                        required
+                        minLength={8}
+                        value={pickupAddress}
+                        onChange={(e) => setPickupAddress(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">
+                      Descripción del envío
+                      <textarea
+                        required
+                        minLength={3}
+                        maxLength={240}
+                        value={pickupDescription}
+                        onChange={(e) => setPickupDescription(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                    <div className="flex justify-end gap-2 pt-2">
                       <button
                         type="button"
-                        autoFocus
-                        aria-label="Cerrar"
                         onClick={() => setIsNewPickupModalOpen(false)}
-                        className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
+                        className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold"
                       >
-                        <X className="h-5 w-5" />
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={pendingAction === "pickup"}
+                        className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white"
+                      >
+                        {pendingAction === "pickup" ? "Registrando…" : "Registrar"}
                       </button>
                     </div>
-                    <form
-                      onSubmit={submitNewPickup}
-                      className="overflow-y-auto p-5 sm:p-6 space-y-3"
-                    >
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <label className="text-xs font-bold text-slate-300">
-                          DNI
-                          <input
-                            required
-                            pattern="\d{8}"
-                            maxLength={8}
-                            value={pickupDni}
-                            onChange={(e) =>
-                              setPickupDni(e.target.value.replace(/\D/g, ""))
-                            }
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                          />
-                        </label>
-                        <label className="text-xs font-bold text-slate-300">
-                          Celular
-                          <input
-                            required
-                            pattern="9\d{8}"
-                            maxLength={9}
-                            value={pickupPhone}
-                            onChange={(e) =>
-                              setPickupPhone(e.target.value.replace(/\D/g, ""))
-                            }
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                          />
-                        </label>
-                      </div>
-                      <label className="block text-xs font-bold text-slate-300">
-                        Nombre completo
-                        <input
-                          required
-                          value={pickupName}
-                          onChange={(e) => setPickupName(e.target.value)}
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                        />
-                      </label>
-                      <label className="block text-xs font-bold text-slate-300">
-                        Fecha de recojo
-                        <input
-                          type="date"
-                          required
-                          min={getTodayDateString()}
-                          value={pickupDate}
-                          onChange={(e) => setPickupDate(e.target.value)}
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                        />
-                      </label>
-                      <label className="block text-xs font-bold text-slate-300">
-                        Dirección
-                        <input
-                          required
-                          minLength={8}
-                          value={pickupAddress}
-                          onChange={(e) => setPickupAddress(e.target.value)}
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                        />
-                      </label>
-                      <label className="block text-xs font-bold text-slate-300">
-                        Descripción del envío
-                        <textarea
-                          required
-                          minLength={3}
-                          maxLength={240}
-                          value={pickupDescription}
-                          onChange={(e) => setPickupDescription(e.target.value)}
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
-                        />
-                      </label>
-                      <div className="flex justify-end gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsNewPickupModalOpen(false)}
-                          className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={pendingAction === "pickup"}
-                          className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white"
-                        >
-                          {pendingAction === "pickup" ? "Registrando…" : "Registrar"}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>,
-                document.body,
-              )}
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* MODAL: ASIGNAR CHOFER A RECOJO */}
-            {isRecojoModalOpen &&
-              createPortal(
-                <div className="dialog-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 sm:p-4">
-                  <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="assign-pickup-dialog-title"
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") setIsRecojoModalOpen(false);
-                      trapDialogFocus(event);
-                    }}
-                    className="corporate-dialog my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-sm animate-fade-in flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
-                  >
-                    <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
-                      <h3
-                        id="assign-pickup-dialog-title"
-                        className="text-base font-black text-white"
+            {isRecojoModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="assign-pickup-dialog-title"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsRecojoModalOpen(false);
+                    trapDialogFocus(event);
+                  }}
+                  className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl space-y-4 animate-fade-in"
+                >
+                  <div className="flex justify-between items-center pb-3 border-b border-white/10">
+                    <h3 id="assign-pickup-dialog-title" className="text-base font-black text-white">
+                      Asignar Conductor
+                    </h3>
+                    <button
+                      type="button"
+                      autoFocus
+                      aria-label="Cerrar asignación de conductor"
+                      onClick={() => setIsRecojoModalOpen(false)}
+                      className="text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={submitAssignDriver} className="space-y-4">
+                    <div className="space-y-1">
+                      <label htmlFor="pickup-driver" className="text-xs font-bold text-slate-300 uppercase block">
+                        Conductor Responsable
+                      </label>
+                      <select
+                        id="pickup-driver"
+                        required
+                        value={recojoDriverSelect}
+                        onChange={(e) => setRecojoDriverSelect(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2.5 text-xs text-white"
                       >
-                        Asignar Conductor
-                      </h3>
-                      <button
-                        type="button"
-                        autoFocus
-                        aria-label="Cerrar asignación de conductor"
-                        onClick={() => setIsRecojoModalOpen(false)}
-                        className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
+                        <option value="">Seleccione conductor...</option>
+                        {db.conductores.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombres}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
-                    <form onSubmit={submitAssignDriver} className="p-5 space-y-4">
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="pickup-driver"
-                          className="text-xs font-bold text-slate-300 uppercase block"
-                        >
-                          Conductor Responsable
-                        </label>
-                        <select
-                          id="pickup-driver"
-                          required
-                          value={recojoDriverSelect}
-                          onChange={(e) => setRecojoDriverSelect(e.target.value)}
-                          className="w-full rounded-xl bg-slate-950 border border-white/10 px-3 py-2.5 text-xs text-white"
-                        >
-                          <option value="">Seleccione conductor...</option>
-                          {db.conductores.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.nombres}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex justify-end gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsRecojoModalOpen(false)}
-                          className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-bold text-slate-300"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={pendingAction === "assign-pickup"}
-                          className="rounded-xl bg-emerald-600 text-white text-xs font-black uppercase px-4 py-2"
-                        >
-                          {pendingAction === "assign-pickup"
-                            ? "Asignando…"
-                            : "Confirmar"}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>,
-                document.body,
-              )}
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsRecojoModalOpen(false)}
+                        className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-bold text-slate-300"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={pendingAction === "assign-pickup"}
+                        className="rounded-xl bg-emerald-600 text-white text-xs font-black uppercase px-4 py-2"
+                      >
+                        {pendingAction === "assign-pickup" ? "Asignando…" : "Confirmar"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
