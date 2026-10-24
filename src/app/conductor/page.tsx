@@ -958,6 +958,23 @@ export default function ConductorPage() {
                               {trip.estado}
                             </span>
                           </div>
+                          {trip.estado === "en_curso" && (
+                            <button
+                              type="button"
+                              disabled={pendingAction === "trip-completado"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTrip(trip);
+                                void handleTripStatus("completado");
+                              }}
+                              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white transition hover:bg-blue-500 cursor-pointer shadow-premium"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                              {pendingAction === "trip-completado"
+                                ? "Finalizando viaje…"
+                                : "Terminar viaje (Registrar llegada)"}
+                            </button>
+                          )}
                           {trip.fechaLlegada && (
                             <p className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-emerald-300">
                               <CheckCircle2 className="h-3.5 w-3.5" />
