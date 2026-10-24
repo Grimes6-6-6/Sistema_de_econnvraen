@@ -785,40 +785,6 @@ export default function DashboardPage() {
   const [pickupDate, setPickupDate] = useState(getTodayDateString());
   const [pickupAddress, setPickupAddress] = useState("");
   const [pickupDescription, setPickupDescription] = useState("");
-  const [isQueryingReniecPickup, setIsQueryingReniecPickup] = useState(false);
-
-  const searchPickupClient = async (dniToQuery?: string) => {
-    const dni = (dniToQuery || pickupDni).trim();
-    if (dni.length !== 8 || !/^\d+$/.test(dni)) {
-      notify({
-        type: "warning",
-        title: "DNI incompleto",
-        message: "Ingresa exactamente 8 dígitos para realizar la consulta.",
-      });
-      return;
-    }
-
-    setIsQueryingReniecPickup(true);
-    try {
-      const data = await lookupDni(dni);
-      setPickupName(`${data.nombres} ${data.apellidos}`.trim());
-      if (data.source === "mock") {
-        notify({
-          type: "warning",
-          title: "Consulta de prueba",
-          message: "Verifica los nombres antes de registrar la solicitud.",
-        });
-      }
-    } catch (error) {
-      notify({
-        type: "error",
-        title: "No se pudo consultar el DNI",
-        message: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setIsQueryingReniecPickup(false);
-    }
-  };
 
   const submitNewPickup = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -3428,62 +3394,32 @@ export default function DashboardPage() {
                       className="overflow-y-auto p-5 sm:p-6 space-y-3"
                     >
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div>
-                          <label htmlFor="pickup-dni-input" className="text-xs font-bold text-slate-300 block mb-1">
-                            DNI
-                          </label>
-                          <div className="flex gap-1.5">
-                            <input
-                              id="pickup-dni-input"
-                              required
-                              inputMode="numeric"
-                              pattern="\d{8}"
-                              maxLength={8}
-                              value={pickupDni}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/\D/g, "");
-                                setPickupDni(val);
-                                if (val.length === 8) {
-                                  void searchPickupClient(val);
-                                }
-                              }}
-                              placeholder="8 dígitos"
-                              className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white font-mono text-xs"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => void searchPickupClient()}
-                              disabled={isQueryingReniecPickup || pickupDni.length !== 8}
-                              aria-label="Consultar DNI en Reniec"
-                              className="flex items-center justify-center rounded-xl bg-emerald-600/20 px-3 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition disabled:opacity-50 cursor-pointer"
-                            >
-                              {isQueryingReniecPickup ? (
-                                <span className="text-[10px] font-bold">...</span>
-                              ) : (
-                                <Search className="h-4 w-4" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        <div>
-                          <label htmlFor="pickup-phone-input" className="text-xs font-bold text-slate-300 block mb-1">
-                            Celular
-                          </label>
+                        <label className="text-xs font-bold text-slate-300">
+                          DNI
                           <input
-                            id="pickup-phone-input"
                             required
-                            type="tel"
-                            inputMode="numeric"
+                            pattern="\d{8}"
+                            maxLength={8}
+                            value={pickupDni}
+                            onChange={(e) =>
+                              setPickupDni(e.target.value.replace(/\D/g, ""))
+                            }
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-300">
+                          Celular
+                          <input
+                            required
                             pattern="9\d{8}"
                             maxLength={9}
                             value={pickupPhone}
                             onChange={(e) =>
                               setPickupPhone(e.target.value.replace(/\D/g, ""))
                             }
-                            placeholder="9XXXXXXXX"
-                            className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white text-xs"
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"
                           />
-                        </div>
+                        </label>
                       </div>
                       <label className="block text-xs font-bold text-slate-300">
                         Nombre completo
@@ -3530,14 +3466,14 @@ export default function DashboardPage() {
                         <button
                           type="button"
                           onClick={() => setIsNewPickupModalOpen(false)}
-                          className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer shadow-sm"
+                          className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold"
                         >
                           Cancelar
                         </button>
                         <button
                           type="submit"
                           disabled={pendingAction === "pickup"}
-                          className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase text-white hover:bg-emerald-500 transition cursor-pointer disabled:opacity-50"
+                          className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white"
                         >
                           {pendingAction === "pickup" ? "Registrando…" : "Registrar"}
                         </button>
@@ -3608,14 +3544,14 @@ export default function DashboardPage() {
                         <button
                           type="button"
                           onClick={() => setIsRecojoModalOpen(false)}
-                          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer shadow-sm"
+                          className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-bold text-slate-300"
                         >
                           Cancelar
                         </button>
                         <button
                           type="submit"
                           disabled={pendingAction === "assign-pickup"}
-                          className="rounded-xl bg-emerald-600 text-white text-xs font-black uppercase px-4 py-2 hover:bg-emerald-500 transition cursor-pointer disabled:opacity-50"
+                          className="rounded-xl bg-emerald-600 text-white text-xs font-black uppercase px-4 py-2"
                         >
                           {pendingAction === "assign-pickup"
                             ? "Asignando…"
