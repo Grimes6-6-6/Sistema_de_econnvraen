@@ -7,7 +7,13 @@ config({ path: ".env" });
 const { Pool } = pg;
 
 export function createPool() {
-  const connectionString = process.env.DATABASE_URL?.trim();
+  // Prefer the direct/non-pooled connection for migrations. Pooled roles may
+  // connect successfully but are not allowed to alter schema-owned objects.
+  const connectionString = (
+    process.env.DATABASE_URL_UNPOOLED
+    || process.env.POSTGRES_URL_NON_POOLING
+    || process.env.DATABASE_URL
+  )?.trim();
   if (!connectionString) {
     throw new Error("DATABASE_URL no está configurada.");
   }
