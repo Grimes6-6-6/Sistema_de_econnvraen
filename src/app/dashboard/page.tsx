@@ -230,8 +230,6 @@ export default function DashboardPage() {
     router.refresh();
   };
 
-  // Helper date — use Peru wall-clock so the date always matches the
-  // timezone used by the database (America/Lima).
   const getTodayDateString = () => getPeruWallClock().date;
 
   // ==========================================================================
