@@ -105,7 +105,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
        JOIN usuarios u ON u.id_usuario = s.id_usuario
        JOIN roles r ON r.id_rol = u.id_rol
        LEFT JOIN personas p ON p.id_persona = u.id_persona
-       LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
+       LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
        LEFT JOIN agencias agency
          ON agency.id_agencia = s.id_agencia_activa
         AND agency.estado = 'ACTIVA'
@@ -215,7 +215,7 @@ export async function getSmsChallenge(): Promise<SmsChallenge | null> {
      JOIN usuarios u ON u.id_usuario = s.id_usuario
      JOIN roles r ON r.id_rol = u.id_rol
      LEFT JOIN personas p ON p.id_persona = u.id_persona
-     LEFT JOIN conductores driver ON driver.id_usuario = u.id_usuario
+     LEFT JOIN conductores driver ON driver.id_persona = u.id_persona
      LEFT JOIN agencias agency
        ON agency.id_agencia = s.id_agencia_activa
       AND agency.estado = 'ACTIVA'
