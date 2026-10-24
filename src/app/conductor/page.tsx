@@ -344,8 +344,10 @@ export default function ConductorPage() {
 
   const handleTripStatus = async (
     nextState: Extract<Viaje["estado"], "en_curso" | "completado">,
+    tripToOperate?: Viaje,
   ) => {
-    if (!selectedTrip) return;
+    const targetTrip = tripToOperate || selectedTrip;
+    if (!targetTrip) return;
     if (nextState === "completado") {
       const result = await requestConfirmation({
         title: "Registrar llegada",
@@ -360,19 +362,20 @@ export default function ConductorPage() {
 
     setPendingAction(`trip-${nextState}`);
     try {
-      const updated = await updateViajeStatus(selectedTrip.id, nextState);
+      const updated = await updateViajeStatus(targetTrip.id, nextState);
       if (updated) setSelectedTrip(updated);
       if (nextState === "completado") {
         stopTracking();
       } else {
         setMainTab("gps");
+        startTracking(conductorId);
       }
       notify({
         type: "success",
         title: nextState === "en_curso" ? "Viaje iniciado" : "Llegada registrada",
         message:
           nextState === "en_curso"
-            ? "La salida quedó registrada. Activa el GPS para transmitir la ruta."
+            ? "La salida quedó registrada y el GPS ha comenzado a transmitir."
             : "El viaje quedó completado y las encomiendas en tránsito ahora figuran En destino.",
       });
     } catch (error) {
@@ -1791,17 +1794,17 @@ export default function ConductorPage() {
         {/* ══════════════════ TAB 3: GPS ══════════════════ */}
         {mainTab === "gps" &&
           (() => {
+            const activeTrip = myTrips.find((trip) => trip.estado === "en_curso");
+            const scheduledTrip = myTrips.find((trip) => trip.estado === "programado");
+            const currentTrip = activeTrip ?? scheduledTrip;
             const route = conductorRecord
               ? (() => {
-                  const gpsTrip =
-                    activeGpsTrip ??
-                    myTrips.find((trip) => trip.estado === "programado");
-                  const r = gpsTrip
-                    ? db.rutas.find((route) => route.id === gpsTrip.id_ruta)
+                  const r = currentTrip
+                    ? db.rutas.find((route) => route.id === currentTrip.id_ruta)
                     : null;
-                  const veh = gpsTrip
+                  const veh = currentTrip
                     ? db.vehiculos.find(
-                        (vehicle) => vehicle.id === gpsTrip.id_vehiculo,
+                        (vehicle) => vehicle.id === currentTrip.id_vehiculo,
                       )
                     : null;
                   return {
@@ -1815,7 +1818,6 @@ export default function ConductorPage() {
 
             return (
               <div className="animate-fade-in space-y-6 max-w-2xl mx-auto">
-                {/* Status Card */}
                 <div
                   className={`rounded-3xl border p-5 shadow-premium flex items-center justify-between gap-4 ${
                     gpsStatus === "active"
@@ -1865,33 +1867,60 @@ export default function ConductorPage() {
                         {gpsStatus === "error" &&
                           (gpsError ?? "Error desconocido")}
                         {gpsStatus === "idle" &&
-                          (activeGpsTrip
+                          (activeTrip
                             ? "Pulsa Iniciar GPS para comenzar el seguimiento"
-                            : "Primero inicia el viaje asignado")}
+                            : scheduledTrip
+                              ? `Viaje listo: ${route.label} (${route.placa})`
+                              : "Activa el GPS para visualizar tu posición en el mapa")}
                         {gpsStatus === "requesting" &&
                           "Concede permisos en el navegador..."}
                       </p>
                     </div>
                   </div>
 
-                  {/* Toggle buttons */}
                   {gpsStatus === "idle" || gpsStatus === "error" ? (
                     <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                      <button
-                        onClick={() => startTracking(conductorId)}
-                        disabled={!conductorId || !activeGpsTrip}
-                        className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        <Zap className="h-3.5 w-3.5 text-yellow-400" />
-                        {activeGpsTrip ? "Iniciar GPS" : "Viaje no iniciado"}
-                      </button>
+                      {activeTrip ? (
+                        <button
+                          type="button"
+                          onClick={() => startTracking(conductorId)}
+                          disabled={!conductorId}
+                          className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-premium"
+                        >
+                          <Zap className="h-4 w-4 text-yellow-300" />
+                          Iniciar GPS
+                        </button>
+                      ) : scheduledTrip ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await handleTripStatus("en_curso", scheduledTrip);
+                          }}
+                          disabled={!conductorId || pendingAction === "trip-en_curso"}
+                          className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-premium"
+                        >
+                          <Navigation className="h-4 w-4" />
+                          {pendingAction === "trip-en_curso" ? "Iniciando…" : "Iniciar Viaje y GPS"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startTracking(conductorId)}
+                          disabled={!conductorId}
+                          className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
+                        >
+                          <Navigation className="h-3.5 w-3.5 text-emerald-400" />
+                          Activar GPS
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <button
+                      type="button"
                       onClick={stopTracking}
                       className="shrink-0 flex items-center justify-center gap-2 bg-red-600/80 hover:bg-red-600 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all cursor-pointer"
                     >
-                      <WifiOff className="h-4 w-4" /> Detener
+                      <WifiOff className="h-4 w-4" /> Detener GPS
                     </button>
                   )}
                 </div>
