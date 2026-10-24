@@ -195,7 +195,6 @@ const STATUS_FROM_DB: Record<string, Encomienda["estado"]> = {
 const TRIP_STATUS_FROM_DB: Record<string, Viaje["estado"]> = {
   PROGRAMADO: "programado",
   EN_CURSO: "en_curso",
-  EN_RUTA: "en_curso",
   COMPLETADO: "completado",
   CANCELADO: "cancelado",
 };
@@ -1326,11 +1325,11 @@ export async function updateTripStatus(
        id_conductor: number;
        id_agencia: number;
        estado: string;
-       is_ready: boolean;
+       is_today: boolean;
      }>(
        `SELECT id_viaje, id_conductor, id_agencia, estado,
-               (fecha_hora_salida AT TIME ZONE 'America/Lima')::date <=
-                 (NOW() AT TIME ZONE 'America/Lima')::date AS is_ready
+               (fecha_hora_salida AT TIME ZONE 'America/Lima')::date =
+                 (NOW() AT TIME ZONE 'America/Lima')::date AS is_today
         FROM viajes
         WHERE id_viaje = $1
           AND ($2::integer IS NULL OR id_agencia = $2)
@@ -1345,19 +1344,19 @@ export async function updateTripStatus(
       if (!driverId || driverId !== current.id_conductor) {
         throw forbidden("Solo puedes actualizar tus propios viajes.");
       }
-      if (input.newState === "en_curso" && !current.is_ready) {
-        throw forbidden("No puedes iniciar viajes programados para fechas futuras.");
+      // El conductor solo inicia salidas de hoy, pero debe poder registrar
+      // la llegada de su viaje en curso aunque haya cruzado la medianoche.
+      if (input.newState === "en_curso" && !current.is_today) {
+        throw forbidden("Solo puedes operar viajes asignados para hoy.");
       }
     }
 
-    const isStarting = input.newState === "en_curso";
-    const validCurrent = isStarting
-      ? current.estado === "PROGRAMADO"
-      : ["EN_CURSO", "EN_RUTA"].includes(current.estado);
-    if (!validCurrent) {
+    const expectedState =
+      input.newState === "en_curso" ? "PROGRAMADO" : "EN_CURSO";
+    if (current.estado !== expectedState) {
       throw conflict(
         "INVALID_TRIP_TRANSITION",
-        isStarting
+        input.newState === "en_curso"
           ? "Solo se puede iniciar un viaje programado."
           : "Solo se puede finalizar un viaje en curso.",
       );
@@ -2109,7 +2108,7 @@ export async function updateVehicleLocation(
         `SELECT id_viaje
          FROM viajes
          WHERE id_conductor = $1
-           AND estado IN ('EN_CURSO', 'EN_RUTA')
+           AND estado = 'EN_CURSO'
          ORDER BY fecha_hora_salida DESC
          LIMIT 1
          FOR SHARE`,
