@@ -36,6 +36,9 @@ export function assertTrustedMutation(request: Request): void {
         : null;
       const isTrustedOrigin =
         originHost === allowedHost ||
+        originHost === host ||
+        originHost.replace(/:\d+$/, "") === host.replace(/:\d+$/, "") ||
+        (originHost.endsWith(".vercel.app") && host.endsWith(".vercel.app")) ||
         (process.env.NODE_ENV !== "production" && originHost.includes("localhost"));
 
       if (!isTrustedOrigin) {
@@ -169,7 +172,7 @@ export function handleRouteError(error: unknown): NextResponse {
       { status: 409 },
     );
   }
-  if (errorCode === "23514" || errorCode === "22P02") {
+  if (errorCode === "23514" || errorCode === "22P02" || errorCode === "23502") {
     return noStoreJson(
       {
         error: {
@@ -183,6 +186,8 @@ export function handleRouteError(error: unknown): NextResponse {
   if (
     errorCode === "ECONNREFUSED" ||
     errorCode === "ENOTFOUND" ||
+    errorCode === "ETIMEDOUT" ||
+    errorCode === "ECONNRESET" ||
     errorCode === "57P01" ||
     errorCode === "57014"
   ) {

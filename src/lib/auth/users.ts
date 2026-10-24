@@ -59,8 +59,23 @@ export async function authenticateUser(
        p.nro_documento AS dni,
        p.telefono,
        driver.id_conductor,
-       membership.id_agencia,
-       agency.nombre AS agencia_nombre,
+       COALESCE(
+         membership.id_agencia,
+         driver.id_agencia_base,
+         (SELECT id_agencia FROM agencias WHERE estado = 'ACTIVA' ORDER BY id_agencia LIMIT 1)
+       ) AS id_agencia,
+       COALESCE(
+         agency.nombre,
+         (
+           SELECT nombre
+           FROM agencias
+           WHERE id_agencia = COALESCE(
+             membership.id_agencia,
+             driver.id_agencia_base,
+             (SELECT id_agencia FROM agencias WHERE estado = 'ACTIVA' ORDER BY id_agencia LIMIT 1)
+           )
+         )
+       ) AS agencia_nombre,
        FALSE AS must_change_password,
        FALSE AS sms_mfa_enabled
      FROM usuarios u
@@ -81,7 +96,10 @@ export async function authenticateUser(
      LEFT JOIN agencias agency ON agency.id_agencia = membership.id_agencia
      WHERE LOWER(u.username) = LOWER($1)
        AND u.estado = 'ACTIVO'
-       AND (r.nombre = 'SUPER_ADMIN' OR membership.id_agencia IS NOT NULL)
+       AND (
+         r.nombre IN ('SUPER_ADMIN', 'CONDUCTOR')
+         OR membership.id_agencia IS NOT NULL
+       )
      LIMIT 1`,
     [username],
   );
