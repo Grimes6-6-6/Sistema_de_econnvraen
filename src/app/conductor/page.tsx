@@ -344,8 +344,10 @@ export default function ConductorPage() {
 
   const handleTripStatus = async (
     nextState: Extract<Viaje["estado"], "en_curso" | "completado">,
+    targetTrip?: Viaje,
   ) => {
-    if (!selectedTrip) return;
+    const trip = targetTrip || selectedTrip;
+    if (!trip) return;
     if (nextState === "completado") {
       const result = await requestConfirmation({
         title: "Registrar llegada",
@@ -360,7 +362,7 @@ export default function ConductorPage() {
 
     setPendingAction(`trip-${nextState}`);
     try {
-      const updated = await updateViajeStatus(selectedTrip.id, nextState);
+      const updated = await updateViajeStatus(trip.id, nextState);
       if (updated) setSelectedTrip(updated);
       if (nextState === "completado") {
         stopTracking();
@@ -965,7 +967,7 @@ export default function ConductorPage() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedTrip(trip);
-                                void handleTripStatus("completado");
+                                void handleTripStatus("completado", trip);
                               }}
                               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white transition hover:bg-blue-500 cursor-pointer shadow-premium"
                             >

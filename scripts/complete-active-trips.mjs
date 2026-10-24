@@ -27,7 +27,7 @@ export async function completeActiveTrips() {
     const updateSql = `
       UPDATE viajes
       SET ${sets.join(", ")}
-      WHERE estado = 'EN_CURSO' OR estado = 'en_curso'
+      WHERE estado IN ('EN_CURSO', 'en_curso', 'PROGRAMADO', 'programado')
       RETURNING id_viaje;
     `;
     const res = await pool.query(updateSql);
